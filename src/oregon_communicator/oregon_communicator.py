@@ -7,8 +7,6 @@ import time
 import serial
 import serial.tools.list_ports
 
-from prompt_toolkit import prompt
-from prompt_toolkit.history import InMemoryHistory
 
 class OregonCommunicator:
     """Class to communicate with Oregon device via serial port."""
