@@ -8,6 +8,13 @@ import time
 import serial
 import serial.tools.list_ports
 
+# Support
+try:
+    import readline  # Linux / macOS
+except ImportError:
+    import pyreadline3 as readline  # Windows
+
+
 
 class OregonCommunicator:
     """Class to communicate with Oregon device via serial port."""
@@ -82,7 +89,6 @@ class OregonCommunicator:
         "RB",
         "FR", "FRD", "FRR", "FRA",
     }
-
 
     def __init__(self):
         self.connection = None
@@ -233,11 +239,12 @@ class OregonCommunicator:
 
     def _post_connect_handshake(self):
         """Send a quick SY command to verify connection and capture prompt signature."""
+
         if not self.connection:
             return
         try:
             # Ignore returned lines; purpose is to confirm comms and set last_prompt_signature
-            self.send_and_receive("sy")
+            self.send_command_and_receive_response("sy")
         except Exception:
             # Non-fatal; connection is still established
             pass
@@ -331,22 +338,22 @@ class OregonCommunicator:
 
         Character definitions:
 
-        Character 1 – Operating mode:
+        Character 1 = Operating mode:
             '0' : Off with power
             'H' : Host mode (generates system timing for network)
             'N' : Node mode (synchronized to host)
 
-        Character 2 – Run state:
+        Character 2 = Run state:
             'R' : Running; scanning enabled, detections saved to file
             'S' : Standby; not scanning, database accessible
             'Z' : Off
 
-        Character 3 – Time synchronization:
+        Character 3 = Time synchronization:
             'G' : Synchronized to GNSS signals
             'N' : Synchronized to network signal
             'U' : Unsynchronized
 
-        Character 4 – Beeper state:
+        Character 4 = Beeper state:
             'B' : Beeper enabled
             '*' : Beeper disabled
 
@@ -394,7 +401,7 @@ class OregonCommunicator:
 
         return valid_signature
 
-    def send_and_receive(self, command, timeout=5):
+    def send_command_and_receive_response(self, command, timeout=5):
         """
         Send a command and read lines until a known prompt ending appears.
         Uses an idle timeout: the clock resets each time data arrives. Returns the
@@ -454,7 +461,7 @@ class OregonCommunicator:
                     continue
 
                 # send command and get cleaned response
-                lines = self.send_and_receive(cmd)
+                lines = self.send_command_and_receive_response(cmd)
                 if lines:
                     print("\n".join(lines))
                 else:
@@ -462,5 +469,7 @@ class OregonCommunicator:
 
         except KeyboardInterrupt:
             print("\nTerminal interrupted by user.")
+
+
 
 
