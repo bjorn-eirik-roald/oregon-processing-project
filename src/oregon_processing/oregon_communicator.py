@@ -8,7 +8,10 @@ import time
 import serial
 import serial.tools.list_ports
 
-# Support
+from datetime import date, datetime, timedelta
+from pathlib import Path
+
+# Support for history of readline on Windows via pyreadline3
 try:
     import readline  # Linux / macOS
 except ImportError:
@@ -98,6 +101,7 @@ class OregonCommunicator:
         self._baudrate = None
         self._last_prompt_signature = None
         self._last_upload_date = None
+        self._reader_name = None
 
     @property
     def port(self):
@@ -108,6 +112,11 @@ class OregonCommunicator:
     def baudrate(self):
         """Get the connected baud rate."""
         return self._baudrate
+
+    @property
+    def reader_name(self):
+        """Get the reader name if known."""
+        return self._reader_name
 
     def __enter__(self):
         """Allow use in 'with' statement."""
@@ -259,7 +268,7 @@ class OregonCommunicator:
             return
         try:
             self.check_system_status_health()
-            #self.get_reader_name()
+            self.get_reader_name()
         except Exception:
             # Non-fatal; connection is still established
             pass
@@ -608,20 +617,18 @@ class OregonCommunicator:
 
         return status
 
-    def _parse_upload_history(self, lines):
+    def parse_upload_history(self):
         """
         Parse upload history output from UH command.
-
-        Parameters
-        ----------
-        lines : list of str
-            Raw output lines from the UH command.
 
         Returns
         -------
         dict
             Parsed upload history with upload records and metadata.
         """
+
+        upload_history_lines = self.send_command_and_receive_response("UH")
+
         history = {
             'reader_name': None,
             'site': None,
@@ -629,10 +636,10 @@ class OregonCommunicator:
             'uploads': [],
             'new_records': None,
             'total_records': None,
-            'raw_output': lines
+            'raw_output': upload_history_lines
         }
 
-        for i, line in enumerate(lines):
+        for i, line in enumerate(upload_history_lines):
             line_stripped = line.strip()
 
             # Parse header line: "Reader: <name>  Site: <site>"
@@ -690,10 +697,16 @@ class OregonCommunicator:
                     except ValueError:
                         pass
 
+            else:
+                raise ValueError(f"Unrecognized line format in upload history: '{line}'")
+
+
         # Store the most recent upload date (last entry in uploads list)
         if history['uploads']:
             last_upload = history['uploads'][-1]
-            self._last_upload_date = f"{last_upload['date']} {last_upload['time']}"
+
+            upload_datetime = datetime.strptime(f"{last_upload['date']} {last_upload['time']}", "%Y-%m-%d %H:%M:%S")
+            self._last_upload_date = upload_datetime.date()
 
         return history
 
@@ -760,7 +773,7 @@ class OregonCommunicator:
                 print("✓ System status check: All parameters within normal range")
 
 
-    def export_system_status_to_file(self, output_filepath: str) -> bool:
+    def export_system_status(self, output_filepath: str) -> bool:
         """
         Run the SY (system status) command and write the response to a text file.
 
@@ -786,7 +799,7 @@ class OregonCommunicator:
 
             with open(output_filepath, 'w') as f:
                 f.write("Oregon RFID System Status\n")
-                f.write("Date/Time: " + time.strftime("%Y-%m-%d %H:%M:%S") + "\n")
+                f.write("Export Date/Time: " + time.strftime("%Y-%m-%d %H:%M:%S") + "\n")
                 f.write("=========================\n\n")
 
                 # Write system status
@@ -819,7 +832,7 @@ class OregonCommunicator:
             print(f"Error writing system status to file: {e}")
             return False
 
-    def export_upload_log_to_file(self, output_filepath: str) -> bool:
+    def export_upload_log(self, output_filepath: str) -> bool:
         """
         Run the UH (upload log) command and write the response to a text file.
 
@@ -840,24 +853,147 @@ class OregonCommunicator:
 
         try:
             print(f"\nExporting upload log to file...", end="")
-            lines = self.send_command_and_receive_response("UH")
+            upload_history_lines = self.send_command_and_receive_response("UH")
 
             with open(output_filepath, 'w') as f:
                 f.write("Oregon RFID Upload Log\n")
-                f.write("Date/Time: " + time.strftime("%Y-%m-%d %H:%M:%S") + "\n")
+                f.write("Export Date/Time: " + time.strftime("%Y-%m-%d %H:%M:%S") + "\n")
                 f.write("=========================\n\n")
 
                 # Write upload log
-                f.write('\n'.join(lines))
+                f.write('\n'.join(upload_history_lines))
 
             print("Done.")
             print(f"Upload log written to {output_filepath}")
-            print(f"Total lines written: {len(lines)}")
+            print(f"Total lines written: {len(upload_history_lines)}")
 
             return True
 
         except Exception as e:
             print(f"Error writing upload log to file: {e}")
+            return False
+
+    def export_system_status_log(self, date: date, output_dir:Path = Path("")) -> bool:
+        """
+        Run the ER command for a specific date and write to file.
+
+        The event record shows system status every minute for the specified date.
+
+        Parameters
+        ----------
+        date : date
+            Date in format YYYY-MM-DD (e.g., "2026-01-08")
+        output_dir : Path
+            Directory where output file will be written (default: current directory)
+
+        Returns
+        -------
+        bool
+            True if successful, False otherwise.
+        """
+
+        if not self._connection:
+            print("Not connected to device.")
+            return False
+
+
+        print(f"\nExporting system status log for {date.strftime('%Y-%m-%d')}...", end="")
+
+        output_filepath = f"{output_dir}/system_log_{date.strftime('%Y_%m_%d')}.txt"
+
+        if not output_dir.exists():
+            output_dir.mkdir(parents=True, exist_ok=True)
+
+        try:
+            # Send ER command with date
+            command = f"ER {date.strftime('%Y-%m-%d')}"
+            lines = self.send_command_and_receive_response(command)
+
+            # Generate output filename with date
+            with open(output_filepath, 'w') as f:
+                f.write("Oregon RFID Event Record\n")
+                f.write("Export Date/Time: " + time.strftime("%Y-%m-%d %H:%M:%S") + "\n")
+                f.write("Date of Record: " + date.strftime("%Y-%m-%d") + "\n")
+                f.write("=========================\n\n")
+
+                # Write event record
+                f.write('\n'.join(lines))
+
+            print("Done.")
+            print(f"System status log written to {output_filepath}")
+            print(f"Total lines written: {len(lines)}")
+
+            return True
+
+        except Exception as e:
+            print("ERROR.")
+            print(f"Error exporting system status log: {e}")
+            return False
+
+    def export_system_status_logs_from_last_upload(self, output_dir: Path = Path("")) -> bool:
+        """
+        Export system status logs for all dates from last upload date to current date (inclusive).
+
+        This method retrieves the last upload date, then runs export_system_status_log()
+        for each day in the range up to and including today.
+
+        Parameters
+        ----------
+        output_dir : Path
+            Directory where output files will be written (default: current directory)
+
+        Returns
+        -------
+        bool
+            True if all exports completed successfully, False if any failed.
+        """
+
+        if not self._connection:
+            print("Not connected to device.")
+            return False
+
+        if not self._last_upload_date:
+            try:
+                print("Retrieving last upload date from device...", end="", flush=True)
+                self.parse_upload_history()
+                print("Done.")
+            except Exception as e:
+                print("ERROR")
+                print(f"Error parsing upload history: {e}")
+                print("Failed to retrieve last upload date. Cannot proceed with batch export.")
+                return False
+
+        try:
+            last_upload = self._last_upload_date
+            current_date = date.today()
+
+
+            last_upload = date(2025,11,25) # TODO: remove after testing
+
+            if last_upload > current_date:
+                print(f"Last upload date ({last_upload}) is in the future. No logs to export.")
+                return False
+
+            print(f"\nExporting system status logs from {last_upload} to {current_date}...")
+
+            # Generate date range
+            current = last_upload
+            all_successful = True
+            export_count = 0
+
+            while current <= current_date:
+                success = self.export_system_status_log(current, output_dir)
+                if not success:
+                    all_successful = False
+                else:
+                    export_count += 1
+                current += timedelta(days=1)
+
+            print(f"\nBatch export complete: {export_count} system log(s) exported.")
+            return all_successful
+
+        except Exception as e:
+            print(f"Error during batch export: {e}")
             return False
 
 
