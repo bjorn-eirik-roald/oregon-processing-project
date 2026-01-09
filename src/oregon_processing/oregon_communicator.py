@@ -91,10 +91,21 @@ class OregonCommunicator:
     }
 
     def __init__(self):
-        self.connection = None
-        self.port = None
-        self.baudrate = None
-        self.last_prompt_signature = None
+        self._connection = None
+        self._port = None
+        self._baudrate = None
+        self._last_prompt_signature = None
+        self._last_upload_date = None
+
+    @property
+    def port(self):
+        """Get the connected port name."""
+        return self._port
+
+    @property
+    def baudrate(self):
+        """Get the connected baud rate."""
+        return self._baudrate
 
     def __enter__(self):
         """Allow use in 'with' statement."""
@@ -106,16 +117,16 @@ class OregonCommunicator:
 
     def close(self):
         """Close serial connection."""
-        if self.connection:
+        if self._connection:
             try:
-                self.connection.close()
-                print(f"Connection to {self.port} closed.")
+                self._connection.close()
+                print(f"\nConnection to {self._port} closed.")
             except Exception as e:
-                print(f"Error closing connection: {e}")
+                print(f"\nError closing connection: {e}")
             finally:
-                self.connection = None
-                self.port = None
-                self.baudrate = None
+                self._connection = None
+                self._port = None
+                self._baudrate = None
 
     def _select_baud_rate(self):
         """Allow user to select baud rate(s) to use for connection."""
@@ -160,9 +171,9 @@ class OregonCommunicator:
                     response = ser.readline().decode(errors="ignore").strip()
 
                     if response:
-                        self.connection = ser
-                        self.port = port
-                        self.baudrate = baud
+                        self._connection = ser
+                        self._port = port
+                        self._baudrate = baud
                         print("SUCCESS!")
                         print(f"Successfully connected to {port} at {baud} baud")
                         # Send a quick SY command to verify comms and capture prompt signature
@@ -240,7 +251,7 @@ class OregonCommunicator:
     def _post_connect_handshake(self):
         """Send a quick SY command to verify connection and capture prompt signature."""
 
-        if not self.connection:
+        if not self._connection:
             return
         try:
             # Ignore returned lines; purpose is to confirm comms and set last_prompt_signature
@@ -397,7 +408,7 @@ class OregonCommunicator:
         valid_signature = all(c in valid for c, valid in zip(signature, valid_sets))
 
         if valid_signature:
-            self.last_prompt_signature = signature
+            self._last_prompt_signature = signature
 
         return valid_signature
 
@@ -407,25 +418,25 @@ class OregonCommunicator:
         Uses an idle timeout: the clock resets each time data arrives. Returns the
         cleaned response (list of lines) with echoed command and prompts removed.
         """
-        if not self.connection:
+        if not self._connection:
             raise ConnectionError("Not connected to device.")
 
         # Clear stale input
-        self.connection.reset_input_buffer()
+        self._connection.reset_input_buffer()
 
         # Send command
-        self.connection.write((command + "\r\n").encode())
-        self.connection.flush()
+        self._connection.write((command + "\r\n").encode())
+        self._connection.flush()
 
         lines = []
         last_data_time = time.time()
 
         while True:
-            line = self.connection.readline().decode(errors="ignore").strip()
+            line = self._connection.readline().decode(errors="ignore").strip()
             if line:
                 # check for valid prompt signature to end reading
                 if self._validate_prompt_signature(line[:4]):
-                    self.last_prompt_signature = line[:4]
+                    self._last_prompt_signature = line[:4]
                     break
 
                 lines.append(line)
@@ -444,7 +455,7 @@ class OregonCommunicator:
 
         try:
             while True:
-                prompt = f"\n{self.last_prompt_signature or ''}>> "
+                prompt = f"\n{self._last_prompt_signature or ''}>> "
                 cmd = input(prompt).strip()
                 if not cmd:
                     continue
@@ -469,6 +480,290 @@ class OregonCommunicator:
 
         except KeyboardInterrupt:
             print("\nTerminal interrupted by user.")
+
+    def _parse_system_status(self, lines):
+        """
+        Parse system status output into a structured dictionary.
+
+        Parameters
+        ----------
+        lines : list of str
+            Raw output lines from the SY command.
+
+        Returns
+        -------
+        dict
+            Parsed system status with keys for each field.
+        """
+        status = {
+            'device_type': None,
+            'version': None,
+            'serial_number': None,
+            'reader_name': None,
+            'mode': None,
+            'supply_voltage': None,
+            'standby_amps': None,
+            'noise': None,
+            'shutdown_supercap': None,
+            'sleep_battery': None,
+            'tags_in_archive': None,
+            'raw_output': lines
+        }
+
+        for line in lines:
+            line_lower = line.lower()
+
+            if 'oregon rfid' in line_lower:
+                status['device_type'] = line.strip()
+            elif line.startswith('V') and '-' in line:
+                # Version and serial number line
+                parts = line.split()
+                if len(parts) >= 2:
+                    status['version'] = parts[0]
+                    status['serial_number'] = parts[1] if len(parts) > 1 else None
+            elif 'reader name' in line_lower:
+                # Could be just "Reader name" or "Reader name <actual name>"
+                if len(line.split()) > 2:
+                    status['reader_name'] = line.split('Reader name', 1)[1].strip()
+                else:
+                    status['reader_name'] = ""
+            elif 'mode' in line_lower:
+                status['mode'] = line.strip()
+            elif 'supply voltage' in line_lower:
+                parts = line.split()
+                status['supply_voltage'] = parts[-1] if parts else None
+            elif 'standby amps' in line_lower or 'amps' in line_lower:
+                parts = line.split()
+                status['standby_amps'] = parts[-1] if parts else None
+            elif 'noise' in line_lower:
+                parts = line.split()
+                status['noise'] = parts[-1] if parts else None
+            elif 'shutdown supercap' in line_lower or 'supercap' in line_lower:
+                parts = line.split()
+                status['shutdown_supercap'] = parts[-1] if parts else None
+            elif 'sleep battery' in line_lower or 'battery' in line_lower:
+                parts = line.split()
+                status['sleep_battery'] = parts[-1] if parts else None
+            elif 'tags in archive' in line_lower or 'archive' in line_lower:
+                parts = line.split()
+                status['tags_in_archive'] = parts[-1] if parts else None
+
+        return status
+
+    def _parse_upload_history(self, lines):
+        """
+        Parse upload history output from UH command.
+
+        Parameters
+        ----------
+        lines : list of str
+            Raw output lines from the UH command.
+
+        Returns
+        -------
+        dict
+            Parsed upload history with upload records and metadata.
+        """
+        history = {
+            'reader_name': None,
+            'site': None,
+            'upload_count': None,
+            'uploads': [],
+            'new_records': None,
+            'total_records': None,
+            'raw_output': lines
+        }
+
+        for i, line in enumerate(lines):
+            line_stripped = line.strip()
+
+            # Parse header line: "Reader: <name>  Site: <site>"
+            if line_stripped.startswith('Reader:'):
+                parts = line_stripped.split('Site:')
+                if len(parts) == 2:
+                    reader_part = parts[0].replace('Reader:', '').strip()
+                    site_part = parts[1].strip()
+                    history['reader_name'] = reader_part
+                    history['site'] = site_part
+
+            # Parse upload histories count
+            elif 'Upload Histories:' in line:
+                parts = line_stripped.split('Upload Histories:')
+                if len(parts) == 2:
+                    try:
+                        history['upload_count'] = int(parts[1].strip())
+                    except ValueError:
+                        pass
+
+            # Skip header row (Num   UP Date    Time    Records)
+            elif line_stripped.startswith('Num'):
+                continue
+
+            # Parse upload record lines (numbered entries)
+            elif line_stripped and line_stripped[0].isdigit():
+                parts = line_stripped.split()
+                if len(parts) >= 4:
+                    try:
+                        upload_record = {
+                            'num': int(parts[0]),
+                            'date': parts[1],
+                            'time': parts[2],
+                            'records': int(parts[3])
+                        }
+                        history['uploads'].append(upload_record)
+                    except (ValueError, IndexError):
+                        pass
+
+            # Parse NEW records line
+            elif line_stripped.startswith('NEW'):
+                parts = line_stripped.split()
+                if len(parts) >= 2:
+                    try:
+                        history['new_records'] = int(parts[-1])
+                    except ValueError:
+                        pass
+
+            # Parse Total line
+            elif line_stripped.startswith('Total'):
+                parts = line_stripped.split()
+                if len(parts) >= 2:
+                    try:
+                        history['total_records'] = int(parts[-1])
+                    except ValueError:
+                        pass
+
+        # Store the most recent upload date (last entry in uploads list)
+        if history['uploads']:
+            last_upload = history['uploads'][-1]
+            self._last_upload_date = f"{last_upload['date']} {last_upload['time']}"
+
+        return history
+
+    def _check_system_status_health(self, parsed_status):
+        """
+        Check parsed system status for potential issues.
+
+        Parameters
+        ----------
+        parsed_status : dict
+            Parsed system status dictionary from _parse_system_status().
+
+        Returns
+        -------
+        dict
+            Dictionary with 'healthy' (bool) and 'warnings' (list of str) keys.
+        """
+        warnings = []
+
+        # Check supply voltage
+        if parsed_status['supply_voltage']:
+            try:
+                voltage = float(parsed_status['supply_voltage'])
+                if voltage < 12.0:
+                    warnings.append(f"Low supply voltage: {voltage}V (should be >= 12V)")
+            except (ValueError, TypeError):
+                warnings.append(f"Could not parse supply voltage: {parsed_status['supply_voltage']}")
+
+        return {
+            'healthy': len(warnings) == 0,
+            'warnings': warnings
+        }
+
+    def export_system_status_to_file(self, output_filepath: str) -> bool:
+        """
+        Run the SY (system status) command and write the response to a text file.
+
+        Parameters
+        ----------
+        filepath : str
+            Path to the output text file where system status will be written.
+
+        Returns
+        -------
+        bool
+            True if successful, False otherwise.
+        """
+
+        if not self._connection:
+            print("Not connected to device.")
+            return False
+
+        try:
+            print(f"\nExporting system status to file...", end="")
+            lines = self.send_command_and_receive_response("SY")
+
+            # Parse the system status
+            parsed = self._parse_system_status(lines)
+
+            # Check for health issues
+            health = self._check_system_status_health(parsed)
+
+            with open(output_filepath, 'w') as f:
+                f.write("Oregon RFID System Status\n")
+                f.write("Date/Time: " + time.strftime("%Y-%m-%d %H:%M:%S") + "\n")
+                f.write("=========================\n\n")
+
+                # Write system status
+                f.write('\n'.join(lines))
+
+            print("Done.")
+            print(f"System status written to {output_filepath}")
+            print(f"Total lines written: {len(lines)}")
+
+            # Report health status
+            if not health['healthy']:
+                print(f"\n⚠ WARNING: {len(health['warnings'])} issue(s) detected:")
+                for warning in health['warnings']:
+                    print(f"  - {warning}")
+            else:
+                print("✓ System status check: All parameters within normal range")
+
+            return True
+
+        except Exception as e:
+            print(f"Error writing system status to file: {e}")
+            return False
+
+    def export_upload_log_to_file(self, output_filepath: str) -> bool:
+        """
+        Run the UH (upload log) command and write the response to a text file.
+
+        Parameters
+        ----------
+        filepath : str
+            Path to the output text file where upload log will be written.
+
+        Returns
+        -------
+        bool
+            True if successful, False otherwise.
+        """
+
+        if not self._connection:
+            print("Not connected to device.")
+            return False
+
+        try:
+            print(f"\nExporting upload log to file...", end="")
+            lines = self.send_command_and_receive_response("UH")
+
+            with open(output_filepath, 'w') as f:
+                f.write("Oregon RFID Upload Log\n")
+                f.write("Date/Time: " + time.strftime("%Y-%m-%d %H:%M:%S") + "\n")
+                f.write("=========================\n\n")
+
+                # Write upload log
+                f.write('\n'.join(lines))
+
+            print("Done.")
+            print(f"Upload log written to {output_filepath}")
+            print(f"Total lines written: {len(lines)}")
+
+            return True
+
+        except Exception as e:
+            print(f"Error writing upload log to file: {e}")
+            return False
 
 
 

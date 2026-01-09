@@ -1,0 +1,14 @@
+Oregon RFID System Status
+Date/Time: 2026-01-09 08:36:56
+=========================
+
+Oregon RFID HDX Single Antenna Reader
+V2.1M 0019-000D-1631-3334-3159-39
+Reader name
+Standby mode
+Supply voltage    15.7
+Standby amps      0.182
+Noise             5
+Shutdown supercap 5.1
+Sleep battery     3.1
+Tags in archive   809
