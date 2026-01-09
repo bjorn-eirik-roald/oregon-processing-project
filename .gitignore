@@ -13,4 +13,6 @@ __pycache__/
 # ------------------------------
 # test folder
 # ------------------------------
-test/
+test/*
+!test/test.py
+!test/terminal.py
