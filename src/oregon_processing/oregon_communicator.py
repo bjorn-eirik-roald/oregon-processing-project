@@ -90,6 +90,8 @@ class OregonCommunicator:
         "FR", "FRD", "FRR", "FRA",
     }
 
+    CRITICAL_VOLTAGE_THRESHOLD = 12.0  # volts
+
     def __init__(self):
         self._connection = None
         self._port = None
@@ -219,10 +221,12 @@ class OregonCommunicator:
     def _handle_prolific_port_search(self, ports, bauds):
         """Search for and attempt connection on Prolific ports. Returns True if connection successful."""
 
-        print("\nSearching for Prolific USB serial adapter ports...")
+        print("\nSearching for Prolific USB serial adapter ports...", end="", flush=True)
 
         # Filter for Prolific ports (common for USB serial adapters)
         prolific_ports = [p.device for p in ports if "prolific" in p.description.lower()]
+
+        print("Done.")
 
         if prolific_ports:
             print(f"Found Prolific port(s): {prolific_ports}")
@@ -249,13 +253,13 @@ class OregonCommunicator:
         return self._attempt_connection(port_devices, bauds)
 
     def _post_connect_handshake(self):
-        """Send a quick SY command to verify connection and capture prompt signature."""
+        """Send a quick SY command to verify connection and capture prompt signature. Store reader name"""
 
         if not self._connection:
             return
         try:
-            # Ignore returned lines; purpose is to confirm comms and set last_prompt_signature
-            self.send_command_and_receive_response("sy")
+            self.check_system_status_health()
+            #self.get_reader_name()
         except Exception:
             # Non-fatal; connection is still established
             pass
@@ -481,20 +485,17 @@ class OregonCommunicator:
         except KeyboardInterrupt:
             print("\nTerminal interrupted by user.")
 
-    def _parse_system_status(self, lines):
+    def _parse_system_status(self):
         """
         Parse system status output into a structured dictionary.
 
-        Parameters
-        ----------
-        lines : list of str
-            Raw output lines from the SY command.
-
-        Returns
-        -------
-        dict
-            Parsed system status with keys for each field.
+        The SY output is order-specific and some fields (e.g., reader name) may
+        not include a label. This parser uses the expected row positions and
+        validates prefixes for the labeled rows to guard against misalignment.
         """
+
+        status_lines = self.send_command_and_receive_response("SY")
+
         status = {
             'device_type': None,
             'version': None,
@@ -507,46 +508,103 @@ class OregonCommunicator:
             'shutdown_supercap': None,
             'sleep_battery': None,
             'tags_in_archive': None,
-            'raw_output': lines
+            'raw_output': status_lines,
+            'warnings': []
         }
 
-        for line in lines:
-            line_lower = line.lower()
+        # Expected order (0-indexed):
+        # 0: device type line (free text)
+        # 1: version/serial line (starts with V)
+        # 2: reader name (free text, label may vary)
+        # 3: mode line (contains "mode")
+        # 4: supply voltage (prefix "supply voltage")
+        # 5: standby amps (prefix "standby amps")
+        # 6: noise (prefix "noise")
+        # 7: shutdown supercap (prefix "shutdown supercap")
+        # 8: sleep battery (prefix "sleep battery")
+        # 9: tags in archive (prefix "tags in archive")
 
-            if 'oregon rfid' in line_lower:
-                status['device_type'] = line.strip()
-            elif line.startswith('V') and '-' in line:
-                # Version and serial number line
-                parts = line.split()
-                if len(parts) >= 2:
-                    status['version'] = parts[0]
-                    status['serial_number'] = parts[1] if len(parts) > 1 else None
-            elif 'reader name' in line_lower:
-                # Could be just "Reader name" or "Reader name <actual name>"
-                if len(line.split()) > 2:
-                    status['reader_name'] = line.split('Reader name', 1)[1].strip()
+        def warn(msg):
+            status['warnings'].append(msg)
+
+
+        for idx, line in enumerate(status_lines):
+            line_lower = line.lower().strip()
+
+            # Device type
+            if idx == 0:
+                status['device_type'] = line.strip() or None
+
+            # Version and serial number
+            elif idx == 1:
+                if line.startswith('V'):
+                    parts = line.split()
+                    if parts:
+                        status['version'] = parts[0]
+                    if len(parts) > 1:
+                        status['serial_number'] = parts[1]
                 else:
-                    status['reader_name'] = ""
-            elif 'mode' in line_lower:
-                status['mode'] = line.strip()
-            elif 'supply voltage' in line_lower:
-                parts = line.split()
-                status['supply_voltage'] = parts[-1] if parts else None
-            elif 'standby amps' in line_lower or 'amps' in line_lower:
-                parts = line.split()
-                status['standby_amps'] = parts[-1] if parts else None
-            elif 'noise' in line_lower:
-                parts = line.split()
-                status['noise'] = parts[-1] if parts else None
-            elif 'shutdown supercap' in line_lower or 'supercap' in line_lower:
-                parts = line.split()
-                status['shutdown_supercap'] = parts[-1] if parts else None
-            elif 'sleep battery' in line_lower or 'battery' in line_lower:
-                parts = line.split()
-                status['sleep_battery'] = parts[-1] if parts else None
-            elif 'tags in archive' in line_lower or 'archive' in line_lower:
-                parts = line.split()
-                status['tags_in_archive'] = parts[-1] if parts else None
+                    warn(f"Unexpected version/serial line format at row {idx+1}: '{line}'")
+
+            # Reader name (no reliable label, trust position)
+            elif idx == 2:
+                status['reader_name'] = line.strip()
+
+            # Mode line
+            elif idx == 3:
+                if 'mode' in line_lower:
+                    status['mode'] = line.strip()
+                else:
+                    status['mode'] = line.strip() or None
+                    warn(f"Expected mode line at row {idx+1} but got: '{line}'")
+
+            # Supply voltage
+            elif idx == 4:
+                if line_lower.startswith('supply voltage'):
+                    parts = line.split()
+                    status['supply_voltage'] = parts[-1] if parts else None
+                else:
+                    warn(f"Expected 'Supply voltage' at row {idx+1} but got: '{line}'")
+
+            # Standby amps
+            elif idx == 5:
+                if line_lower.startswith('standby amps'):
+                    parts = line.split()
+                    status['standby_amps'] = parts[-1] if parts else None
+                else:
+                    warn(f"Expected 'Standby amps' at row {idx+1} but got: '{line}'")
+
+            # Noise
+            elif idx == 6:
+                if line_lower.startswith('noise'):
+                    parts = line.split()
+                    status['noise'] = parts[-1] if parts else None
+                else:
+                    warn(f"Expected 'Noise' at row {idx+1} but got: '{line}'")
+
+            # Shutdown supercap
+            elif idx == 7:
+                if line_lower.startswith('shutdown supercap'):
+                    parts = line.split()
+                    status['shutdown_supercap'] = parts[-1] if parts else None
+                else:
+                    warn(f"Expected 'Shutdown supercap' at row {idx+1} but got: '{line}'")
+
+            # Sleep battery
+            elif idx == 8:
+                if line_lower.startswith('sleep battery'):
+                    parts = line.split()
+                    status['sleep_battery'] = parts[-1] if parts else None
+                else:
+                    warn(f"Expected 'Sleep battery' at row {idx+1} but got: '{line}'")
+
+            # Tags in archive
+            elif idx == 9:
+                if line_lower.startswith('tags in archive'):
+                    parts = line.split()
+                    status['tags_in_archive'] = parts[-1] if parts else None
+                else:
+                    warn(f"Expected 'Tags in archive' at row {idx+1} but got: '{line}'")
 
         return status
 
@@ -639,35 +697,68 @@ class OregonCommunicator:
 
         return history
 
-    def _check_system_status_health(self, parsed_status):
+    def get_reader_name(self) -> str:
         """
-        Check parsed system status for potential issues.
+        Retrieve the reader name from the device using the SY command.
 
-        Parameters
-        ----------
-        parsed_status : dict
-            Parsed system status dictionary from _parse_system_status().
+        Returns
+        -------
+        str
+            The reader name, or None if not set or an error occurs.
+        """
+
+        if not self._connection:
+            print("Not connected to device.")
+            return None
+
+        try:
+            parsed_status = self._parse_system_status()
+            self._reader_name = parsed_status["reader_name"]
+            return self._reader_name
+
+        except Exception as e:
+            print(f"Error retrieving reader name: {e}")
+            return None
+
+    def check_system_status_health(self):
+        """
+        Calls for system status and checks parsed system status for potential issues.
 
         Returns
         -------
         dict
             Dictionary with 'healthy' (bool) and 'warnings' (list of str) keys.
         """
+
+        print("\nChecking system status health...", end="")
         warnings = []
+
+        parsed_status = self._parse_system_status()
 
         # Check supply voltage
         if parsed_status['supply_voltage']:
             try:
                 voltage = float(parsed_status['supply_voltage'])
-                if voltage < 12.0:
-                    warnings.append(f"Low supply voltage: {voltage}V (should be >= 12V)")
+                if voltage < self.CRITICAL_VOLTAGE_THRESHOLD:
+                    warnings.append(f"Low supply voltage: {voltage}V (should be >= {self.CRITICAL_VOLTAGE_THRESHOLD}V)")
             except (ValueError, TypeError):
                 warnings.append(f"Could not parse supply voltage: {parsed_status['supply_voltage']}")
 
-        return {
+        health_report = {
             'healthy': len(warnings) == 0,
             'warnings': warnings
         }
+
+        print("Done")
+
+        # Report health status
+        if not health_report['healthy']:
+            print(f"\n⚠ WARNING: {len(health_report['warnings'])} issue(s) detected:")
+            for warning in health_report['warnings']:
+                print(f"  - {warning}")
+        else:
+                print("✓ System status check: All parameters within normal range")
+
 
     def export_system_status_to_file(self, output_filepath: str) -> bool:
         """
@@ -690,13 +781,8 @@ class OregonCommunicator:
 
         try:
             print(f"\nExporting system status to file...", end="")
-            lines = self.send_command_and_receive_response("SY")
+            parsed_status = self._parse_system_status()
 
-            # Parse the system status
-            parsed = self._parse_system_status(lines)
-
-            # Check for health issues
-            health = self._check_system_status_health(parsed)
 
             with open(output_filepath, 'w') as f:
                 f.write("Oregon RFID System Status\n")
@@ -704,19 +790,28 @@ class OregonCommunicator:
                 f.write("=========================\n\n")
 
                 # Write system status
-                f.write('\n'.join(lines))
+                f.write(f"Device Type: {parsed_status['device_type']}\n")
+                f.write(f"Version: {parsed_status['version']}\n")
+                f.write(f"Serial Number: {parsed_status['serial_number']}\n")
+                f.write(f"Reader Name: {parsed_status['reader_name']}\n")
+                f.write(f"Mode: {parsed_status['mode']}\n")
+                f.write(f"Supply Voltage: {parsed_status['supply_voltage']}\n")
+                f.write(f"Standby Amps: {parsed_status['standby_amps']}\n")
+                f.write(f"Noise: {parsed_status['noise']}\n")
+                f.write(f"Shutdown Supercap: {parsed_status['shutdown_supercap']}\n")
+                f.write(f"Sleep Battery: {parsed_status['sleep_battery']}\n")
+                f.write(f"Tags in Archive: {parsed_status['tags_in_archive']}\n\n")
+
+                if parsed_status['warnings']:
+                    f.write("Warnings:\n")
+                    for warning in parsed_status['warnings']:
+                        f.write(f"  - {warning}\n")
+                    f.write("\n")
+                else:
+                    f.write("No warnings detected.\n\n")
 
             print("Done.")
             print(f"System status written to {output_filepath}")
-            print(f"Total lines written: {len(lines)}")
-
-            # Report health status
-            if not health['healthy']:
-                print(f"\n⚠ WARNING: {len(health['warnings'])} issue(s) detected:")
-                for warning in health['warnings']:
-                    print(f"  - {warning}")
-            else:
-                print("✓ System status check: All parameters within normal range")
 
             return True
 
