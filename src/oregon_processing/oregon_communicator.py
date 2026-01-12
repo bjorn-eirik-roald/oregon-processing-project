@@ -1117,7 +1117,7 @@ class OregonCommunicator:
             while time.time() < timeout:
                 if self._connection.in_waiting:
                     line = self._connection.readline().decode(errors="ignore").strip()
-                    if "update" in line.lower() and "y" in line.lower():
+                    if "update" in line.lower() and "(y)" in line.lower():
                         prompt_found = True
                         print("Received!")
                         break
@@ -1125,12 +1125,12 @@ class OregonCommunicator:
 
             if not prompt_found:
                 print("TIMEOUT!")
-                print("Did not receive 'Update(Y)?' prompt. Update way not executed.")
+                print("Did not receive 'Update(Y)?' prompt. Update aborted.")
                 return False
 
-            print("Step 5: Confirming update...", end="", flush=True)
+            print("Step 5: Starting update execution...", end="", flush=True)
             self._send_command("Y")
-            print("Done.")
+            print("Started.")
 
             # Step 6: Wait for "Start" prompt
             print("Step 6: Waiting for 'Start' prompt...", end="", flush=True)
@@ -1156,9 +1156,52 @@ class OregonCommunicator:
             self._send_command(firmware_content)
             print("Done.")
 
-            print("\nFirmware update process completed.")
-            print("Please wait for the reader to restart and verify the new version.")
-            print("\nNote: You may need to reconnect to the reader after update.")
+            # Step 8: Capture response from device
+            print("Step 8: Waiting for device response...", end="", flush=True)
+            response_lines = []
+            response_timeout = time.time() + 60  # 60 second timeout for firmware processing
+            last_data_time = time.time()
+
+            while time.time() < response_timeout:
+                if self._connection.in_waiting:
+                    line = self._connection.readline().decode(errors="ignore").strip()
+                    if line:
+                        response_lines.append(line)
+                        last_data_time = time.time()
+
+                # If no data for 3 seconds, assume response is complete
+                if time.time() - last_data_time > 3:
+                    break
+
+                time.sleep(0.2)
+
+            print("Done.")
+
+            # Display response
+            if response_lines:
+                print("\nDevice Response:")
+                print("-"*60)
+                for line in response_lines:
+                    print(line)
+                print("-"*60)
+            else:
+                print("\nNo response received from device.")
+
+            # Make user verfiy update success
+            print("\nPlease verify the firmware update was successful.")
+            verify = None
+            while verify not in ['yes', 'y', 'no', 'n']:
+                verify = input("Did the update complete successfully? (yes/no): ").strip().lower()
+
+            if verify in ['no', 'n']:
+                print("Firmware update reported as unsuccessful by user.")
+                return False
+            else:
+                print("Firmware update reported as successful by user.")
+
+            print("\n" + "="*60)
+            print("FIRMWARE UPDATE COMPLETED")
+            print("="*60)
 
             return True
 
