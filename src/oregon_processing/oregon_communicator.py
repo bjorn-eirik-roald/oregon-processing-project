@@ -331,19 +331,33 @@ class OregonCommunicator:
                     return False
 
     def _is_valid_command(self, command: str) -> bool:
-        """Basic validation: command must start with two-letter main code followed by a space or end."""
-        if not command or len(command) < 2:
+        """
+        Validate command by extracting the main code and checking against VALID_MAIN_COMMANDS.
+
+        Splits the command at the first space and validates the first part (main code).
+        Supports:
+        - Fixed codes: SY, ON, ER, etc.
+        - Codes with wildcards: UP* (where * matches any character or digit)
+        - Pattern codes: UP# (where # can be any digit)
+        """
+        if not command or not command.strip():
             return False
 
-        main = command[:2].upper()
+        # Split at space to get the main command code
+        parts = command.strip().split(None, 1)  # Split on whitespace, max 1 split
+        main_command = parts[0].upper()
 
-        if main not in self.VALID_MAIN_COMMANDS:
-            return False
-
-        # Require a space or end after the two-letter main code
-        if len(command) == 2:
+        # Direct match in VALID_MAIN_COMMANDS
+        if main_command in self.VALID_MAIN_COMMANDS:
             return True
-        return command[2].isspace()
+
+        # Check for pattern matches (e.g., UP# where # is a digit)
+        if main_command[:2] == "UP":
+            suffix = main_command[2:]
+            if suffix and all(c.isdigit() for c in suffix):
+                return True
+
+        return False
 
     def _validate_prompt_signature(self, signature: str) -> bool:
         """
@@ -425,6 +439,23 @@ class OregonCommunicator:
 
         return valid_signature
 
+    def _send_command(self, command):
+        """
+        Send a command to the device.
+
+        Parameters
+        ----------
+        command : str
+            Command string to send (e.g., "SY").
+        """
+
+        if not self._connection:
+            raise ConnectionError("Not connected to device.")
+
+        self._connection.reset_input_buffer()
+        self._connection.write((command + "\r\n").encode())
+        self._connection.flush()
+
     def send_command_and_receive_response(self, command, timeout=5):
         """
         Send a command and read lines until a known prompt ending appears.
@@ -434,12 +465,8 @@ class OregonCommunicator:
         if not self._connection:
             raise ConnectionError("Not connected to device.")
 
-        # Clear stale input
-        self._connection.reset_input_buffer()
-
         # Send command
-        self._connection.write((command + "\r\n").encode())
-        self._connection.flush()
+        self._send_command(command)
 
         lines = []
         last_data_time = time.time()
@@ -994,6 +1021,149 @@ class OregonCommunicator:
 
         except Exception as e:
             print(f"Error during batch export: {e}")
+            return False
+
+    def update_firmware(self, firmware_file_path: str, new_version: str) -> bool:
+        """
+        Update the firmware on the Oregon RFID reader.
+
+        Process:
+        1. Get current firmware version
+        2. Confirm with user
+        3. Turn off reader with OF command
+        4. Run FW command
+        5. Wait for prompt and confirm with Y
+        6. Wait for "Start" prompt
+        7. Send firmware file content
+
+        Parameters
+        ----------
+        firmware_file_path : str
+            Path to the firmware update file
+        new_version : str
+            Version string of the new firmware (e.g., "V2.2A")
+
+        Returns
+        -------
+        bool
+            True if update completed successfully, False otherwise.
+        """
+
+        if not self._connection:
+            print("Not connected to device.")
+            return False
+
+        # Verify firmware file exists before starting
+        try:
+            with open(firmware_file_path, 'r') as f:
+                firmware_content = f.read()
+        except FileNotFoundError:
+            print(f"\nError: Firmware file not found: {firmware_file_path}")
+            return False
+        except Exception as e:
+            print(f"\nError reading firmware file: {e}")
+            return False
+
+        # Get current firmware version
+        print("Retrieving current firmware version...", end="")
+        parsed_status = self._parse_system_status()
+        current_version = parsed_status.get('version', 'Unknown')
+        print(f"Done. Current version: {current_version}")
+
+        # Initial confirmation
+        print("\n" + "="*60)
+        print("FIRMWARE UPDATE PROCESS")
+        print("="*60)
+
+        try:
+
+            # Final confirmation with version info
+            print("\n" + "-"*60)
+            print(f"Current firmware version: {current_version}")
+            print(f"New firmware version:     {new_version}")
+            print("-"*60)
+            confirm = input("\nConfirm firmware update (yes/no): ").strip().lower()
+            if confirm not in ['yes', 'y']:
+                print("Firmware update cancelled by user.")
+                return False
+
+            print("\n" + "="*60)
+            print("Starting firmware update process...")
+            print("="*60)
+
+            # Step 1: Read firmware file content
+            print(f"\nStep 1: Reading firmware file: {firmware_file_path}...", end="", flush=True)
+            with open(firmware_file_path, 'r') as f:
+                firmware_content = f.read()
+            print("Done.")
+
+            # Step 2: Turn off reader
+            print("\nStep 2: Turning off reader...", end="", flush=True)
+            self.send_command_and_receive_response
+            self._send_command("OF")
+            time.sleep(2)
+            print("Done.")
+
+            # Step 3: Send FW command
+            print("Step 3: Initiating firmware update mode...", end="", flush=True)
+            self._send_command("FW")
+            print("Done.")
+
+            # Step 4: Wait for "Update(Y)?" prompt and send Y
+            print("Step 4: Waiting for 'Update(Y)?' prompt...", end="", flush=True)
+            prompt_found = False
+            timeout = time.time() + 10  # 10 second timeout
+
+            while time.time() < timeout:
+                if self._connection.in_waiting:
+                    line = self._connection.readline().decode(errors="ignore").strip()
+                    if "update" in line.lower() and "y" in line.lower():
+                        prompt_found = True
+                        print("Received!")
+                        break
+                time.sleep(0.2)
+
+            if not prompt_found:
+                print("TIMEOUT!")
+                print("Did not receive 'Update(Y)?' prompt. Update way not executed.")
+                return False
+
+            print("Step 5: Confirming update...", end="", flush=True)
+            self._send_command("Y")
+            print("Done.")
+
+            # Step 6: Wait for "Start" prompt
+            print("Step 6: Waiting for 'Start' prompt...", end="", flush=True)
+            start_found = False
+            timeout = time.time() + 30  # 30 second timeout
+
+            while time.time() < timeout:
+                if self._connection.in_waiting:
+                    line = self._connection.readline().decode(errors="ignore").strip()
+                    if "start" in line.lower():
+                        start_found = True
+                        print("Received!")
+                        break
+                time.sleep(0.5)
+
+            if not start_found:
+                print("TIMEOUT!")
+                print("Did not receive 'Start' prompt. Update may have failed.")
+                return False
+
+            # Step 7: Send firmware content
+            print("Step 7: Uploading firmware data...", end="", flush=True)
+            self._send_command(firmware_content)
+            print("Done.")
+
+            print("\nFirmware update process completed.")
+            print("Please wait for the reader to restart and verify the new version.")
+            print("\nNote: You may need to reconnect to the reader after update.")
+
+            return True
+
+        except Exception as e:
+            print(f"\nError during firmware update: {e}")
             return False
 
 
