@@ -15,6 +15,8 @@ try:
 except ImportError:
     import pyreadline3 as readline  # Windows
 
+from oregon_processing.oregon_connector import OregonConnector
+
 
 
 
