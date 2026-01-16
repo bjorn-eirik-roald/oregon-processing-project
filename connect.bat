@@ -20,9 +20,8 @@ if errorlevel 1 (
 REM --- Check if the environment exists ---
 conda env list | findstr /i "%OREGON_ENV%" >nul
 if errorlevel 1 (
-    echo ERROR: Conda environment "%OREGON_ENV%" not found.
-    echo Please create it first:
-    echo    conda create -n %OREGON_ENV% python=3.11
+    echo ERROR: Conda environment "%OREGON_ENV%" not found. 
+    echo Make sure the environment is created with the proper name and packages installed. Then try again.
     pause
     exit /b 1
 )
@@ -36,8 +35,8 @@ if errorlevel 1 (
 )
 
 REM --- Run the Python script ---
-
 oregon-terminal
+
 set ERR=%ERRORLEVEL%
 
 if %ERR% NEQ 0 (
