@@ -26,6 +26,9 @@ test = [
     "pytest-cov>=4.0",
 ]
 
+[project.scripts]
+oregon-terminal = "test.terminal:run"
+
 [project.urls]
 Homepage = "https://github.com/yourusername/oregon-processing-project"
 Documentation = "https://github.com/yourusername/oregon-processing-project#readme"
@@ -33,10 +36,11 @@ Repository = "https://github.com/yourusername/oregon-processing-project.git"
 "Bug Tracker" = "https://github.com/yourusername/oregon-processing-project/issues"
 
 [tool.setuptools]
-packages = ["oregon_processing"]
+packages = ["oregon_processing", "test"]
 
 [tool.setuptools.package-dir]
-"" = "src"
+oregon_processing = "src/oregon_processing"
+test = "test"
 
 [tool.black]
 line-length = 100

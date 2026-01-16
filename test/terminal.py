@@ -11,9 +11,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from oregon_processing.oregon_communicator import OregonCommunicator
 
-if __name__ == '__main__':
-
+def run():
     with OregonCommunicator() as communicator:
 
         communicator.connect()
         communicator.interactive_terminal()
+
+if __name__ == '__main__':
+    run()
