@@ -17,6 +17,8 @@ except ImportError:
     import pyreadline3 as readline  # Windows
 
 from oregon_processing.oregon_connector import OregonConnector
+from oregon_processing.command_manager import CommandManager
+from oregon_processing.interactive_terminal import InteractiveTerminal
 
 
 
@@ -24,76 +26,6 @@ from oregon_processing.oregon_connector import OregonConnector
 
 class OregonCommunicator:
     """Class to communicate with Oregon device via serial port."""
-
-    VALID_MAIN_COMMANDS = {
-        # Reader power / operation
-        "ON", "ST", "OF",
-
-        # Bluetooth
-        "BT0", "BT1",
-
-        # Status / diagnostics
-        "SY", "NO", "AB", "QU", "HE",
-
-        # Beeper / LEDs / display
-        "BP0", "BP1", "BP2",
-        "BR1", "BR2", "BR3",
-        "DK",
-
-        # Antenna / tuning
-        "TU", "TO", "AP", "AS", "MQ",
-        "SM", "SMA",
-        "MX", "MV",
-
-        # Timing / scheduling
-        "TM", "DT", "TZ",
-        "OVG", "OVN",
-
-        # Scan / detection behavior
-        "DM",
-        "FS",
-        "TF",
-        "TC",
-        "RE",
-        "MP",
-        "PH0", "PH1",
-        "HD", "HDR", "HDC", "HDL",
-        "MC",
-
-        # Configuration / identity
-        "RN", "SC",
-        "BC", "BCR",
-
-        # Datalogger / records
-        "UH",
-        "UP", "UP*", "UPS",
-        "UD", "UT",
-        "ER",
-        "CO",
-        "TL",
-        "FM", "FN",
-        "WE0", "WE1",
-        "LA",
-        "CS",
-        "MG",
-
-        # Network / multi-reader
-        "NL", "SL",
-
-        # GNSS / location / sensors
-        "GNS0", "GNS1",
-        "LO",
-        "TS",
-
-        # Utilities
-        "CV",
-
-        # Firmware / maintenance
-        "FW",
-        "RD",
-        "RB",
-        "FR", "FRD", "FRR", "FRA",
-    }
 
     TIME_STATUSES_SYNCED = {'G':"GNSS Time", 'N':"Network time using CAT5 cable", 'U':"Uncalibrated (entered with DT command)", "E": "Ellapsed time since power-up"}
     CRITICAL_VOLTAGE_THRESHOLD = 12.0  # volts
@@ -103,7 +35,7 @@ class OregonCommunicator:
         self._connection = None
         self._port = None
         self._baudrate = None
-        self._last_prompt_signature = None
+        self._command_manager = None
         self._last_upload_date = None
         self._reader_name = None
 
@@ -130,6 +62,29 @@ class OregonCommunicator:
         """Ensure the connection is closed when leaving context."""
         self.close()
 
+    def _post_connect_handshake(self):
+        """Send a quick SY command to verify connection and capture prompt signature. Store reader name"""
+
+        if not self._connection:
+            return
+
+        self.check_system_status_health()
+        self.get_reader_name()
+
+    def connect(self):
+        """Attempt to connect to Oregon RFID sensor using the OregonConnector."""
+        result = self._connector.connect()
+
+        if result:
+            self._connection = result['connection']
+            self._port = result['port']
+            self._baudrate = result['baudrate']
+            self._command_manager = CommandManager(self._connection)
+            self._post_connect_handshake()
+            return True
+
+        return False
+
     def close(self):
         """Close serial connection."""
         if self._connection:
@@ -143,222 +98,22 @@ class OregonCommunicator:
                 self._port = None
                 self._baudrate = None
 
-    def _post_connect_handshake(self):
-        """Send a quick SY command to verify connection and capture prompt signature. Store reader name"""
+    def send_command(self, command: str):
+        return self._command_manager.send_command_and_receive_response(command)
 
+    def start_interactive_terminal(self):
+        """
+        Start an interactive terminal session for sending commands to the device.
+
+        Opens a command-line interface where commands can be entered, validated,
+        sent to the device, and responses displayed. Type 'exit' or 'quit' to exit.
+        """
         if not self._connection:
+            print("Not connected to device.")
             return
-        try:
-            self.check_system_status_health()
-            self.get_reader_name()
-        except Exception:
-            # Non-fatal; connection is still established
-            pass
 
-    def connect(self):
-        """Attempt to connect to Oregon RFID sensor using the OregonConnector."""
-        result = self._connector.connect()
-
-        if result:
-            self._connection = result['connection']
-            self._port = result['port']
-            self._baudrate = result['baudrate']
-            # Send a quick SY command to verify comms and capture prompt signature
-            self._post_connect_handshake()
-            return True
-
-        return False
-
-    def _is_valid_command(self, command: str) -> bool:
-        """
-        Validate command by extracting the main code and checking against VALID_MAIN_COMMANDS.
-
-        Splits the command at the first space and validates the first part (main code).
-        Supports:
-        - Fixed codes: SY, ON, ER, etc.
-        - Codes with wildcards: UP* (where * matches any character or digit)
-        - Pattern codes: UP# (where # can be any digit)
-        """
-        if not command or not command.strip():
-            return False
-
-        # Split at space to get the main command code
-        parts = command.strip().split(None, 1)  # Split on whitespace, max 1 split
-        main_command = parts[0].upper()
-
-        # Direct match in VALID_MAIN_COMMANDS
-        if main_command in self.VALID_MAIN_COMMANDS:
-            return True
-
-        # Check for pattern matches (e.g., UP# where # is a digit)
-        if main_command[:2] == "UP":
-            suffix = main_command[2:]
-            if suffix and all(c.isdigit() for c in suffix):
-                return True
-
-        return False
-
-    def _validate_prompt_signature(self, signature: str) -> bool:
-        """
-        Validate an Oregon RFID prompt signature.
-
-        Oregon RFID devices prepend each serial output line with a
-        4-character prompt signature describing the current device state.
-        The format is positional and must be interpreted by character index:
-
-            [0][1][2][3]
-            |  |  |  |
-            |  |  |  └─ Audible feedback state
-            |  |  └──── Time synchronization source
-            |  └────── Run / scan state
-            └───────── Network / operating mode
-
-        Character definitions:
-
-        Character 1 = Operating mode:
-            '0' : Off with power
-            'H' : Host mode (generates system timing for network)
-            'N' : Node mode (synchronized to host)
-
-        Character 2 = Run state:
-            'R' : Running; scanning enabled, detections saved to file
-            'S' : Standby; not scanning, database accessible
-            'Z' : Off
-
-        Character 3 = Time synchronization:
-            'G' : Synchronized to GNSS signals
-            'N' : Synchronized to network signal
-            'U' : Unsynchronized
-
-        Character 4 = Beeper state:
-            'B' : Beeper enabled
-            '*' : Beeper disabled
-
-        Validation rules:
-            - Signature must be exactly 4 characters long
-            - Each character must be valid for its position
-            - Signature must be a string (not None)
-
-        Example:
-            "HRGB" → valid
-            "HSU*" → valid
-            "HRGX" → invalid (unknown beeper state)
-            "ABCD" → invalid
-            "HRG"  → invalid (wrong length)
-
-        Parameters
-        ----------
-        signature : str
-            Four-character prompt signature (e.g. "HRGB").
-
-        Returns
-        -------
-        bool
-            True if the signature is valid according to the Oregon RFID
-            prompt signature specification, otherwise False.
-        """
-
-        if not isinstance(signature, str):
-            raise TypeError("Signature must be a string.")
-
-        if len(signature) != 4:
-            return False
-
-        valid_sets = (
-            {'0', 'H', 'N'},  # operating mode
-            {'R', 'S', 'Z'},  # run state
-            {'G', 'N', 'U'},  # time sync
-            {'B', '*'}       # beeper
-        )
-
-        valid_signature = all(c in valid for c, valid in zip(signature, valid_sets))
-
-        if valid_signature:
-            self._last_prompt_signature = signature
-
-        return valid_signature
-
-    def _send_command(self, command):
-        """
-        Send a command to the device.
-
-        Parameters
-        ----------
-        command : str
-            Command string to send (e.g., "SY").
-        """
-
-        if not self._connection:
-            raise ConnectionError("Not connected to device.")
-
-        self._connection.reset_input_buffer()
-        self._connection.write((command + "\r\n").encode())
-        self._connection.flush()
-
-    def send_command_and_receive_response(self, command, timeout=5):
-        """
-        Send a command and read lines until a known prompt ending appears.
-        Uses an idle timeout: the clock resets each time data arrives. Returns the
-        cleaned response (list of lines) with echoed command and prompts removed.
-        """
-        if not self._connection:
-            raise ConnectionError("Not connected to device.")
-
-        # Send command
-        self._send_command(command)
-
-        lines = []
-        last_data_time = time.time()
-
-        while True:
-            line = self._connection.readline().decode(errors="ignore").strip()
-            if line:
-                # check for valid prompt signature to end reading
-                if self._validate_prompt_signature(line[:4]):
-                    self._last_prompt_signature = line[:4]
-                    break
-
-                lines.append(line)
-                last_data_time = time.time()
-
-            # Idle timeout: only break if no new data arrives within timeout
-            if time.time() - last_data_time > timeout:
-                break
-
-        # Remove echoed command and empty lines
-        cleaned = [l for l in lines if l and l != command]
-        return cleaned
-
-    def interactive_terminal(self):
-        print("\nEntering interactive terminal. Type 'exit' to quit.")
-
-        try:
-            while True:
-                prompt = f"\n{self._last_prompt_signature or ''}>> "
-                cmd = input(prompt).strip()
-                if not cmd:
-                    continue
-
-                # Exit on 'exit' or 'quit'
-                if cmd.lower() in ("exit", "quit"):
-                    print("Exiting terminal.")
-                    break
-
-                # Validate command format
-                if not self._is_valid_command(cmd):
-                    print("Invalid command. Use a two-letter code followed by a space (e.g., 'SY ').")
-                    print(f"Valid codes: {sorted(self.VALID_MAIN_COMMANDS)}")
-                    continue
-
-                # send command and get cleaned response
-                lines = self.send_command_and_receive_response(cmd)
-                if lines:
-                    print("\n".join(lines))
-                else:
-                    print("Command received without error")
-
-        except KeyboardInterrupt:
-            print("\nTerminal interrupted by user.")
+        terminal = InteractiveTerminal(self._command_manager)
+        terminal.run()
 
     def _parse_system_status(self):
         """
@@ -369,7 +124,7 @@ class OregonCommunicator:
         validates prefixes for the labeled rows to guard against misalignment.
         """
 
-        status_lines = self.send_command_and_receive_response("SY")
+        status_lines = self.send_command("SY")
 
         status = {
             'device_type': None,
@@ -493,7 +248,7 @@ class OregonCommunicator:
             Parsed upload history with upload records and metadata.
         """
 
-        upload_history_lines = self.send_command_and_receive_response("UH")
+        upload_history_lines = self.send_command("UH")
 
         history = {
             'reader_name': None,
@@ -618,7 +373,7 @@ class OregonCommunicator:
 
         try:
             # Send TZ command and get response
-            lines = self.send_command_and_receive_response("TZ")
+            lines = self.send_command("TZ")
 
         except Exception as e:
             print(f"Error sending TZ command: {e}")
@@ -708,7 +463,7 @@ class OregonCommunicator:
 
         # Send DT command and get response
         try:
-            lines = self.send_command_and_receive_response("DT")
+            lines = self.send_command("DT")
         except Exception as e:
             raise Exception(f"Error sending DT command: {e}")
 
@@ -798,8 +553,8 @@ class OregonCommunicator:
             'error': None
         }
 
-        # If out of sync and attempt_synch enabled, prompt user and update device
-        if not is_synced and attempt_synch:
+        # If out of sync and attempt_sync enabled, prompt user and update device
+        if not is_synced and attempt_sync:
             # Ask for user confirmation
             confirm = None
             while confirm not in ['yes', 'y', 'no', 'n']:
@@ -813,13 +568,13 @@ class OregonCommunicator:
                 # Update device time: first set timezone to UTC, then send the time
                 print("Updating device time...", end="", flush=True)
                 print("\n  Setting device timezone to UTC...", end="", flush=True)
-                self.send_command_and_receive_response("TZ0")
+                self.send_command("TZ 0")
                 print("Done.")
 
                 print("  Sending device time...", end="", flush=True)
                 # Send UTC time to device (device interprets DT command as UTC)
                 dt_command = system_datetime_utc.strftime("DT %Y-%m-%d %H:%M:%S")
-                response_lines = self.send_command_and_receive_response(dt_command)
+                response_lines = self.send_command(dt_command)
 
                 report['was_updated'] = True
                 report['update_command_sent'] = dt_command
@@ -957,7 +712,7 @@ class OregonCommunicator:
 
         try:
             print(f"\nExporting upload log to file...", end="")
-            upload_history_lines = self.send_command_and_receive_response("UH")
+            upload_history_lines = self.send_command("UH")
 
             with open(output_filepath, 'w') as f:
                 f.write("Oregon RFID Upload Log\n")
@@ -1011,7 +766,7 @@ class OregonCommunicator:
         try:
             # Send ER command with date
             command = f"ER {date.strftime('%Y-%m-%d')}"
-            lines = self.send_command_and_receive_response(command)
+            lines = self.send_command(command)
 
             # Generate output filename with date
             with open(output_filepath, 'w') as f:
@@ -1176,14 +931,13 @@ class OregonCommunicator:
 
             # Step 2: Turn off reader
             print("\nStep 2: Turning off reader...", end="", flush=True)
-            self.send_command_and_receive_response
-            self._send_command("OF")
+            self._command_manager._send_command("OF")
             time.sleep(2)
             print("Done.")
 
             # Step 3: Send FW command
             print("Step 3: Initiating firmware update mode...", end="", flush=True)
-            self._send_command("FW")
+            self._command_manager._send_command("FW")
             print("Done.")
 
             # Step 4: Wait for "Update(Y)?" prompt and send Y
@@ -1206,7 +960,7 @@ class OregonCommunicator:
                 return False
 
             print("Step 5: Starting update execution...", end="", flush=True)
-            self._send_command("Y")
+            self._command_manager._send_command("Y")
             print("Started.")
 
             # Step 6: Wait for "Start" prompt
@@ -1230,7 +984,7 @@ class OregonCommunicator:
 
             # Step 7: Send firmware content
             print("Step 7: Uploading firmware data...", end="", flush=True)
-            self._send_command(firmware_content)
+            self._command_manager._send_command(firmware_content)
             print("Done.")
 
             # Step 8: Capture response from device
