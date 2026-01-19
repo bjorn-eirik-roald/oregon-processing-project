@@ -5,8 +5,9 @@ Oregon RFID Communicator
 
 from inspect import signature
 import time
+import os
 
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 # Support for history of readline on Windows via pyreadline3
@@ -94,6 +95,7 @@ class OregonCommunicator:
         "FR", "FRD", "FRR", "FRA",
     }
 
+    TIME_STATUSES_SYNCED = {'G':"GNSS Time", 'N':"Network time using CAT5 cable", 'U':"Uncalibrated (entered with DT command)", "E": "Ellapsed time since power-up"}
     CRITICAL_VOLTAGE_THRESHOLD = 12.0  # volts
 
     def __init__(self):
@@ -481,7 +483,7 @@ class OregonCommunicator:
 
         return status
 
-    def parse_upload_history(self):
+    def _parse_upload_history(self):
         """
         Parse upload history output from UH command.
 
@@ -596,6 +598,245 @@ class OregonCommunicator:
         except Exception as e:
             print(f"Error retrieving reader name: {e}")
             return None
+
+    def get_device_timezone(self) -> timezone:
+        """
+        Retrieve the device's timezone offset using the TZ command.
+
+        The TZ command returns timezone information in two possible formats:
+        Format 1 (hours and minutes): "Hours:minutes to UT: -3h30m"
+        Format 2 (hours only): "Hours to UT: +0"
+
+        Returns
+        -------
+        timezone
+            Python timezone object representing the device's UTC offset,
+            or None if an error occurs.
+        """
+        if not self._connection:
+            raise ConnectionError("Not connected to device.")
+
+        try:
+            # Send TZ command and get response
+            lines = self.send_command_and_receive_response("TZ")
+
+        except Exception as e:
+            print(f"Error sending TZ command: {e}")
+
+
+        # First line contains timezone offset information
+        # Format 1: "Hours:minutes to UT: -3h30m"
+        # Format 2: "Hours to UT: +0"
+        tz_line = lines[0].strip()
+
+        hours = 0
+        minutes = 0
+        sign = 1
+
+        # Determine format and parse accordingly
+        if tz_line.startswith("Hours:minutes to UT:"):
+            # Format 1: "Hours:minutes to UT: -3h30m"
+            offset_part = tz_line.split("Hours:minutes to UT:")[1].strip()
+
+            # Determine sign
+            if offset_part.startswith('-'):
+                sign = -1
+                offset_part = offset_part[1:]
+            elif offset_part.startswith('+'):
+                sign = 1
+                offset_part = offset_part[1:]
+            else:
+                raise ValueError(f"Unrecognized timezone format: {tz_line}")
+
+            # Parse "3h30m" format
+            try:
+                hours = int(offset_part.split('h')[0].strip())
+                minutes = int(offset_part.split('h')[1].strip().split('m')[0].strip())
+            except IndexError:
+                raise ValueError(f"Unrecognized timezone format: {tz_line}")
+
+
+        elif tz_line.startswith("Hours to UT:"):
+            # Format 2: "Hours to UT: +0"
+            offset_part = tz_line.split("Hours to UT:")[1].strip()
+
+            # Determine sign
+            if offset_part.startswith('-'):
+                sign = -1
+                offset_part = offset_part[1:]
+            elif offset_part.startswith('+'):
+                sign = 1
+                offset_part = offset_part[1:]
+            else:
+                raise ValueError(f"Unrecognized timezone format: {tz_line}")
+
+            # Parse hours only
+            hours = int(offset_part)
+
+        else:
+            raise ValueError(f"Unrecognized timezone format: {tz_line}")
+
+        # Calculate total offset and return timezone object
+        total_seconds = sign * (hours * 3600 + minutes * 60)
+
+        return timezone(timedelta(seconds=total_seconds))
+
+
+    def get_device_datetime(self) -> dict:
+        """
+        Retrieve the device's current date and time using the DT and TZ commands.
+
+        Returns a timezone-aware datetime object combining the device's time
+        from the DT command with the timezone offset from the TZ command.
+
+        Returns
+        -------
+        dict
+            Parsed device datetime with keys:
+            - 'datetime': Timezone-aware datetime object
+            - 'milliseconds': Milliseconds component (int, 0-999)
+            - 'sync_status': Synchronization status ('G', 'N', or 'U')
+            - 'raw_output': Raw DT response line from device
+            - 'error': Error message if parsing failed (None if successful)
+        """
+
+        if not self._connection:
+            raise ConnectionError("Not connected to device.")
+
+        device_tz = self.get_device_timezone()
+
+
+        # Send DT command and get response
+        try:
+            lines = self.send_command_and_receive_response("DT")
+        except Exception as e:
+            raise Exception(f"Error sending DT command: {e}")
+
+        # Parse the DT response: "2025-01-19 09:18:02.304 U (UT+0)"
+        response_line = lines[0].strip()
+        parts = response_line.split()
+
+        if len(parts) < 3:
+            raise ValueError(f"Unrecognized DT response format: {response_line}")
+
+        date_str = parts[0]  # YYYY-MM-DD
+        time_str = parts[1]  # HH:MM:SS.milliseconds
+        sync_status = parts[2]  # G, N, or U
+
+        # Parse time and milliseconds
+        if '.' in time_str:
+            time_part, milliseconds_str = time_str.split('.')
+            milliseconds = int(milliseconds_str)
+        else:
+            time_part = time_str
+            milliseconds = 0
+
+        # Create timezone-aware datetime
+        datetime_obj = datetime.strptime(f"{date_str} {time_part}", "%Y-%m-%d %H:%M:%S")
+        datetime_aware = datetime_obj.replace(tzinfo=device_tz)
+
+        return {
+            'datetime': datetime_aware,
+            'milliseconds': milliseconds,
+            'sync_status': self.TIME_STATUSES_SYNCED.get(sync_status, "Unknown"),
+            'raw_output': response_line,
+            'error': None
+        }
+
+
+    def control_device_datetime(self, tolerance_seconds: int = 15, attempt_sync: bool = False) -> dict:
+
+
+        if not self._connection:
+            raise ConnectionError("Not connected to device.")
+
+        print("\n" + "=" * 70)
+        print("Device Date/Time Check")
+
+
+        device_result = self.get_device_datetime()
+        device_datetime = device_result['datetime']
+        sync_status = device_result['sync_status']
+
+        # Get system datetime (PC time)
+        system_datetime = datetime.now()
+        system_datetime_utc = system_datetime.astimezone(timezone.utc)
+
+        # Convert both to UTC for comparison
+        device_datetime_utc = device_datetime.astimezone(timezone.utc)
+        system_datetime_local = system_datetime.astimezone()  # Get local time with timezone
+
+        # Calculate difference in UTC (negative means device is behind)
+        time_diff = (device_datetime_utc - system_datetime_utc).total_seconds()
+
+        # Check if within acceptable tolerance
+        is_synced = abs(time_diff) <= tolerance_seconds
+
+        # Display sync status and times (always, regardless of attempt_synch)
+        device_offset_hours = device_datetime.utcoffset().total_seconds() / 3600
+        system_offset_hours = system_datetime_local.utcoffset().total_seconds() / 3600
+        device_tz_str = f"(UT{device_offset_hours:+.1f})"
+        system_tz_str = f"(UT{system_offset_hours:+.1f})"
+
+
+        print(f"Sync Status: {'✓ IN SYNC' if is_synced else '⚠ OUT OF SYNC'}")
+        print("-" * 70)
+        print(f"Device datetime: {device_datetime.strftime('%Y-%m-%d %H:%M:%S')} {device_tz_str} [Time source: {sync_status}]")
+        print(f"System datetime: {system_datetime.strftime('%Y-%m-%d %H:%M:%S')} {system_tz_str}")
+        if not is_synced:
+            print(f"Time difference: {time_diff:+.1f} seconds ({abs(time_diff):.1f}s {'ahead' if time_diff > 0 else 'behind'})")
+        print("=" * 70)
+
+        report = {
+            'synced': is_synced,
+            'device_datetime': device_datetime,
+            'system_datetime': system_datetime,
+            'difference_seconds': time_diff,
+            'was_updated': False,
+            'update_command_sent': None,
+            'update_response': None,
+            'error': None
+        }
+
+        # If out of sync and attempt_synch enabled, prompt user and update device
+        if not is_synced and attempt_synch:
+            # Ask for user confirmation
+            confirm = None
+            while confirm not in ['yes', 'y', 'no', 'n']:
+                confirm = input("\nUpdate device time to match system time? (yes/no): ").strip().lower()
+
+            if confirm in ['no', 'n']:
+                print("Device time sync cancelled by user.")
+                return report
+
+            try:
+                # Update device time: first set timezone to UTC, then send the time
+                print("Updating device time...", end="", flush=True)
+                print("\n  Setting device timezone to UTC...", end="", flush=True)
+                self.send_command_and_receive_response("TZ0")
+                print("Done.")
+
+                print("  Sending device time...", end="", flush=True)
+                # Send UTC time to device (device interprets DT command as UTC)
+                dt_command = system_datetime_utc.strftime("DT %Y-%m-%d %H:%M:%S")
+                response_lines = self.send_command_and_receive_response(dt_command)
+
+                report['was_updated'] = True
+                report['update_command_sent'] = dt_command
+                report['update_response'] = response_lines
+                report['synced'] = True
+
+                print("Done.")
+                print("Device datetime updated successfully.")
+
+            except Exception as e:
+                report['error'] = f'Failed to update device datetime: {e}'
+                print("ERROR.")
+                print(f"Error updating device time: {e}")
+
+        return report
+
+
 
     def check_system_status_health(self):
         """
@@ -818,7 +1059,7 @@ class OregonCommunicator:
         if not self._last_upload_date:
             try:
                 print("Retrieving last upload date from device...", end="", flush=True)
-                self.parse_upload_history()
+                self._parse_upload_history()
                 print("Done.")
             except Exception as e:
                 print("ERROR")
