@@ -54,8 +54,14 @@ class OregonCommunicator:
         """Get the reader name if known."""
         return self._reader_name
 
+    @property
+    def is_connected(self):
+        """Check if there is an active connection."""
+        return self._connection is not None
+
     def __enter__(self):
         """Allow use in 'with' statement."""
+        self.connect()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):

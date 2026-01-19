@@ -21,7 +21,11 @@ class OregonConnector:
 
         while True:
             choice = input("\nSelect a baud rate option (enter option number): ").strip()
-            index = int(choice) - 1
+            try:
+                index = int(choice) - 1
+            except ValueError:
+                print("Invalid selection! Enter a number from the list.", end=" ")
+                continue
 
             # Return selected baud rate(s)
             if 0 <= index < len(self.BAUD_RATES):
@@ -29,12 +33,114 @@ class OregonConnector:
             # User chose to try all baud rates
             elif index == len(self.BAUD_RATES):
                 return self.BAUD_RATES
-            #User cancelled
+            # User cancelled
             elif index == len(self.BAUD_RATES) + 1:
+                print("Baud rate selection aborted.")
                 return None
             # Invalid selection
             else:
-                print("Invalid selection!", end=" ")
+                print("Invalid selection! Enter a number from the list.", end=" ")
+
+
+        print("No device found on the attempted port(s).")
+        return None
+
+    def _handle_manual_port_selection(self, ports):
+        """Handle user selecting a specific port. Returns selected port device or None."""
+        if not ports:
+            print("\nNo ports available.")
+            return None
+
+        print("\nAvailable ports:")
+        for i, port in enumerate(ports, 1):
+            print(f"  {i}. {port.device} - {port.description}")
+        print(f"  {len(ports) + 1}. Cancel and return to main menu")
+
+        # Loop until valid port is selected
+        while True:
+            port_choice = input("\nSelect a port (enter number): ").strip()
+
+            try:
+                port_index = int(port_choice) - 1
+            except ValueError:
+                print("Invalid input. Please enter a number from the list.")
+                continue
+
+            if 0 <= port_index < len(ports):
+                return ports[port_index].device
+            elif port_index == len(ports):
+                print("Cancelled. Returning to main menu.")
+                return None
+            else:
+                print("Invalid port selection. Please try again.")
+
+    def _handle_prolific_port_search(self, ports):
+        """Return list of Prolific ports (if any) for later connection attempt."""
+
+        print("\nSearching for Prolific USB serial adapter ports:", flush=True)
+
+        # Filter for Prolific ports (common for USB serial adapters)
+        prolific_ports = [p.device for p in ports if "prolific" in p.description.lower()]
+
+
+        if prolific_ports:
+            print(f"  Found Prolific port(s): {prolific_ports}")
+            return prolific_ports
+
+        print("  No Prolific USB serial adapter ports found.")
+        return None
+
+    def _handle_all_ports_selection(self, ports):
+        """Return list of all available port devices for later connection attempt."""
+        if not ports:
+            print("\nNo ports available.")
+            return None
+
+        port_devices = [p.device for p in ports]
+        print(f"\nEach available port will be attempted: {port_devices}")
+        return port_devices
+
+    def _select_ports(self):
+        print("\n\n=== Port Selection ===")
+        #loop until connection is successful or user aborts
+        while True:
+
+            ports = [p for p in serial.tools.list_ports.comports()]
+
+            # select option for selecting port
+            print("\nOptions:")
+            print("  1. Select a specific port to attempt")
+            print("  2. Attempt all available ports")
+            print("  3. Search for Prolific ports")
+            print("  4. Abort connection process")
+
+            # Loop until valid choice is made
+            while True:
+                choice = input("\nEnter your choice (1, 2, 3, or 4): ").strip()
+
+                # Validate input
+                if choice not in ["1", "2", "3", "4"]:
+                    print("Invalid choice. Please enter 1, 2, 3, or 4.")
+                    continue
+
+                # Valid choice - process accordingly
+                if choice == "1":
+                    selected_port = self._handle_manual_port_selection(ports)
+                    selected_ports = [selected_port] if selected_port else None
+                elif choice == "2":
+                    selected_ports = self._handle_all_ports_selection(ports)
+                elif choice == "3":
+                    selected_ports = self._handle_prolific_port_search(ports)
+                elif choice == "4":
+                    print("Connection process aborted by user.")
+                    return None
+
+                if selected_ports:
+                    return selected_ports
+                else:
+                    # No valid selection; re-display options
+                    break
+
 
     def _attempt_connection(self, ports, bauds):
         """Helper method to attempt connection on a list of ports with specified baud rates."""
@@ -63,72 +169,6 @@ class OregonConnector:
                 except Exception as e:
                     print(f" Error: {e}")
 
-        print("No device found on the attempted port(s).")
-        return None
-
-    def _handle_manual_port_selection(self, ports, bauds):
-        """Handle user selecting a specific port. Returns connection dict if successful."""
-        if not ports:
-            print("No ports available.")
-            return None
-
-        print("\nAvailable ports:")
-        for i, port in enumerate(ports, 1):
-            print(f"  {i}. {port.device} - {port.description}")
-        print(f"  {len(ports) + 1}. Cancel and return to main menu")
-
-        # Loop until valid port is selected
-        while True:
-            port_choice = input("\nSelect a port (enter number): ").strip()
-            port_index = int(port_choice) - 1
-
-            if 0 <= port_index < len(ports):
-                selected_port = ports[port_index].device
-                result = self._attempt_connection([selected_port], bauds)
-                if result:
-                    return result
-                return None
-            elif port_index == len(ports):
-                print("Cancelled. Returning to main menu.")
-                return None
-            else:
-                print("Invalid port selection. Please try again.")
-
-    def _handle_prolific_port_search(self, ports, bauds):
-        """Search for and attempt connection on Prolific ports. Returns connection dict if successful."""
-
-        print("\nSearching for Prolific USB serial adapter ports...", end="", flush=True)
-
-        # Filter for Prolific ports (common for USB serial adapters)
-        prolific_ports = [p.device for p in ports if "prolific" in p.description.lower()]
-
-        print("Done.")
-
-        if prolific_ports:
-            print(f"Found Prolific port(s): {prolific_ports}")
-
-            result = self._attempt_connection(prolific_ports, bauds)
-            if result:
-                return result
-
-            # Prolific ports found but connection failed
-            print("Connection failed. Device did not respond.")
-            return None
-        else:
-            # No Prolific ports found
-            print("No Prolific USB serial adapter ports found.")
-            return None
-
-    def _handle_all_ports_selection(self, ports, bauds):
-        """Handle attempting connection on all available ports. Returns connection dict if successful."""
-        if not ports:
-            print("No ports available.")
-            return None
-
-        port_devices = [p.device for p in ports]
-        print(f"\nAttempting all available ports: {port_devices}")
-        return self._attempt_connection(port_devices, bauds)
-
     def connect(self):
         """
         Attempt to connect to Oregon RFID sensor with circular retry options.
@@ -139,56 +179,23 @@ class OregonConnector:
             Dictionary with 'connection', 'port', and 'baudrate' keys if successful, None otherwise.
         """
 
-        print("=== Oregon RFID Communicator Connection ===")
+        print("\n\n=== Oregon RFID Communicator Connection ===")
 
-        # Ask user to select baud rate upfront
-        bauds = self._select_baud_rate()
-        if not bauds:
-            print("Connection process aborted by user.")
-            return None
-
-        #loop until connection is successful or user aborts
         while True:
+            # Ask user to select baud rate
+            bauds = self._select_baud_rate()
+            if not bauds:
+                return None
 
-            ports = [p for p in serial.tools.list_ports.comports()]
+            # Ask user to select port(s)
+            selected_ports = self._select_ports()
 
-            # select option for selecting port
-            print("\nOptions:")
-            print("  1. Select a specific port to attempt")
-            print("  2. Attempt all available ports")
-            print("  3. Search for Prolific ports")
-            print("  4. Abort connection process")
+            if not selected_ports:
+                return None
 
-            # Loop until valid choice is made
-            while True:
-                choice = input("\nEnter your choice (1, 2, 3, or 4): ").strip()
+            result = self._attempt_connection(selected_ports, bauds)
 
-                # Validate input
-                if choice not in ["1", "2", "3", "4"]:
-                    print("Invalid choice. Please enter 1, 2, 3, or 4.")
-                    continue
+            if result:
+                return result
 
-                # Valid choice - process accordingly
-                if choice == "1":
-                    result = self._handle_manual_port_selection(ports, bauds)
-                    if result:
-                        return result
-                    else:
-                        break  # Exit choice loop to restart options
 
-                elif choice == "2":
-                    result = self._handle_all_ports_selection(ports, bauds)
-                    if result:
-                        return result
-                    else:
-                        break  # Exit choice loop to restart options
-
-                elif choice == "3":
-                    result = self._handle_prolific_port_search(ports, bauds)
-                    if result:
-                        return result
-                    else:
-                        break  # Exit choice loop to restart Prolific search
-                elif choice == "4":
-                    print("Connection process aborted by user.")
-                    return None
