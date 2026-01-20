@@ -9,6 +9,7 @@ import os
 
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
+from typing import Union
 
 
 
@@ -35,6 +36,7 @@ class OregonCommunicator:
         self._command_manager = None
         self._last_upload_date = None
         self._reader_name = None
+        self._serial_number = None
 
     @property
     def port(self):
@@ -49,7 +51,18 @@ class OregonCommunicator:
     @property
     def reader_name(self):
         """Get the reader name if known."""
+
+        if not self._reader_name:
+            self._get_reader_name()
         return self._reader_name
+
+    @property
+    def serial_number(self):
+        """Get the serial number if known."""
+
+        if not self._serial_number:
+            self._get_serial_number()
+        return self._serial_number
 
     @property
     def is_connected(self):
@@ -75,7 +88,6 @@ class OregonCommunicator:
             self._baudrate = result['baudrate']
             self._command_manager = CommandManager(self._connection)
             self._post_connect_handshake()
-            return True
 
         return False
 
@@ -140,6 +152,8 @@ class OregonCommunicator:
                 print(f"  - {warning}")
         else:
                 print("  ✓ System status check: All parameters within normal range")
+
+        return health_report
 
     def update_firmware(self, firmware_file_path: Path, new_version: str) -> bool:
         """
@@ -428,6 +442,29 @@ class OregonCommunicator:
             print(f"Error retrieving reader name: {e}")
             return None
 
+    def _get_serial_number(self) -> str:
+        """
+        Retrieve the serial number from the device using the SY command.
+
+        Returns
+        -------
+        str
+            The serial number, or None if not set or an error occurs.
+        """
+
+        if not self._connection:
+            print("Not connected to device.")
+            return None
+
+        try:
+            parsed_status = self.get_system_status()
+            serial_number = parsed_status["serial_number"]
+            return serial_number
+
+        except Exception as e:
+            print(f"Error retrieving serial number: {e}")
+            return None
+
     def _parse_tz_response(self, tz_line: str) -> timezone:
         hours = 0
         minutes = 0
@@ -577,15 +614,15 @@ class OregonCommunicator:
             'sync_status': self.TIME_STATUSES_SYNCED.get(parsed_dt['sync_status'], "Unknown"),
         }
 
-    def control_device_datetime(self, tolerance_seconds: int = 15, attempt_sync: bool = False) -> dict:
+    def control_device_datetime(self, tolerance_seconds: int = 15, attempt_sync: bool = True) -> dict:
 
 
         if not self._connection:
             raise ConnectionError("Not connected to device.")
 
-        print("\n" + "=" * 70)
-        print("Device Date/Time Check")
-
+        print("\n" + "=" * 70, flush=True)
+        print("DEVICE DATE/TIME CHECK", flush=True)
+        print("=" * 70, flush=True)
 
         device_result = self.get_device_datetime()
         device_datetime = device_result['datetime']
@@ -611,14 +648,14 @@ class OregonCommunicator:
         device_tz_str = f"(UT{device_offset_hours:+.1f})"
         system_tz_str = f"(UT{system_offset_hours:+.1f})"
 
-
-        print(f"Sync Status: {'✓ IN SYNC' if is_synced else '⚠ OUT OF SYNC'}")
+        print("\n" + "-" * 70)
+        print("SYNC STATUS")
         print("-" * 70)
+        print(f"Status: {'✓ IN SYNC' if is_synced else '⚠ OUT OF SYNC'}", flush=True)
         print(f"Device datetime: {device_datetime.strftime('%Y-%m-%d %H:%M:%S')} {device_tz_str} [Time source: {sync_status}]")
         print(f"System datetime: {system_datetime.strftime('%Y-%m-%d %H:%M:%S')} {system_tz_str}")
         if not is_synced:
             print(f"Time difference: {time_diff:+.1f} seconds ({abs(time_diff):.1f}s {'ahead' if time_diff > 0 else 'behind'})")
-        print("=" * 70)
 
         report = {
             'synced': is_synced,
@@ -633,6 +670,11 @@ class OregonCommunicator:
 
         # If out of sync and attempt_sync enabled, prompt user and update device
         if not is_synced and attempt_sync:
+
+            print("\n" + "-" * 70)
+            print("CLOCK SYNC ACTION REQUIRED")
+            print("-" * 70)
+
             # Ask for user confirmation
             confirm = None
             while confirm not in ['yes', 'y', 'no', 'n']:
@@ -640,16 +682,20 @@ class OregonCommunicator:
 
             if confirm in ['no', 'n']:
                 print("Device time sync cancelled by user.")
+                print("\n" + "=" * 70)
+                print("CHECK COMPLETE")
+                print("=" * 70)
                 return report
 
             try:
-                # Update device time: first set timezone to UTC, then send the time
-                print("Updating device time...", end="", flush=True)
-                print("\n  Setting device timezone to UTC...", end="", flush=True)
+                print("\n" + "-" * 70)
+                print("UPDATING DEVICE TIME")
+                print("-" * 70)
+                print("Setting device timezone to UTC...", end="", flush=True)
                 self.send_command("TZ 0")
                 print("Done.")
 
-                print("  Sending device time...", end="", flush=True)
+                print("Sending device time..............", end="", flush=True)
                 # Send UTC time to device (device interprets DT command as UTC)
                 dt_command = system_datetime_utc.strftime("DT %Y-%m-%d %H:%M:%S")
                 response_lines = self.send_command(dt_command)
@@ -660,13 +706,15 @@ class OregonCommunicator:
                 report['synced'] = True
 
                 print("Done.")
-                print("Device datetime updated successfully.")
 
             except Exception as e:
                 report['error'] = f'Failed to update device datetime: {e}'
                 print("ERROR.")
-                print(f"Error updating device time: {e}")
+                print(f"\nError updating device time: {e}")
 
+        print("\n" + "=" * 70)
+        print("CHECK COMPLETE")
+        print("=" * 70)
         return report
 
     def export_system_status(self, output_dir: Path) -> bool:
@@ -932,6 +980,160 @@ class OregonCommunicator:
             print(f"Error during batch export: {e}")
             return False
 
+    def export_records(self, first_date: date, last_date: Union[date, None] = None, output_dir: Path = Path("")) -> bool:
+        """
+        Export event records for a date range using the ER command.
+
+        Parameters
+        ----------
+        first_date : date object
+            Start date for export (inclusive)
+        last_date : date object, optional
+            End date for export (inclusive). If None, defaults to current date.
+        output_dir : str or Path
+            Directory where output files will be written (default: current directory)
+
+        Returns
+        -------
+        bool
+            True if all exports completed successfully, False if any failed.
+        """
+
+        if last_date is None:
+            last_date = date.today()
+
+        if isinstance(output_dir, str):
+            try:
+                output_dir = Path(output_dir)
+            except Exception as e:
+                print(f"Error converting output directory string to Path object: {e}")
+                return False
+
+        if not self._connection:
+            print("Not connected to device.")
+            return False
+
+        if not output_dir.exists():
+            output_dir.mkdir(parents=True, exist_ok=True)
+
+        if first_date > last_date:
+            print(f"First date ({first_date}) is after last date ({last_date}). No records to export.")
+            return False
+
+        upload_history = self.get_upload_history()
+        total_number_of_records = upload_history["total_records"]
+
+        try:
+            print("\n" + "=" * 70)
+            print("EXPORTING EVENT RECORDS")
+            print("=" * 70)
+            print(f"Date range: {first_date} to {last_date}")
+            print(f"Total records on device: {total_number_of_records}")
+            print(f"Output directory: {output_dir}")
+
+            print("\n" + "-" * 70)
+            print("PHASE 1: Retrieving Records from Device")
+            print("-" * 70)
+            print("Requesting all records from device...", end="", flush=True)
+            response = self.send_command("UP*")
+            print("Done.")
+
+            print("\n" + "-" * 70)
+            print("PHASE 2: Processing Records")
+            print("-" * 70)
+            print("Filtering detection records in date range...", end="", flush=True)
+            # Convert dates to strings for comparison (YYYY-MM-DD format sorts chronologically)
+            first_date_str = first_date.strftime("%Y-%m-%d")
+            last_date_str = last_date.strftime("%Y-%m-%d")
+
+            # Filter records in date range - single pass with early termination
+            filtered_records = []
+            for line in response:
+                if not line.startswith("S"):
+                    continue
+                record_date = line[3:13]  # Extract "YYYY-MM-DD" from "S  2021-09-25 05:14:56.400"
+                if record_date > last_date_str:
+                    break  # Early exit - records are chronological, no need to continue
+                if record_date >= first_date_str:
+                    filtered_records.append(line)
+            print("Done.")
+
+            print("Organizing records by date..................", end="", flush=True)
+            records = {} # dict with date keys and list of records values
+            all_dates = [first_date + timedelta(days=i) for i in range((last_date - first_date).days + 1)]
+            num_dates = len(all_dates)
+
+            current_date = None
+            for record in filtered_records:
+                record_date = datetime.strptime(record[3:13], "%Y-%m-%d").date()
+
+                if record_date != current_date:
+                    current_date = record_date
+                    records[current_date] = []
+
+                records[current_date].append(record)
+
+            print("Done.")
+
+            print("\n" + "-" * 70)
+            print("SUMMARY")
+            print("-" * 70)
+
+            # Calculate max width for summary number alignment
+            max_summary_width = max(
+                len(str(len(filtered_records))),
+                len(str(len(records))),
+                len(str(num_dates - len(records)))
+            )
+
+            print(f"Total detection records in date range: {str(len(filtered_records)).rjust(max_summary_width)}")
+            print(f"Number of dates with records:          {str(len(records)).rjust(max_summary_width)}")
+            print(f"Number of dates without records:       {str(num_dates - len(records)).rjust(max_summary_width)}")
+
+            print("\n" + "-" * 70)
+            print("PHASE 3: Exporting Files")
+            print("-" * 70)
+
+            # Calculate max width for counter alignment
+            max_counter_width = len(f"({num_dates}/{num_dates})")
+
+            # Calculate max width for record count alignment
+            max_record_count = max((len(recs) for recs in records.values()), default=0)
+            max_count_width = len(str(max_record_count))
+
+            for date_num, current_date in enumerate(all_dates):
+                counter = f"({date_num + 1}/{num_dates})"
+                spacing = " " * (max_counter_width - len(counter))
+                print(f"  - {spacing}{counter} {current_date}. ", end="", flush=True)
+
+                if current_date not in records:
+                    count_str = "0".rjust(max_count_width)
+                    print(f"Number of records: {count_str}. Exporting file...", end="", flush=True)
+                else:
+                    count_str = str(len(records[current_date])).rjust(max_count_width)
+                    print(f"Number of records: {count_str}. Exporting file...", end="", flush=True)
+
+                output_filepath = output_dir / f"{self.reader_name}_records_{current_date.strftime('%Y-%m-%d')}.txt"
+                with open(output_filepath, 'w') as f:
+                    f.write("Oregon RFID Event Records\n")
+                    f.write("Export Date/Time: " + time.strftime("%Y-%m-%d %H:%M:%S") + "\n")
+                    f.write("Date of Record: " + current_date.strftime("%Y-%m-%d") + "\n")
+                    f.write("=========================\n\n")
+
+                    # Write event records for the date
+                    if current_date in records:
+                        f.write('\n'.join(records[current_date]))
+
+                print("Done.")
+
+            print("\n" + "=" * 70, flush=True)
+            print("EXPORT COMPLETE", flush=True)
+            print("=" * 70, flush=True)
+            return True
+
+        except Exception as e:
+            print(f"\nError during batch export: {e}")
+            return False
 
 
 
