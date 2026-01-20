@@ -839,80 +839,6 @@ class OregonCommunicator:
             print(f"Error writing upload log to file: {e}")
             return False
 
-    def export_system_status_log(self, log_date: date, output_dir:Path = Path(""), verbose: bool = True) -> bool:
-        """
-        Run the ER command for a specific date and write to file.
-
-        The event record shows system status every minute for the specified date.
-
-        Parameters
-        ----------
-        log_date : date object
-        output_dir : str or Path
-            Directory where output file will be written (default: current directory)
-
-        Returns
-        -------
-        bool
-            True if successful, False otherwise.
-        """
-
-        if isinstance(output_dir, str):
-            try:
-                output_dir = Path(output_dir)
-            except Exception as e:
-                print(f"Error converting output directory string to Path object: {e}")
-                return False
-
-        if not self._connection:
-            print("Not connected to device.")
-            return False
-
-        if not output_dir.exists():
-            output_dir.mkdir(parents=True, exist_ok=True)
-
-        if verbose:
-            print(f"\nExporting system status log for {log_date.strftime('%Y-%m-%d')}...", end="")
-
-        output_filepath = f"{output_dir}/{self.reader_name}_system_log_{log_date.strftime('%Y_%m_%d')}.txt"
-
-        try:
-            # Send ER command with date
-            command = f"ER {log_date.strftime('%Y-%m-%d')}"
-            lines = self.send_command(command)
-
-            # Generate output filename with date
-            with open(output_filepath, 'w') as f:
-                f.write("Oregon RFID Event Record\n")
-                f.write("Export Date/Time: " + time.strftime("%Y-%m-%d %H:%M:%S") + "\n")
-                f.write("Date of Record: " + log_date.strftime("%Y-%m-%d") + "\n")
-                f.write("=========================\n\n")
-
-                # Write event record
-                f.write('\n'.join(lines))
-
-            if verbose:
-                print("Done.")
-                print(f"System status log written to {output_filepath}")
-                print(f"Total lines written: {len(lines)}")
-
-            report = {
-                "lines_written": len(lines),
-                "output_filepath": output_filepath,
-                "success": True
-            }
-            return report
-
-        except Exception as e:
-            print("ERROR.")
-            print(f"Error exporting system status log: {e}")
-            return {
-                "lines_written": 0,
-                "output_filepath": output_filepath,
-                "success": False,
-                "error": str(e)
-            }
-
     def export_system_status_logs(self, first_date: date, last_date: Union[date, None] = None, output_dir: Path = Path("")) -> bool:
         """
         Export system status logs for all dates since specifed date
@@ -948,38 +874,86 @@ class OregonCommunicator:
 
 
         try:
-            current_date = date.today()
 
-            if first_date > current_date:
+            if first_date > last_date:
                 print(f"First date ({first_date}) is in the future. No logs to export.")
                 return False
 
-            print(f"\nExporting system status logs from {first_date} to {current_date}:")
-            # Generate date range
-            current = first_date
+            # Header
+            print("\n" + "=" * 70)
+            print("EXPORTING SYSTEM STATUS LOGS")
+            print("=" * 70)
+            print(f"Date range: {first_date} to {last_date}")
+            print(f"Output directory: {output_dir}")
+
+            # Prepare ranges and formatting
+            num_dates = (last_date - first_date).days + 1
+            all_dates = [first_date + timedelta(days=i) for i in range(num_dates)]
+            max_counter_width = len(f"({num_dates}/{num_dates})")
+            max_line_width = len(str(1440))  # assume up to one line per minute per day
+
+            print("\n" + "-" * 70)
+            print("Exporting Logs")
+            print("-" * 70)
+
             all_successful = True
             export_count = 0
 
-            while current <= current_date:
-                print(f"  - Exporting log for {current}...", end="", flush=True)
-                report = self.export_system_status_log(current, output_dir, verbose=False)
-                if not report["success"]:
-                    print("FAILED.")
-                    all_successful = False
-                else:
-                    print(f"Done. ({report['lines_written']} lines written to {report['output_filepath']})")
-                    export_count += 1
-                current += timedelta(days=1)
+            for date_num, current in enumerate(all_dates, start=1):
 
+                output_filepath = f"{output_dir}/{self.reader_name}_system_log_{current.strftime('%Y_%m_%d')}.txt"
+
+                counter = f"({date_num}/{num_dates})"
+                spacing = " " * (max_counter_width - len(counter))
+                print(f"  - {spacing}{counter} {current}. Exporting...", end="", flush=True)
+
+                try:
+                    success = True
+                    # Send ER command with date
+                    command = f"ER {current.strftime('%Y-%m-%d')}"
+                    response = self.send_command(command)
+                except Exception as e:
+                    print(f"ERROR. {e}")
+                    success = False
+                    all_successful = False
+
+                    # Generate output filename with date
+                    with open(output_filepath, 'w') as f:
+                        f.write("Oregon RFID Event Record\n")
+                        f.write("Export Date/Time: " + time.strftime("%Y-%m-%d %H:%M:%S") + "\n")
+                        f.write("Date of Record: " + current.strftime("%Y-%m-%d") + "\n")
+                        f.write("=========================\n\n")
+
+                        # Write event record
+                        f.write('\n'.join(response))
+
+                if success:
+                    print(f"Done. Lines written: {len(response)}.")
+                    export_count += 1
+
+            failed_exports = num_dates - export_count
+
+            print("\n" + "-" * 70)
+            print("SUMMARY")
+            print("-" * 70)
+            print(f"Total dates processed: {num_dates}")
+            print(f"Successful exports:    {export_count}")
+            print(f"Failed exports:        {failed_exports}")
+
+            print("\n" + "=" * 70)
             if all_successful:
-                print("All system status logs exported successfully.")
+                print("EXPORT COMPLETE")
             else:
-                print("Some system status logs failed to export.")
+                print("EXPORT COMPLETE WITH ERRORS")
+            print("=" * 70)
 
             return True if all_successful else False
 
         except Exception as e:
             print(f"Error during batch export: {e}")
+            print("\n" + "=" * 70)
+            print("EXPORT FAILED")
+            print("=" * 70)
             return False
 
     def export_records(self, first_date: date, last_date: Union[date, None] = None, output_dir: Path = Path("")) -> bool:
