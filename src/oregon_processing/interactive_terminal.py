@@ -6,6 +6,11 @@ Provides a command-line interface for sending commands to the Oregon device
 and receiving responses.
 """
 
+# Support for history of readline on Windows via pyreadline3
+try:
+    import readline  # Linux / macOS
+except ImportError:
+    import pyreadline3 as readline  # Windows
 
 class InteractiveTerminal:
     """Interactive terminal for sending commands to Oregon RFID device."""

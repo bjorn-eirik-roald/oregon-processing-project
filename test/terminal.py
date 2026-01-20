@@ -14,8 +14,7 @@ from oregon_processing.oregon_communicator import OregonCommunicator
 def run():
     with OregonCommunicator() as communicator:
 
-        communicator.connect()
-        communicator.interactive_terminal()
+        communicator.start_interactive_terminal()
 
 if __name__ == '__main__':
     run()

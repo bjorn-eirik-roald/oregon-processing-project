@@ -146,7 +146,7 @@ class OregonConnector:
         """Helper method to attempt connection on a list of ports with specified baud rates."""
         for port in ports:
             for baud in bauds:
-                print(f"Attempting connection to {port} at {baud} baud...", end="", flush=True)
+                print(f"\nAttempting connection to {port} at {baud} baud...", end="", flush=True)
 
                 try:
                     ser = serial.Serial(port, baudrate=baud, timeout=0.2, write_timeout=0.2)

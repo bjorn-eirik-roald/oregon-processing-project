@@ -10,15 +10,12 @@ import os
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
-# Support for history of readline on Windows via pyreadline3
-try:
-    import readline  # Linux / macOS
-except ImportError:
-    import pyreadline3 as readline  # Windows
+
 
 from oregon_processing.oregon_connector import OregonConnector
 from oregon_processing.command_manager import CommandManager
 from oregon_processing.interactive_terminal import InteractiveTerminal
+from oregon_processing.firmware_updater import FirmwareUpdater
 
 
 
@@ -28,7 +25,7 @@ class OregonCommunicator:
     """Class to communicate with Oregon device via serial port."""
 
     TIME_STATUSES_SYNCED = {'G':"GNSS Time", 'N':"Network time using CAT5 cable", 'U':"Uncalibrated (entered with DT command)", "E": "Ellapsed time since power-up"}
-    CRITICAL_VOLTAGE_THRESHOLD = 12.0  # volts
+    CRITICAL_VOLTAGE_THRESHOLD = 14.0  # volts
 
     def __init__(self):
         self._connector = OregonConnector()
@@ -68,15 +65,6 @@ class OregonCommunicator:
         """Ensure the connection is closed when leaving context."""
         self.close()
 
-    def _post_connect_handshake(self):
-        """Send a quick SY command to verify connection and capture prompt signature. Store reader name"""
-
-        if not self._connection:
-            return
-
-        self.check_system_status_health()
-        self.get_reader_name()
-
     def connect(self):
         """Attempt to connect to Oregon RFID sensor using the OregonConnector."""
         result = self._connector.connect()
@@ -103,9 +91,86 @@ class OregonCommunicator:
                 self._connection = None
                 self._port = None
                 self._baudrate = None
+                self._command_manager = None
 
-    def send_command(self, command: str):
-        return self._command_manager.send_command_and_receive_response(command)
+    def _post_connect_handshake(self):
+        """Send a quick SY command to verify connection and capture prompt signature. Store reader name"""
+
+        if not self._connection:
+            return
+
+        self._get_reader_name()
+
+        print(f"\nReader name: {self._reader_name or '(not set)'}")
+        self._check_system_status_health()
+
+    def _check_system_status_health(self):
+        """
+        Calls for system status and checks parsed system status for potential issues.
+
+        Returns
+        -------
+        dict
+            Dictionary with 'healthy' (bool) and 'warnings' (list of str) keys.
+        """
+
+        print("\nChecking system status health:", flush=True)
+        warnings = []
+
+        parsed_status = self.get_system_status()
+
+        # Check supply voltage
+        if parsed_status['supply_voltage']:
+            try:
+                voltage = float(parsed_status['supply_voltage'])
+                if voltage < self.CRITICAL_VOLTAGE_THRESHOLD:
+                    warnings.append(f"Low supply voltage: {voltage}V (should be >= {self.CRITICAL_VOLTAGE_THRESHOLD}V)")
+            except (ValueError, TypeError):
+                warnings.append(f"Could not parse supply voltage: {parsed_status['supply_voltage']}")
+
+        health_report = {
+            'healthy': len(warnings) == 0,
+            'warnings': warnings
+        }
+
+        # Report health status
+        if not health_report['healthy']:
+            print(f"  ⚠ WARNING: {len(health_report['warnings'])} issue(s) detected:")
+            for warning in health_report['warnings']:
+                print(f"  - {warning}")
+        else:
+                print("  ✓ System status check: All parameters within normal range")
+
+    def update_firmware(self, firmware_file_path: Path, new_version: str) -> bool:
+        """
+        Update the firmware on the Oregon RFID reader.
+
+        Parameters
+        ----------
+        firmware_file_path : str or Path
+            Path to the firmware update file
+        new_version : str
+            Version string of the new firmware (e.g., "V2.2A")
+
+        Returns
+        -------
+        bool
+            True if update completed successfully, False otherwise.
+        """
+
+        if isinstance(firmware_file_path, str):
+            try:
+                firmware_file_path = Path(firmware_file_path)
+            except Exception as e:
+                print(f"Error converting firmware path string to Path object: {e}")
+                return False
+
+        if not self._connection:
+            print("Not connected to device.")
+            return False
+
+        updater = FirmwareUpdater(self._connection, self._command_manager)
+        return updater.update(firmware_file_path, new_version)
 
     def start_interactive_terminal(self):
         """
@@ -121,7 +186,10 @@ class OregonCommunicator:
         terminal = InteractiveTerminal(self._command_manager)
         terminal.run()
 
-    def _parse_system_status(self):
+    def send_command(self, command: str):
+        return self._command_manager.send_command_and_receive_response(command)
+
+    def get_system_status(self):
         """
         Parse system status output into a structured dictionary.
 
@@ -244,7 +312,7 @@ class OregonCommunicator:
 
         return status
 
-    def _parse_upload_history(self):
+    def get_upload_history(self):
         """
         Parse upload history output from UH command.
 
@@ -337,7 +405,7 @@ class OregonCommunicator:
 
         return history
 
-    def get_reader_name(self) -> str:
+    def _get_reader_name(self) -> str:
         """
         Retrieve the reader name from the device using the SY command.
 
@@ -352,7 +420,7 @@ class OregonCommunicator:
             return None
 
         try:
-            parsed_status = self._parse_system_status()
+            parsed_status = self.get_system_status()
             self._reader_name = parsed_status["reader_name"]
             return self._reader_name
 
@@ -360,36 +428,7 @@ class OregonCommunicator:
             print(f"Error retrieving reader name: {e}")
             return None
 
-    def get_device_timezone(self) -> timezone:
-        """
-        Retrieve the device's timezone offset using the TZ command.
-
-        The TZ command returns timezone information in two possible formats:
-        Format 1 (hours and minutes): "Hours:minutes to UT: -3h30m"
-        Format 2 (hours only): "Hours to UT: +0"
-
-        Returns
-        -------
-        timezone
-            Python timezone object representing the device's UTC offset,
-            or None if an error occurs.
-        """
-        if not self._connection:
-            raise ConnectionError("Not connected to device.")
-
-        try:
-            # Send TZ command and get response
-            lines = self.send_command("TZ")
-
-        except Exception as e:
-            print(f"Error sending TZ command: {e}")
-
-
-        # First line contains timezone offset information
-        # Format 1: "Hours:minutes to UT: -3h30m"
-        # Format 2: "Hours to UT: +0"
-        tz_line = lines[0].strip()
-
+    def _parse_tz_response(self, tz_line: str) -> timezone:
         hours = 0
         minutes = 0
         sign = 1
@@ -442,6 +481,47 @@ class OregonCommunicator:
 
         return timezone(timedelta(seconds=total_seconds))
 
+    def _parse_dt_response(self, dt_line: str) -> dict:
+        """
+        Parse the DT command response line into its components.
+
+        Parameters
+        ----------
+        dt_line : str
+            The raw DT response line from the device.
+
+        Returns
+        -------
+        dict
+            Parsed DT response with keys:
+            - 'date': Date string (YYYY-MM-DD)
+            - 'time': Time string (HH:MM:SS)
+            - 'milliseconds': Milliseconds component (int, 0-999)
+            - 'sync_status': Synchronization status ('G', 'N', or 'U')
+        """
+
+        parts = dt_line.split()
+
+        if len(parts) < 3:
+            raise ValueError(f"Unrecognized DT response format: {dt_line}")
+
+        date_str = parts[0]  # YYYY-MM-DD
+        time_str = parts[1]  # HH:MM:SS.milliseconds
+        sync_status = parts[2]  # G, N, or U
+
+        # Parse time and milliseconds
+        if '.' in time_str:
+            time_part, milliseconds_str = time_str.split('.')
+            milliseconds = int(milliseconds_str)
+        else:
+            time_part = time_str
+            milliseconds = 0
+
+        return {
+            'datetime': datetime.strptime(f"{date_str} {time_part}", "%Y-%m-%d %H:%M:%S"),
+            'milliseconds': milliseconds,
+            'sync_status': sync_status
+        }
 
     def get_device_datetime(self) -> dict:
         """
@@ -464,7 +544,19 @@ class OregonCommunicator:
         if not self._connection:
             raise ConnectionError("Not connected to device.")
 
-        device_tz = self.get_device_timezone()
+        try:
+            # Send TZ command and get response
+            lines = self.send_command("TZ")
+
+        except Exception as e:
+            raise Exception(f"Error sending TZ command: {e}")
+
+
+        # First line contains timezone offset information
+        # Format 1: "Hours:minutes to UT: -3h30m"
+        # Format 2: "Hours to UT: +0"
+        tz_line = lines[0].strip()
+        device_tz = self._parse_tz_response(tz_line)
 
 
         # Send DT command and get response
@@ -473,37 +565,17 @@ class OregonCommunicator:
         except Exception as e:
             raise Exception(f"Error sending DT command: {e}")
 
-        # Parse the DT response: "2025-01-19 09:18:02.304 U (UT+0)"
-        response_line = lines[0].strip()
-        parts = response_line.split()
+        parsed_dt = self._parse_dt_response(lines[0].strip())
+        device_dt = parsed_dt['datetime']
 
-        if len(parts) < 3:
-            raise ValueError(f"Unrecognized DT response format: {response_line}")
-
-        date_str = parts[0]  # YYYY-MM-DD
-        time_str = parts[1]  # HH:MM:SS.milliseconds
-        sync_status = parts[2]  # G, N, or U
-
-        # Parse time and milliseconds
-        if '.' in time_str:
-            time_part, milliseconds_str = time_str.split('.')
-            milliseconds = int(milliseconds_str)
-        else:
-            time_part = time_str
-            milliseconds = 0
-
-        # Create timezone-aware datetime
-        datetime_obj = datetime.strptime(f"{date_str} {time_part}", "%Y-%m-%d %H:%M:%S")
-        datetime_aware = datetime_obj.replace(tzinfo=device_tz)
+        # Create timezone-aware datetime using the timezone from TZ command
+        datetime_aware = device_dt.replace(tzinfo=device_tz)
 
         return {
             'datetime': datetime_aware,
-            'milliseconds': milliseconds,
-            'sync_status': self.TIME_STATUSES_SYNCED.get(sync_status, "Unknown"),
-            'raw_output': response_line,
-            'error': None
+            'milliseconds': parsed_dt['milliseconds'],
+            'sync_status': self.TIME_STATUSES_SYNCED.get(parsed_dt['sync_status'], "Unknown"),
         }
-
 
     def control_device_datetime(self, tolerance_seconds: int = 15, attempt_sync: bool = False) -> dict:
 
@@ -597,55 +669,14 @@ class OregonCommunicator:
 
         return report
 
-
-
-    def check_system_status_health(self):
-        """
-        Calls for system status and checks parsed system status for potential issues.
-
-        Returns
-        -------
-        dict
-            Dictionary with 'healthy' (bool) and 'warnings' (list of str) keys.
-        """
-
-        print("\nChecking system status health...", end="")
-        warnings = []
-
-        parsed_status = self._parse_system_status()
-
-        # Check supply voltage
-        if parsed_status['supply_voltage']:
-            try:
-                voltage = float(parsed_status['supply_voltage'])
-                if voltage < self.CRITICAL_VOLTAGE_THRESHOLD:
-                    warnings.append(f"Low supply voltage: {voltage}V (should be >= {self.CRITICAL_VOLTAGE_THRESHOLD}V)")
-            except (ValueError, TypeError):
-                warnings.append(f"Could not parse supply voltage: {parsed_status['supply_voltage']}")
-
-        health_report = {
-            'healthy': len(warnings) == 0,
-            'warnings': warnings
-        }
-
-        print("Done")
-
-        # Report health status
-        if not health_report['healthy']:
-            print(f"\n⚠ WARNING: {len(health_report['warnings'])} issue(s) detected:")
-            for warning in health_report['warnings']:
-                print(f"  - {warning}")
-        else:
-                print("✓ System status check: All parameters within normal range")
-
-    def export_system_status(self, output_filepath: str) -> bool:
+    def export_system_status(self, output_dir: Path) -> bool:
         """
         Run the SY (system status) command and write the response to a text file.
 
         Parameters
         ----------
-        filepath : str
-            Path to the output text file where system status will be written.
+        output_dir : str or Path
+            Directory where system status will be written.
 
         Returns
         -------
@@ -653,13 +684,25 @@ class OregonCommunicator:
             True if successful, False otherwise.
         """
 
+        if isinstance(output_dir, str):
+            try:
+                output_dir = Path(output_dir)
+            except Exception as e:
+                print(f"Error converting output directory string to Path object: {e}")
+                return False
+
         if not self._connection:
             print("Not connected to device.")
             return False
 
+        if not output_dir.exists():
+            output_dir.mkdir(parents=True, exist_ok=True)
+
+        output_filepath = output_dir / f"{self.reader_name}_system_status_{datetime.now().strftime('%Y_%m_%d_%H%M%S')}.txt"
+
         try:
             print(f"\nExporting system status to file...", end="")
-            parsed_status = self._parse_system_status()
+            parsed_status = self.get_system_status()
 
 
             with open(output_filepath, 'w') as f:
@@ -697,14 +740,14 @@ class OregonCommunicator:
             print(f"Error writing system status to file: {e}")
             return False
 
-    def export_upload_log(self, output_filepath: str) -> bool:
+    def export_upload_log(self, output_dir: Path) -> bool:
         """
         Run the UH (upload log) command and write the response to a text file.
 
         Parameters
         ----------
-        filepath : str
-            Path to the output text file where upload log will be written.
+        output_dir : str or Path
+            Directory where output file will be written.
 
         Returns
         -------
@@ -712,12 +755,24 @@ class OregonCommunicator:
             True if successful, False otherwise.
         """
 
+        if isinstance(output_dir, str):
+            try:
+                output_dir = Path(output_dir)
+            except Exception as e:
+                print(f"Error converting output directory string to Path object: {e}")
+                return False
+
         if not self._connection:
             print("Not connected to device.")
             return False
 
+        if not output_dir.exists():
+            output_dir.mkdir(parents=True, exist_ok=True)
+
+        output_filepath = output_dir / f"{self.reader_name}_upload_log_{datetime.now().strftime('%Y_%m_%d_%H%M%S')}.txt"
+
         try:
-            print(f"\nExporting upload log to file...", end="")
+            print(f"\nExporting upload log to file:", flush=True)
             upload_history_lines = self.send_command("UH")
 
             with open(output_filepath, 'w') as f:
@@ -728,9 +783,8 @@ class OregonCommunicator:
                 # Write upload log
                 f.write('\n'.join(upload_history_lines))
 
-            print("Done.")
-            print(f"Upload log written to {output_filepath}")
-            print(f"Total lines written: {len(upload_history_lines)}")
+            print(f"  Upload log written to {output_filepath}")
+            print(f"  Total lines written: {len(upload_history_lines)}")
 
             return True
 
@@ -738,7 +792,7 @@ class OregonCommunicator:
             print(f"Error writing upload log to file: {e}")
             return False
 
-    def export_system_status_log(self, date: date, output_dir:Path = Path("")) -> bool:
+    def export_system_status_log(self, log_date: date, output_dir:Path = Path(""), verbose: bool = True) -> bool:
         """
         Run the ER command for a specific date and write to file.
 
@@ -746,9 +800,8 @@ class OregonCommunicator:
 
         Parameters
         ----------
-        date : date
-            Date in format YYYY-MM-DD (e.g., "2026-01-08")
-        output_dir : Path
+        log_date : date object
+        output_dir : str or Path
             Directory where output file will be written (default: current directory)
 
         Returns
@@ -757,54 +810,73 @@ class OregonCommunicator:
             True if successful, False otherwise.
         """
 
+        if isinstance(output_dir, str):
+            try:
+                output_dir = Path(output_dir)
+            except Exception as e:
+                print(f"Error converting output directory string to Path object: {e}")
+                return False
+
         if not self._connection:
             print("Not connected to device.")
             return False
 
-
-        print(f"\nExporting system status log for {date.strftime('%Y-%m-%d')}...", end="")
-
-        output_filepath = f"{output_dir}/system_log_{date.strftime('%Y_%m_%d')}.txt"
-
         if not output_dir.exists():
             output_dir.mkdir(parents=True, exist_ok=True)
 
+        if verbose:
+            print(f"\nExporting system status log for {log_date.strftime('%Y-%m-%d')}...", end="")
+
+        output_filepath = f"{output_dir}/{self.reader_name}_system_log_{log_date.strftime('%Y_%m_%d')}.txt"
+
         try:
             # Send ER command with date
-            command = f"ER {date.strftime('%Y-%m-%d')}"
+            command = f"ER {log_date.strftime('%Y-%m-%d')}"
             lines = self.send_command(command)
 
             # Generate output filename with date
             with open(output_filepath, 'w') as f:
                 f.write("Oregon RFID Event Record\n")
                 f.write("Export Date/Time: " + time.strftime("%Y-%m-%d %H:%M:%S") + "\n")
-                f.write("Date of Record: " + date.strftime("%Y-%m-%d") + "\n")
+                f.write("Date of Record: " + log_date.strftime("%Y-%m-%d") + "\n")
                 f.write("=========================\n\n")
 
                 # Write event record
                 f.write('\n'.join(lines))
 
-            print("Done.")
-            print(f"System status log written to {output_filepath}")
-            print(f"Total lines written: {len(lines)}")
+            if verbose:
+                print("Done.")
+                print(f"System status log written to {output_filepath}")
+                print(f"Total lines written: {len(lines)}")
 
-            return True
+            report = {
+                "lines_written": len(lines),
+                "output_filepath": output_filepath,
+                "success": True
+            }
+            return report
 
         except Exception as e:
             print("ERROR.")
             print(f"Error exporting system status log: {e}")
-            return False
+            return {
+                "lines_written": 0,
+                "output_filepath": output_filepath,
+                "success": False,
+                "error": str(e)
+            }
 
-    def export_system_status_logs_from_last_upload(self, output_dir: Path = Path("")) -> bool:
+    def export_system_status_logs(self, first_date: date, output_dir: Path = Path("")) -> bool:
         """
-        Export system status logs for all dates from last upload date to current date (inclusive).
+        Export system status logs for all dates since specifed date
 
         This method retrieves the last upload date, then runs export_system_status_log()
         for each day in the range up to and including today.
 
         Parameters
         ----------
-        output_dir : Path
+        first_date : date object
+        output_dir : str or Path
             Directory where output files will be written (default: current directory)
 
         Returns
@@ -813,238 +885,54 @@ class OregonCommunicator:
             True if all exports completed successfully, False if any failed.
         """
 
+        if isinstance(output_dir, str):
+            try:
+                output_dir = Path(output_dir)
+            except Exception as e:
+                print(f"Error converting output directory string to Path object: {e}")
+                return False
+
         if not self._connection:
             print("Not connected to device.")
             return False
 
-        if not self._last_upload_date:
-            try:
-                print("Retrieving last upload date from device...", end="", flush=True)
-                self._parse_upload_history()
-                print("Done.")
-            except Exception as e:
-                print("ERROR")
-                print(f"Error parsing upload history: {e}")
-                print("Failed to retrieve last upload date. Cannot proceed with batch export.")
-                return False
 
         try:
-            last_upload = self._last_upload_date
             current_date = date.today()
 
-
-            last_upload = date(2025,11,25) # TODO: remove after testing
-
-            if last_upload > current_date:
-                print(f"Last upload date ({last_upload}) is in the future. No logs to export.")
+            if first_date > current_date:
+                print(f"First date ({first_date}) is in the future. No logs to export.")
                 return False
 
-            print(f"\nExporting system status logs from {last_upload} to {current_date}...")
-
+            print(f"\nExporting system status logs from {first_date} to {current_date}:")
             # Generate date range
-            current = last_upload
+            current = first_date
             all_successful = True
             export_count = 0
 
             while current <= current_date:
-                success = self.export_system_status_log(current, output_dir)
-                if not success:
+                print(f"  - Exporting log for {current}...", end="", flush=True)
+                report = self.export_system_status_log(current, output_dir, verbose=False)
+                if not report["success"]:
+                    print("FAILED.")
                     all_successful = False
                 else:
+                    print(f"Done. ({report['lines_written']} lines written to {report['output_filepath']})")
                     export_count += 1
                 current += timedelta(days=1)
 
-            print(f"\nBatch export complete: {export_count} system log(s) exported.")
-            return all_successful
+            if all_successful:
+                print("All system status logs exported successfully.")
+            else:
+                print("Some system status logs failed to export.")
+
+            return True if all_successful else False
 
         except Exception as e:
             print(f"Error during batch export: {e}")
             return False
 
-    def update_firmware(self, firmware_file_path: str, new_version: str) -> bool:
-        """
-        Update the firmware on the Oregon RFID reader.
 
-        Process:
-        1. Get current firmware version
-        2. Confirm with user
-        3. Turn off reader with OF command
-        4. Run FW command
-        5. Wait for prompt and confirm with Y
-        6. Wait for "Start" prompt
-        7. Send firmware file content
-
-        Parameters
-        ----------
-        firmware_file_path : str
-            Path to the firmware update file
-        new_version : str
-            Version string of the new firmware (e.g., "V2.2A")
-
-        Returns
-        -------
-        bool
-            True if update completed successfully, False otherwise.
-        """
-
-        if not self._connection:
-            print("Not connected to device.")
-            return False
-
-        # Verify firmware file exists before starting
-        try:
-            with open(firmware_file_path, 'r') as f:
-                firmware_content = f.read()
-        except FileNotFoundError:
-            print(f"\nError: Firmware file not found: {firmware_file_path}")
-            return False
-        except Exception as e:
-            print(f"\nError reading firmware file: {e}")
-            return False
-
-        # Get current firmware version
-        print("Retrieving current firmware version...", end="")
-        parsed_status = self._parse_system_status()
-        current_version = parsed_status.get('version', 'Unknown')
-        print(f"Done. Current version: {current_version}")
-
-        # Initial confirmation
-        print("\n" + "="*60)
-        print("FIRMWARE UPDATE PROCESS")
-        print("="*60)
-
-        try:
-
-            # Final confirmation with version info
-            print("\n" + "-"*60)
-            print(f"Current firmware version: {current_version}")
-            print(f"New firmware version:     {new_version}")
-            print("-"*60)
-            confirm = input("\nConfirm firmware update (yes/no): ").strip().lower()
-            if confirm not in ['yes', 'y']:
-                print("Firmware update cancelled by user.")
-                return False
-
-            print("\n" + "="*60)
-            print("Starting firmware update process...")
-            print("="*60)
-
-            # Step 1: Read firmware file content
-            print(f"\nStep 1: Reading firmware file: {firmware_file_path}...", end="", flush=True)
-            with open(firmware_file_path, 'r') as f:
-                firmware_content = f.read()
-            print("Done.")
-
-            # Step 2: Turn off reader
-            print("\nStep 2: Turning off reader...", end="", flush=True)
-            self._command_manager._send_command("OF")
-            time.sleep(2)
-            print("Done.")
-
-            # Step 3: Send FW command
-            print("Step 3: Initiating firmware update mode...", end="", flush=True)
-            self._command_manager._send_command("FW")
-            print("Done.")
-
-            # Step 4: Wait for "Update(Y)?" prompt and send Y
-            print("Step 4: Waiting for 'Update(Y)?' prompt...", end="", flush=True)
-            prompt_found = False
-            timeout = time.time() + 10  # 10 second timeout
-
-            while time.time() < timeout:
-                if self._connection.in_waiting:
-                    line = self._connection.readline().decode(errors="ignore").strip()
-                    if "update" in line.lower() and "(y)" in line.lower():
-                        prompt_found = True
-                        print("Received!")
-                        break
-                time.sleep(0.2)
-
-            if not prompt_found:
-                print("TIMEOUT!")
-                print("Did not receive 'Update(Y)?' prompt. Update aborted.")
-                return False
-
-            print("Step 5: Starting update execution...", end="", flush=True)
-            self._command_manager._send_command("Y")
-            print("Started.")
-
-            # Step 6: Wait for "Start" prompt
-            print("Step 6: Waiting for 'Start' prompt...", end="", flush=True)
-            start_found = False
-            timeout = time.time() + 30  # 30 second timeout
-
-            while time.time() < timeout:
-                if self._connection.in_waiting:
-                    line = self._connection.readline().decode(errors="ignore").strip()
-                    if "start" in line.lower():
-                        start_found = True
-                        print("Received!")
-                        break
-                time.sleep(0.5)
-
-            if not start_found:
-                print("TIMEOUT!")
-                print("Did not receive 'Start' prompt. Update may have failed.")
-                return False
-
-            # Step 7: Send firmware content
-            print("Step 7: Uploading firmware data...", end="", flush=True)
-            self._command_manager._send_command(firmware_content)
-            print("Done.")
-
-            # Step 8: Capture response from device
-            print("Step 8: Waiting for device response...", end="", flush=True)
-            response_lines = []
-            response_timeout = time.time() + 60  # 60 second timeout for firmware processing
-            last_data_time = time.time()
-
-            while time.time() < response_timeout:
-                if self._connection.in_waiting:
-                    line = self._connection.readline().decode(errors="ignore").strip()
-                    if line:
-                        response_lines.append(line)
-                        last_data_time = time.time()
-
-                # If no data for 3 seconds, assume response is complete
-                if time.time() - last_data_time > 3:
-                    break
-
-                time.sleep(0.2)
-
-            print("Done.")
-
-            # Display response
-            if response_lines:
-                print("\nDevice Response:")
-                print("-"*60)
-                for line in response_lines:
-                    print(line)
-                print("-"*60)
-            else:
-                print("\nNo response received from device.")
-
-            # Make user verfiy update success
-            print("\nPlease verify the firmware update was successful.")
-            verify = None
-            while verify not in ['yes', 'y', 'no', 'n']:
-                verify = input("Did the update complete successfully? (yes/no): ").strip().lower()
-
-            if verify in ['no', 'n']:
-                print("Firmware update reported as unsuccessful by user.")
-                return False
-            else:
-                print("Firmware update reported as successful by user.")
-
-            print("\n" + "="*60)
-            print("FIRMWARE UPDATE COMPLETED")
-            print("="*60)
-
-            return True
-
-        except Exception as e:
-            print(f"\nError during firmware update: {e}")
-            return False
 
 
 
