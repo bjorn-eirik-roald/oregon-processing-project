@@ -114,9 +114,8 @@ class OregonCommunicator:
         self._get_reader_name()
 
         print(f"\nReader name: {self._reader_name or '(not set)'}")
-        self._check_system_status_health()
 
-    def _check_system_status_health(self):
+    def check_system_status_health(self):
         """
         Calls for system status and checks parsed system status for potential issues.
 
@@ -914,7 +913,7 @@ class OregonCommunicator:
                 "error": str(e)
             }
 
-    def export_system_status_logs(self, first_date: date, output_dir: Path = Path("")) -> bool:
+    def export_system_status_logs(self, first_date: date, last_date: Union[date, None] = None, output_dir: Path = Path("")) -> bool:
         """
         Export system status logs for all dates since specifed date
 
@@ -932,6 +931,9 @@ class OregonCommunicator:
         bool
             True if all exports completed successfully, False if any failed.
         """
+
+        if last_date is None:
+            last_date = date.today()
 
         if isinstance(output_dir, str):
             try:
