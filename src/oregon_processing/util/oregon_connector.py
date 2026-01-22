@@ -12,7 +12,9 @@ class OregonConnector:
 
     def _select_baud_rate(self):
         """Allow user to select baud rate(s) to use for connection."""
-        print("\n=== Baud Rate Selection ===")
+        print("\n" + "-" * 70)
+        print("BAUD RATE SELECTION")
+        print("-" * 70)
         print("Available baud rates:")
         for i, baud in enumerate(self.BAUD_RATES, 1):
             print(f"  {i}. {baud}")
@@ -101,10 +103,11 @@ class OregonConnector:
         return port_devices
 
     def _select_ports(self):
-        print("\n\n=== Port Selection ===")
-        #loop until connection is successful or user aborts
-        while True:
+        print("\n" + "-" * 70)
+        print("PORT SELECTION")
+        print("-" * 70)
 
+        while True:
             ports = [p for p in serial.tools.list_ports.comports()]
 
             # select option for selecting port
@@ -139,11 +142,18 @@ class OregonConnector:
                     return selected_ports
                 else:
                     # No valid selection; re-display options
+                    print("\n" + "-" * 70)
+                    print("PORT SELECTION")
+                    print("-" * 70)
                     break
 
 
     def _attempt_connection(self, ports, bauds):
         """Helper method to attempt connection on a list of ports with specified baud rates."""
+        print("\n" + "-" * 70)
+        print("ATTEMPTING CONNECTION")
+        print("-" * 70)
+
         for port in ports:
             for baud in bauds:
                 print(f"\nAttempting connection to {port} at {baud} baud...", end="", flush=True)
@@ -159,15 +169,16 @@ class OregonConnector:
                     response = ser.readline().decode(errors="ignore").strip()
 
                     if response:
-                        print("SUCCESS!")
-                        print(f"Successfully connected to {port} at {baud} baud")
+                        print(" SUCCESS!")
                         return {'connection': ser, 'port': port, 'baudrate': baud}
 
                     ser.close()
-                    print("No response.")
+                    print(" No response.")
 
                 except Exception as e:
                     print(f" Error: {e}")
+
+        return None
 
     def connect(self):
         """
@@ -179,23 +190,57 @@ class OregonConnector:
             Dictionary with 'connection', 'port', and 'baudrate' keys if successful, None otherwise.
         """
 
-        print("\n\n=== Oregon RFID Communicator Connection ===")
+        print("\n" + "=" * 70)
+        print("OREGON RFID COMMUNICATOR CONNECTION")
+        print("=" * 70)
 
         while True:
             # Ask user to select baud rate
             bauds = self._select_baud_rate()
             if not bauds:
+                print("\n" + "=" * 70)
+                print("CONNECTION FAILED")
+                print("=" * 70)
                 return None
 
             # Ask user to select port(s)
             selected_ports = self._select_ports()
 
             if not selected_ports:
+                print("\n" + "=" * 70)
+                print("CONNECTION FAILED")
+                print("=" * 70)
                 return None
 
             result = self._attempt_connection(selected_ports, bauds)
 
             if result:
+                print("\n" + "-" * 70)
+                print(f"Successfully connected to {result['port']} at {result['baudrate']} baud")
+                print("-" * 70)
+                print("\n" + "=" * 70)
+                print("CONNECTION SUCCESSFUL")
+                print("=" * 70)
                 return result
+
+            # Connection failed, ask if user wants to retry
+            print("\n" + "-" * 70)
+            print("Connection failed on all attempted port/baud combinations.")
+            print("-" * 70)
+
+            while True:
+                retry = input("\nWould you like to retry? (y/n): ").strip().lower()
+                if retry in ['y', 'yes', 'n', 'no']:
+                    break
+
+            if retry not in ['y', 'yes']:
+                print("\n" + "=" * 70)
+                print("CONNECTION FAILED")
+                print("=" * 70)
+                return None
+
+            print("\n" + "=" * 70)
+            print("END OF OREGON RFID COMMUNICATOR CONNECTION")
+            print("=" * 70)
 
 

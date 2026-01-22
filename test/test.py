@@ -1,10 +1,12 @@
 from datetime import date
 from pathlib import Path
 
-from oregon_processing.oregon_communicator import OregonCommunicator
+from oregon_processing.util.oregon_communicator import OregonCommunicator
+from oregon_processing.util.config_manager import ConfigManager
 
 
 def main():
+
     with OregonCommunicator() as communicator:
         if not communicator.is_connected:
             print("Failed to connect to Oregon RFID device. Aborting.")
@@ -22,9 +24,16 @@ def main():
 
         first_date = date(2021, 9, 1)
         last_date = date(2022, 1, 11)
+
         communicator.export_system_status_logs(first_date=first_date, last_date=last_date, output_dir=Path("system_logs"))
         communicator.export_records(first_date=first_date, last_date=last_date, output_dir=Path("records"))
 
 
 if __name__ == "__main__":
-    main()
+
+    ConfigManager.create_new_config()
+    config_manager = ConfigManager()
+
+    print(f"\nUsername: {config_manager.user}")
+    print(f"Data dir: {config_manager.data_dir}")
+    #main()

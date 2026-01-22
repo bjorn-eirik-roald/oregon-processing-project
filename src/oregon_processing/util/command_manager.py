@@ -95,8 +95,9 @@ class CommandManager:
         self._last_prompt_signature = None
 
     @property
-    def last_prompt_signature(self):
+    def prompt_signature(self):
         """Get the last received prompt signature."""
+        self.send_command_and_receive_response("SY")  # Update last prompt signature
         return self._last_prompt_signature
 
     def validate_command(self, command: str) -> bool:

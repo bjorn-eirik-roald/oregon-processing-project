@@ -13,13 +13,10 @@ from typing import Union
 
 
 
-from oregon_processing.oregon_connector import OregonConnector
-from oregon_processing.command_manager import CommandManager
-from oregon_processing.interactive_terminal import InteractiveTerminal
-from oregon_processing.firmware_updater import FirmwareUpdater
-
-
-
+from oregon_processing.util.oregon_connector import OregonConnector
+from oregon_processing.util.command_manager import CommandManager
+from oregon_processing.util.interactive_terminal import InteractiveTerminal
+from oregon_processing.util.firmware_updater import FirmwareUpdater
 
 
 class OregonCommunicator:
@@ -69,6 +66,19 @@ class OregonCommunicator:
         """Check if there is an active connection."""
         return self._connection is not None
 
+    @property
+    def prompt_signature(self):
+        """Get the last received prompt signature from the command manager."""
+        if self._command_manager:
+            return self._command_manager.prompt_signature
+        return None
+
+    @property
+    def mode(self):
+        """Get the current operating mode from the system status."""
+        status = self.get_system_status()
+        return status['mode']
+
     def __enter__(self):
         """Allow use in 'with' statement."""
         self.connect()
@@ -76,6 +86,8 @@ class OregonCommunicator:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Ensure the connection is closed when leaving context."""
+        if self._connection:
+            self.return_to_startup_mode()
         self.close()
 
     def connect(self):
@@ -105,6 +117,21 @@ class OregonCommunicator:
                 self._baudrate = None
                 self._command_manager = None
 
+    def return_to_startup_mode(self):
+        """Return the Oregon RFID device to its start-up mode."""
+        if self._connection is None:
+            return
+
+        if self._start_up_mode.lower() == "standby":
+            self.standby_mode()
+        elif self._start_up_mode.lower() == "run":
+            self.run_mode()
+        elif self._start_up_mode.lower() == "sleep":
+            self.sleep_mode()
+        else:
+            self.sleep_mode()
+            print("WARNING: Unknown start-up mode. Reader has been set to Sleep mode to be safe.")
+
     def _post_connect_handshake(self):
         """Send a quick SY command to verify connection and capture prompt signature. Store reader name"""
 
@@ -112,8 +139,117 @@ class OregonCommunicator:
             return
 
         self._get_reader_name()
+        self._start_up_mode = self.mode
 
-        print(f"\nReader name: {self._reader_name or '(not set)'}")
+
+    def standby_mode(self) -> bool:
+        """
+        Check prompt code to see if device is in Sleep mode, Standby mode, or Run mode.
+
+        Sends ST command to put device in standby mode if not already in that mode.
+
+        Check the prompt code again to see if device is in standby mode.
+        """
+        if not self._connection:
+            print("Not connected to device.")
+            return False
+
+        print("\n" + "=" * 70, flush=True)
+        print("SETTING DEVICE TO STANDBY MODE")
+        print("=" * 70, flush=True)
+
+        if self.mode != 'Standby':
+            print(f"\nDevice is in '{self.mode}' mode.", flush=True)
+            print("\nSending ST command to device...", end="", flush=True)
+            self.send_command("ST")
+            print(" Done.", flush=True)
+            print("Verifying device mode...", end="", flush=True)
+            if self.mode == 'Standby':
+                print(" SUCCESS! Device is now in 'Standby' mode.", flush=True)
+            else:
+                print(f" FAILED! Device is still in '{self.mode}' mode.", flush=True)
+                return False
+        else:
+            print("\nDevice is already in 'Standby' mode.", flush=True)
+
+        print("\n" + "=" * 70)
+        print("DEVICE SET TO STANDBY MODE")
+        print("=" * 70)
+
+        return True
+
+    def run_mode(self) -> bool:
+        """
+        Check prompt code to see if device is in Sleep mode, Standby mode, or Run mode.
+
+        Sends ON command to put device in run mode if not already in that mode.
+
+        Check the prompt code again to see if device is in run mode.
+        """
+        if not self._connection:
+            print("Not connected to device.")
+            return False
+
+        print("\n" + "=" * 70, flush=True)
+        print("SETTING DEVICE TO RUN MODE")
+        print("=" * 70, flush=True)
+
+        if self.mode != 'Run':
+            print(f"\nDevice is in '{self.mode}' mode.", flush=True)
+            print("\nSending ON command to device...", end="", flush=True)
+            self.send_command("ON")
+            print(" Done.", flush=True)
+            print("Verifying device mode...", end="", flush=True)
+            if self.mode == 'Run':
+                print(" SUCCESS! Device is now in 'Run' mode.", flush=True)
+            else:
+                print(f" FAILED! Device is still in '{self.mode}' mode.", flush=True)
+                return False
+        else:
+            print("\nDevice is already in 'Run' mode.", flush=True)
+
+        print("\n" + "=" * 70)
+        print("DEVICE SET TO RUN MODE")
+        print("=" * 70)
+
+        return True
+
+    def sleep_mode(self) -> bool:
+        """
+        Check prompt code to see if device is in Sleep mode, Standby mode, or Run mode.
+
+        Sends OF command to put device in sleep mode if not already in that mode.
+
+        Check the prompt code again to see if device is in sleep mode.
+        """
+        if not self._connection:
+            print("Not connected to device.")
+            return False
+
+        print("\n" + "=" * 70, flush=True)
+        print("SETTING DEVICE TO SLEEP MODE")
+        print("=" * 70, flush=True)
+
+        if self.mode != 'Sleep':
+            print(f"\nDevice is in '{self.mode}' mode.", flush=True)
+            print("\nSending OF command to device...", end="", flush=True)
+            self.send_command("OF")
+            print(" Done.", flush=True)
+            print("Verifying device mode...", end="", flush=True)
+            if self.mode == 'Sleep':
+                print(" SUCCESS! Device is now in 'Sleep' mode.", flush=True)
+            else:
+                print(f" FAILED! Device is still in '{self.mode}' mode.", flush=True)
+                return False
+        else:
+            print("\nDevice is already in 'Sleep' mode.", flush=True)
+
+        print("\n" + "=" * 70)
+        print("DEVICE SET TO SLEEP MODE")
+        print("=" * 70)
+
+        return True
+
 
     def check_system_status_health(self):
         """
@@ -125,12 +261,25 @@ class OregonCommunicator:
             Dictionary with 'healthy' (bool) and 'warnings' (list of str) keys.
         """
 
-        print("\nChecking system status health:", flush=True)
-        warnings = []
+        print("\n" + "=" * 70, flush=True)
+        print("SYSTEM STATUS HEALTH CHECK", flush=True)
+        print("=" * 70, flush=True)
 
+        print("\n" + "-" * 70)
+        print("Retrieving System Status")
+        print("-" * 70)
+        print("Requesting system status from device...", end="", flush=True)
+
+        warnings = []
         parsed_status = self.get_system_status()
 
+        print("Done.")
+
         # Check supply voltage
+        print("\n" + "-" * 70)
+        print("Health Analysis")
+        print("-" * 70)
+
         if parsed_status['supply_voltage']:
             try:
                 voltage = float(parsed_status['supply_voltage'])
@@ -146,11 +295,15 @@ class OregonCommunicator:
 
         # Report health status
         if not health_report['healthy']:
-            print(f"  ⚠ WARNING: {len(health_report['warnings'])} issue(s) detected:")
+            print(f"\n⚠ WARNING: {len(health_report['warnings'])} issue(s) detected:")
             for warning in health_report['warnings']:
                 print(f"  - {warning}")
         else:
-                print("  ✓ System status check: All parameters within normal range")
+            print("\n✓ System status check: All parameters within normal range")
+
+        print("\n" + "=" * 70)
+        print("CHECK COMPLETE")
+        print("=" * 70)
 
         return health_report
 
@@ -206,9 +359,9 @@ class OregonCommunicator:
         """
         Parse system status output into a structured dictionary.
 
-        The SY output is order-specific and some fields (e.g., reader name) may
-        not include a label. This parser uses the expected row positions and
-        validates prefixes for the labeled rows to guard against misalignment.
+        The SY output has a fixed structure for the first 3 lines (device type, version/serial, reader name),
+        but subsequent lines may vary by firmware version. This parser uses position for the first 3 lines
+        and keyword matching for the remaining fields.
         """
 
         status_lines = self.send_command("SY")
@@ -229,99 +382,64 @@ class OregonCommunicator:
             'warnings': []
         }
 
-        # Expected order (0-indexed):
-        # 0: device type line (free text)
-        # 1: version/serial line (starts with V)
-        # 2: reader name (free text, label may vary)
-        # 3: mode line (contains "mode")
-        # 4: supply voltage (prefix "supply voltage")
-        # 5: standby amps (prefix "standby amps")
-        # 6: noise (prefix "noise")
-        # 7: shutdown supercap (prefix "shutdown supercap")
-        # 8: sleep battery (prefix "sleep battery")
-        # 9: tags in archive (prefix "tags in archive")
+        # Parse first 3 lines by position (these are always in the same order)
+        if len(status_lines) < 3:
+            raise ValueError(f"Expected at least 3 lines in SY response, got {len(status_lines)}")
 
-        def warn(msg):
-            status['warnings'].append(msg)
+        # Line 0: device type
+        status['device_type'] = status_lines[0].strip() or None
 
+        # Line 1: version and serial number
+        line = status_lines[1]
+        if line.startswith('V'):
+            parts = line.split()
+            if parts:
+                status['version'] = parts[0]
+            if len(parts) > 1:
+                status['serial_number'] = parts[1]
+        else:
+            raise ValueError(f"Unexpected version/serial line format at row 2: '{line}'")
 
-        for idx, line in enumerate(status_lines):
+        # Line 2: reader name
+        status['reader_name'] = status_lines[2].strip()
+
+        # Parse remaining lines by keyword matching (order may vary by firmware)
+        for idx, line in enumerate(status_lines[3:], start=3):
             line_lower = line.lower().strip()
 
-            # Device type
-            if idx == 0:
-                status['device_type'] = line.strip() or None
-
-            # Version and serial number
-            elif idx == 1:
-                if line.startswith('V'):
-                    parts = line.split()
-                    if parts:
-                        status['version'] = parts[0]
-                    if len(parts) > 1:
-                        status['serial_number'] = parts[1]
-                else:
-                    warn(f"Unexpected version/serial line format at row {idx+1}: '{line}'")
-
-            # Reader name (no reliable label, trust position)
-            elif idx == 2:
-                status['reader_name'] = line.strip()
-
-            # Mode line
-            elif idx == 3:
-                if 'mode' in line_lower:
-                    status['mode'] = line.strip()
-                else:
-                    status['mode'] = line.strip() or None
-                    warn(f"Expected mode line at row {idx+1} but got: '{line}'")
+            # Mode line (contains "mode")
+            if 'mode' in line_lower:
+                status['mode'] = line.strip().split(' mode')[0].strip() or None
 
             # Supply voltage
-            elif idx == 4:
-                if line_lower.startswith('supply voltage'):
-                    parts = line.split()
-                    status['supply_voltage'] = parts[-1] if parts else None
-                else:
-                    warn(f"Expected 'Supply voltage' at row {idx+1} but got: '{line}'")
+            elif 'supply voltage' in line_lower:
+                parts = line.split()
+                status['supply_voltage'] = parts[-1] if parts else None
 
-            # Standby amps
-            elif idx == 5:
-                if line_lower.startswith('standby amps'):
-                    parts = line.split()
-                    status['standby_amps'] = parts[-1] if parts else None
-                else:
-                    warn(f"Expected 'Standby amps' at row {idx+1} but got: '{line}'")
+            # Standby/Sleep amps (could be "standby amps" or "sleep amps")
+            elif ('standby amps' in line_lower or 'sleep amps' in line_lower) and 'amps' in line_lower:
+                parts = line.split()
+                status['standby_amps'] = parts[-1] if parts else None
 
             # Noise
-            elif idx == 6:
-                if line_lower.startswith('noise'):
-                    parts = line.split()
-                    status['noise'] = parts[-1] if parts else None
-                else:
-                    warn(f"Expected 'Noise' at row {idx+1} but got: '{line}'")
+            elif line_lower.startswith('noise'):
+                parts = line.split()
+                status['noise'] = parts[-1] if parts else None
 
-            # Shutdown supercap
-            elif idx == 7:
-                if line_lower.startswith('shutdown supercap'):
-                    parts = line.split()
-                    status['shutdown_supercap'] = parts[-1] if parts else None
-                else:
-                    warn(f"Expected 'Shutdown supercap' at row {idx+1} but got: '{line}'")
+            # Shutdown supercap/supply
+            elif 'shutdown' in line_lower and ('supercap' in line_lower or 'supply' in line_lower):
+                parts = line.split()
+                status['shutdown_supercap'] = parts[-1] if parts else None
 
             # Sleep battery
-            elif idx == 8:
-                if line_lower.startswith('sleep battery'):
-                    parts = line.split()
-                    status['sleep_battery'] = parts[-1] if parts else None
-                else:
-                    warn(f"Expected 'Sleep battery' at row {idx+1} but got: '{line}'")
+            elif 'sleep battery' in line_lower or (line_lower.startswith('battery') and 'sleep' not in line_lower):
+                parts = line.split()
+                status['sleep_battery'] = parts[-1] if parts else None
 
             # Tags in archive
-            elif idx == 9:
-                if line_lower.startswith('tags in archive'):
-                    parts = line.split()
-                    status['tags_in_archive'] = parts[-1] if parts else None
-                else:
-                    warn(f"Expected 'Tags in archive' at row {idx+1} but got: '{line}'")
+            elif 'tags in archive' in line_lower:
+                parts = line.split()
+                status['tags_in_archive'] = parts[-1] if parts else None
 
         return status
 
@@ -916,16 +1034,17 @@ class OregonCommunicator:
                     print(f"ERROR. {e}")
                     success = False
                     all_successful = False
+                    response = []
 
-                    # Generate output filename with date
-                    with open(output_filepath, 'w') as f:
-                        f.write("Oregon RFID Event Record\n")
-                        f.write("Export Date/Time: " + time.strftime("%Y-%m-%d %H:%M:%S") + "\n")
-                        f.write("Date of Record: " + current.strftime("%Y-%m-%d") + "\n")
-                        f.write("=========================\n\n")
+                # Generate output filename with date
+                with open(output_filepath, 'w') as f:
+                    f.write("Oregon RFID Event Record\n")
+                    f.write("Export Date/Time: " + time.strftime("%Y-%m-%d %H:%M:%S") + "\n")
+                    f.write("Date of Record: " + current.strftime("%Y-%m-%d") + "\n")
+                    f.write("=========================\n\n")
 
-                        # Write event record
-                        f.write('\n'.join(response))
+                    # Write event record
+                    f.write('\n'.join(response))
 
                 if success:
                     print(f"Done. Lines written: {len(response)}.")

@@ -37,7 +37,7 @@ class InteractiveTerminal:
 
         try:
             while True:
-                prompt = f"\n{self._command_manager.last_prompt_signature or ''}>> "
+                prompt = f"\n{self._command_manager.prompt_signature or ''}>> "
                 cmd = input(prompt).strip()
                 if not cmd:
                     continue
