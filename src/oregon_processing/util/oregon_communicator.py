@@ -141,7 +141,6 @@ class OregonCommunicator:
         self._get_reader_name()
         self._start_up_mode = self.mode
 
-
     def standby_mode(self) -> bool:
         """
         Check prompt code to see if device is in Sleep mode, Standby mode, or Run mode.
@@ -249,7 +248,6 @@ class OregonCommunicator:
         print("=" * 70)
 
         return True
-
 
     def check_system_status_health(self):
         """
@@ -378,6 +376,7 @@ class OregonCommunicator:
             'shutdown_supercap': None,
             'sleep_battery': None,
             'tags_in_archive': None,
+            'gnss_log_interval_minutes': False,
             'raw_output': status_lines,
             'warnings': []
         }
@@ -386,29 +385,57 @@ class OregonCommunicator:
         if len(status_lines) < 3:
             raise ValueError(f"Expected at least 3 lines in SY response, got {len(status_lines)}")
 
-        # Line 0: device type
-        status['device_type'] = status_lines[0].strip() or None
+        for line_num, line in enumerate(status_lines):
+            if not line.strip():
+                raise ValueError(f"Empty line encountered in SY response at row {line_num + 1}")
 
-        # Line 1: version and serial number
-        line = status_lines[1]
-        if line.startswith('V'):
-            parts = line.split()
-            if parts:
-                status['version'] = parts[0]
-            if len(parts) > 1:
-                status['serial_number'] = parts[1]
-        else:
-            raise ValueError(f"Unexpected version/serial line format at row 2: '{line}'")
+            line = line.strip()
+            line_lower = line.lower()
 
-        # Line 2: reader name
-        status['reader_name'] = status_lines[2].strip()
+            # Line 0: device type
+            if line_num == 0:
+                # Line 0: device type
+                if not "oregon rfid" in line_lower:
+                    raise ValueError(f"Unexpected device type line format at row 1: '{line}'")
 
-        # Parse remaining lines by keyword matching (order may vary by firmware)
-        for idx, line in enumerate(status_lines[3:], start=3):
-            line_lower = line.lower().strip()
+                status['device_type'] = line
+
+            # Line 1: version and serial number
+            elif line_num == 1:
+                line_splits = line.split()
+                if len(line_splits) != 2:
+                    raise ValueError(f"Unexpected version/serial line format at row 2: '{line}'")
+
+                version = line_splits[0]
+                # Validate version format: Vx.xxM/N/F (e.g., V2.74M)
+                if not (len(version) >= 3 and
+                        version[0].upper() == 'V' and
+                        version[-1].upper() in ['M', 'N', 'F']):
+                    raise ValueError(f"Unexpected version/serial line format at row 2: '{line}'")
+
+                # Validate that the middle part is numerical (digits and decimal point)
+                version_number = version[1:-1]
+                if not all(c.isdigit() or c == '.' for c in version_number):
+                    raise ValueError(f"Unexpected version/serial line format at row 2: '{line}'")
+
+                serial_number = line_splits[1].strip()
+                # Validate serial number format: hex digits separated by hyphens (e.g., 0011-000C-0C36-3039-3455-37)
+                if not all(c in '0123456789ABCDEFabcdef-' for c in serial_number):
+                    raise ValueError(f"Unexpected version/serial line format at row 2: '{line}'")
+                if not serial_number or serial_number.startswith('-') or serial_number.endswith('-'):
+                    raise ValueError(f"Unexpected version/serial line format at row 2: '{line}'")
+
+                status['version'] = version
+                status['serial_number'] = serial_number
+
+            # Line 2: reader name
+            elif line_num == 2:
+                # No validation possible here yet
+                # TODO add validfation by restricting to allowed names. Only possible once we have changed all names.
+                status['reader_name'] = line
 
             # Mode line (contains "mode")
-            if 'mode' in line_lower:
+            elif 'mode' in line_lower:
                 status['mode'] = line.strip().split(' mode')[0].strip() or None
 
             # Supply voltage
@@ -440,6 +467,10 @@ class OregonCommunicator:
             elif 'tags in archive' in line_lower:
                 parts = line.split()
                 status['tags_in_archive'] = parts[-1] if parts else None
+            elif "gnss logged every / minutes" in line_lower:
+                status['gnss_log_interval_minutes'] = True
+            else:
+                raise ValueError(f"Unrecognized line format in system status at row {line_num + 1}: '{line}'")
 
         return status
 
