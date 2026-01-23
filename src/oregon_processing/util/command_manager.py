@@ -208,7 +208,7 @@ class CommandManager:
         valid_sets = (
             {'0', 'H', 'N'},  # operating mode
             {'R', 'S', 'Z'},  # run state
-            {'G', 'N', 'U'},  # time sync
+            {'G', 'N', 'U', 'E'},  # time sync (E = elapsed)
             {'B', '*'}       # beeper
         )
 
@@ -237,16 +237,33 @@ class CommandManager:
         if not self._connection:
             raise ConnectionError("Not connected to device.")
 
+        # Clear buffer by actually reading and discarding stray bytes
         self._connection.reset_input_buffer()
+        time.sleep(0.05)  # Brief pause to let buffer clear
+
+        # Drain any remaining bytes that reset_input_buffer() missed
+        self._connection.timeout = 0.1
+        while self._connection.in_waiting > 0:
+            self._connection.read(self._connection.in_waiting)
+            time.sleep(0.01)
+
+        # Send the command
         self._connection.write((command + "\r\n").encode())
         self._connection.flush()
 
     def send_command_and_receive_response(self, command: str, timeout: float = 5) -> list:
         """
-        Send a command and read lines until a known prompt ending appears.
+        Send a command and read lines until a prompt signature indicates completion.
 
-        Uses an idle timeout: the clock resets each time data arrives. Returns the
-        cleaned response (list of lines) with echoed command and prompts removed.
+        The device sometimes emits stray prompt signatures (or prefixes the prompt on
+        the same line as data). We now:
+        - Strip prompt signatures from the front of any line and keep the remainder.
+        - Ignore signature-only lines until we've received at least one data line.
+        - Stop reading once a standalone prompt arrives after data, or when the idle
+          timeout elapses.
+
+        Returns the cleaned response (list of lines) with echoed command and prompts
+        removed.
 
         Parameters
         ----------
@@ -277,14 +294,26 @@ class CommandManager:
 
         while True:
             line = self._connection.readline().decode(errors="ignore").strip()
-            if line:
-                # check for valid prompt signature to end reading
-                if self.validate_prompt_signature(line[:4]):
-                    self._last_prompt_signature = line[:4]
-                    break
 
-                lines.append(line)
-                last_data_time = time.time()
+            if line:
+                raw_line = line
+                prompt_found = self.validate_prompt_signature(line[:4])
+
+                if prompt_found:
+                    self._last_prompt_signature = line[:4]
+                    # Strip the prompt signature (and optional '>') and keep any data that follows.
+                    line = line[4:].lstrip('>').strip()
+
+                if line:
+                    lines.append(line)
+                    last_data_time = time.time()
+
+                    # If the device sent data on the same line as the prompt, continue reading.
+                    continue
+
+                # If we saw a prompt-only line after collecting data, stop; otherwise ignore stray prompt.
+                if prompt_found and lines:
+                    break
 
             # Idle timeout: only break if no new data arrives within timeout
             if time.time() - last_data_time > timeout:
