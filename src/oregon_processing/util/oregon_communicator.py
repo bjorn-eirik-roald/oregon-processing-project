@@ -18,6 +18,7 @@ from oregon_processing.util.command_manager import CommandManager
 from oregon_processing.util.clock_manager import ClockManager
 from oregon_processing.util.interactive_terminal import InteractiveTerminal
 from oregon_processing.util.firmware_updater import FirmwareUpdater
+from oregon_processing.util.format_manager import FormatManager
 from oregon_processing.util.data_exporter import DataExporter
 
 
@@ -34,6 +35,7 @@ class OregonCommunicator:
 
         self._command_manager = None
         self._clock_manager = None
+        self._format_manager = None
         self._data_exporter = None
 
         self._last_upload_date = None
@@ -84,8 +86,8 @@ class OregonCommunicator:
         """Ensure the connection is closed when leaving context."""
         if self._connection:
             self._return_to_startup_mode()
-
-            self._data_exporter.restore_startup_format()
+            if self._format_manager:
+                self._format_manager.restore_startup_format()
 
         self.close()
 
@@ -98,8 +100,8 @@ class OregonCommunicator:
             self._port = result['port']
             self._baudrate = result['baudrate']
 
-
             self._command_manager = CommandManager(self)
+            self._format_manager = FormatManager(self)
             self._data_exporter = DataExporter(self)
             self._clock_manager = ClockManager(self)
 
@@ -120,6 +122,7 @@ class OregonCommunicator:
                 self._port = None
                 self._baudrate = None
                 self._command_manager = None
+                self._format_manager = None
                 self._clock_manager = None
 
     def _return_to_startup_mode(self):
