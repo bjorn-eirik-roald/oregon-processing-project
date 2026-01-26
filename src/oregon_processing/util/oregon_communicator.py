@@ -42,16 +42,6 @@ class OregonCommunicator:
         self._event_record_format = None
 
     @property
-    def port(self):
-        """Get the connected port name."""
-        return self._port
-
-    @property
-    def baudrate(self):
-        """Get the connected baud rate."""
-        return self._baudrate
-
-    @property
     def reader_name(self):
         """Get the reader name if known."""
 
@@ -94,8 +84,9 @@ class OregonCommunicator:
         """Ensure the connection is closed when leaving context."""
         if self._connection:
             self._return_to_startup_mode()
-            if self._data_exporter:
-                self._data_exporter.restore_startup_format()
+
+            self._data_exporter.restore_startup_format()
+
         self.close()
 
     def connect(self):
@@ -154,7 +145,6 @@ class OregonCommunicator:
 
         self._get_reader_name()
         self._start_up_mode = self.mode
-
 
     def change_mode(self, mode_name: str) -> bool:
         """

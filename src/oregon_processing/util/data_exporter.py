@@ -130,7 +130,6 @@ class DataExporter:
         # Format has changed - restore to startup format using set_event_record_format
         return self.set_event_record_format(self._startup_format['columns_raw'])
 
-
     def _split_detection_record(self, record_line: str, format_info: dict) -> list:
         """
         Split a detection record line into parts, handling the ARR field which contains spaces.
