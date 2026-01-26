@@ -93,7 +93,7 @@ class OregonCommunicator:
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Ensure the connection is closed when leaving context."""
         if self._connection:
-            self.return_to_startup_mode()
+            self._return_to_startup_mode()
             if self._data_exporter:
                 self._data_exporter.restore_startup_format()
         self.close()
@@ -131,7 +131,7 @@ class OregonCommunicator:
                 self._command_manager = None
                 self._clock_manager = None
 
-    def return_to_startup_mode(self):
+    def _return_to_startup_mode(self):
         """Return the Oregon RFID device to its start-up mode."""
         if self._connection is None:
             return
@@ -156,113 +156,72 @@ class OregonCommunicator:
         self._start_up_mode = self.mode
 
 
-    def standby_mode(self) -> bool:
+    def change_mode(self, mode_name: str) -> bool:
         """
-        Check prompt code to see if device is in Sleep mode, Standby mode, or Run mode.
+        Change the device operating mode.
 
-        Sends ST command to put device in standby mode if not already in that mode.
+        Parameters
+        ----------
+        mode_name : str
+            Target mode: "Standby", "Run", or "Sleep"
 
-        Check the prompt code again to see if device is in standby mode.
+        Returns
+        -------
+        bool
+            True if mode change successful, False otherwise.
         """
+        # Map mode names to commands
+        mode_commands = {
+            'Standby': 'ST',
+            'Run': 'ON',
+            'Sleep': 'OF'
+        }
+
+        if mode_name not in mode_commands:
+            print(f"Invalid mode: {mode_name}. Valid modes are: Standby, Run, Sleep")
+            return False
+
         if not self._connection:
             print("Not connected to device.")
             return False
 
+        command = mode_commands[mode_name]
+
         print("\n" + "=" * 70, flush=True)
-        print("SETTING DEVICE TO STANDBY MODE")
+        print(f"SETTING DEVICE TO {mode_name.upper()} MODE")
         print("=" * 70, flush=True)
 
-        if self.mode != 'Standby':
+        if self.mode != mode_name:
             print(f"\nDevice is in '{self.mode}' mode.", flush=True)
-            print("\nSending ST command to device...", end="", flush=True)
-            self.send_command("ST")
+            print(f"\nSending {command} command to device...", end="", flush=True)
+            self.send_command(command)
             print(" Done.", flush=True)
             print("Verifying device mode...", end="", flush=True)
-            if self.mode == 'Standby':
-                print(" SUCCESS! Device is now in 'Standby' mode.", flush=True)
+            if self.mode == mode_name:
+                print(f" SUCCESS! Device is now in '{mode_name}' mode.", flush=True)
             else:
                 print(f" FAILED! Device is still in '{self.mode}' mode.", flush=True)
                 return False
         else:
-            print("\nDevice is already in 'Standby' mode.", flush=True)
+            print(f"\nDevice is already in '{mode_name}' mode.", flush=True)
 
         print("\n" + "=" * 70)
-        print("DEVICE SET TO STANDBY MODE")
+        print(f"DEVICE SET TO {mode_name.upper()} MODE")
         print("=" * 70)
 
         return True
+
+    def standby_mode(self) -> bool:
+        """Set device to standby mode."""
+        return self.change_mode('Standby')
 
     def run_mode(self) -> bool:
-        """
-        Check prompt code to see if device is in Sleep mode, Standby mode, or Run mode.
-
-        Sends ON command to put device in run mode if not already in that mode.
-
-        Check the prompt code again to see if device is in run mode.
-        """
-        if not self._connection:
-            print("Not connected to device.")
-            return False
-
-        print("\n" + "=" * 70, flush=True)
-        print("SETTING DEVICE TO RUN MODE")
-        print("=" * 70, flush=True)
-
-        if self.mode != 'Run':
-            print(f"\nDevice is in '{self.mode}' mode.", flush=True)
-            print("\nSending ON command to device...", end="", flush=True)
-            self.send_command("ON")
-            print(" Done.", flush=True)
-            print("Verifying device mode...", end="", flush=True)
-            if self.mode == 'Run':
-                print(" SUCCESS! Device is now in 'Run' mode.", flush=True)
-            else:
-                print(f" FAILED! Device is still in '{self.mode}' mode.", flush=True)
-                return False
-        else:
-            print("\nDevice is already in 'Run' mode.", flush=True)
-
-        print("\n" + "=" * 70)
-        print("DEVICE SET TO RUN MODE")
-        print("=" * 70)
-
-        return True
+        """Set device to run mode."""
+        return self.change_mode('Run')
 
     def sleep_mode(self) -> bool:
-        """
-        Check prompt code to see if device is in Sleep mode, Standby mode, or Run mode.
-
-        Sends OF command to put device in sleep mode if not already in that mode.
-
-        Check the prompt code again to see if device is in sleep mode.
-        """
-        if not self._connection:
-            print("Not connected to device.")
-            return False
-
-        print("\n" + "=" * 70, flush=True)
-        print("SETTING DEVICE TO SLEEP MODE")
-        print("=" * 70, flush=True)
-
-        if self.mode != 'Sleep':
-            print(f"\nDevice is in '{self.mode}' mode.", flush=True)
-            print("\nSending OF command to device...", end="", flush=True)
-            self.send_command("OF")
-            print(" Done.", flush=True)
-            print("Verifying device mode...", end="", flush=True)
-            if self.mode == 'Sleep':
-                print(" SUCCESS! Device is now in 'Sleep' mode.", flush=True)
-            else:
-                print(f" FAILED! Device is still in '{self.mode}' mode.", flush=True)
-                return False
-        else:
-            print("\nDevice is already in 'Sleep' mode.", flush=True)
-
-        print("\n" + "=" * 70)
-        print("DEVICE SET TO SLEEP MODE")
-        print("=" * 70)
-
-        return True
+        """Set device to sleep mode."""
+        return self.change_mode('Sleep')
 
     def check_system_status_health(self):
         """

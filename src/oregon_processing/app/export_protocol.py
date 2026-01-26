@@ -206,7 +206,6 @@ class _ExportProtocolSession:
         self._communicator.export_system_status_logs(first_date=previous_export_dates['system_logs'], last_date=None, output_dir=self._system_logs_dir)
         self._communicator.export_records(first_date=previous_export_dates['records'], last_date=None, output_dir=self._records_dir)
 
-        self._communicator.return_to_startup_mode()
 
 def main():
 
