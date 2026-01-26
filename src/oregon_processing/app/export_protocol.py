@@ -35,7 +35,7 @@ class _ExportProtocolSession:
 
     def __exit__(self, exc_type, exc_value, traceback):
         if self._communicator:
-            self._communicator.exit(exc_type, exc_value, traceback)
+            self._communicator.exit()
 
         if self._database_manager:
             self._database_manager.exit()
