@@ -35,7 +35,10 @@ class _ExportProtocolSession:
 
     def __exit__(self, exc_type, exc_value, traceback):
         if self._communicator:
-            self._communicator.__exit__(exc_type, exc_value, traceback)
+            self._communicator.exit(exc_type, exc_value, traceback)
+
+        if self._database_manager:
+            self._database_manager.exit()
 
     def _load_configuration(self):
         print("\n"+"=" * SECTION_LINE_LENGTH, flush=True)
@@ -88,17 +91,17 @@ class _ExportProtocolSession:
             last_date=None,
             output_dir=self._database_manager.system_logs_dir
         )
-        self._communicator.export_records(
+        self._communicator.export_detection_records(
             first_date=previous_export_dates['records'],
             last_date=None,
             output_dir=self._database_manager.records_dir
         )
 
 
-def main():
+def run():
 
     with ExportProtocol() as export_protocol:
         export_protocol.run_export_protocol()
 
 if __name__ == "__main__":
-    main()
+    run()

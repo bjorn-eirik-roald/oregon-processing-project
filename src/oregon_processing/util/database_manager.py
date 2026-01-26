@@ -32,6 +32,14 @@ class DatabaseManager:
         self._records_dir = None
         self._system_logs_dir = None
 
+    def exit(self) -> None:
+        """
+        Cleanup handler for DatabaseManager.
+
+        Called by ExportProtocol.__exit__().
+        """
+        pass
+
     def prepare_directories(self) -> None:
         """Prepare and create necessary directories for export."""
 

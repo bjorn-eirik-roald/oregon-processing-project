@@ -27,6 +27,15 @@ class FormatManager:
         if self._communicator.is_connected:
             self._startup_format = self._fetch_detection_record_format()
 
+    def exit(self) -> None:
+        """
+        Cleanup handler for FormatManager.
+
+        Called by OregonCommunicator.__exit__().
+        """
+
+        self.restore_startup_format()
+
     def _fetch_detection_record_format(self) -> dict:
         """
         Fetch and parse the detection record format from the device using the FM command.
@@ -141,3 +150,13 @@ class FormatManager:
             Format information with 'columns_raw', 'columns', and 'column_indices'
         """
         return self._fetch_detection_record_format()
+
+    def exit(self) -> None:
+        """
+        Cleanup handler for FormatManager.
+
+        Called by OregonCommunicator.__exit__().
+        """
+        pass
+
+

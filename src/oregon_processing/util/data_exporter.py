@@ -35,6 +35,14 @@ class DataExporter:
         self._format_manager = format_manager
         self._command_manager = command_manager
 
+    def exit(self):
+        """
+        Cleanup handler for DataExporter.
+
+        Called by OregonCommunicator.__exit__().
+        """
+        pass
+
     def _split_detection_record(self, record_line: str, format_info: dict) -> list:
         """
         Split a detection record line into parts, handling the ARR field which contains spaces.
@@ -288,7 +296,7 @@ class DataExporter:
                     success = True
                     # Send ER command with date
                     command = f"ER {current.strftime('%Y-%m-%d')}"
-                    response = self._communicator.send_command(command)
+                    response = self._command_manager.send_command(command)
                 except Exception as e:
                     print(f"ERROR. {e}")
                     success = False
@@ -334,16 +342,13 @@ class DataExporter:
             print("=" * 70)
             return False
 
-    def export_records(self, first_date: date, last_date: Union[date, None] = None, output_dir: Path = Path(""), sep=',') -> bool:
+    def export_detection_records(self, first_date: date, last_date: Union[date, None] = None, output_dir: Path = Path(""), sep=',') -> bool:
         """
-        Export all records (detection records, event records, GNSS records) for a date range using the UP* command.
+        Export detection records (S-type) for a date range using the UP* command.
 
-        The UP* command returns all record types:
-        - S: Detection records
-        - E: Event records
-        - G: GNSS location records
-
-        This method filters for detection records (S-type) in the date range.
+        The UP* command returns all record types (S: Detection, E: Event, G: GNSS),
+        but this method filters and exports only detection records (S-type) within
+        the specified date range.
 
         Parameters
         ----------

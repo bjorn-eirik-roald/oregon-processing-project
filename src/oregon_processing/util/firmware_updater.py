@@ -25,6 +25,14 @@ class FirmwareUpdater:
         self._communicator = communicator
         self._command_manager = command_manager
 
+    def __enter__(self):
+        """Enter context manager."""
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        """Exit context manager."""
+        pass
+
     def update(self, firmware_file_path: str, new_version: str) -> bool:
         """
         Update the firmware on the Oregon RFID reader.

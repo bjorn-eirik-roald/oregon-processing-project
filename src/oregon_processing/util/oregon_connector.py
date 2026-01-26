@@ -10,6 +10,14 @@ class OregonConnector:
     def __init__(self):
         pass
 
+    def __enter__(self):
+        """Enter context manager."""
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        """Exit context manager."""
+        pass
+
     def _select_baud_rate(self):
         """Allow user to select baud rate(s) to use for connection."""
         print("\n" + "-" * 70)

@@ -94,10 +94,18 @@ class CommandManager:
         self._communicator = communicator
         self._last_prompt_signature = None
 
+    def exit(self) -> None:
+        """
+        Cleanup handler for CommandManager.
+
+        Called by OregonCommunicator.__exit__().
+        """
+        pass
+
     @property
     def prompt_signature(self):
         """Get the last received prompt signature."""
-        self.send_command_and_receive_response("SY")  # Update last prompt signature
+        self.send_command("SY")  # Update last prompt signature
         return self._last_prompt_signature
 
     def validate_command(self, command: str) -> bool:
@@ -322,3 +330,5 @@ class CommandManager:
         # Remove echoed command and empty lines
         cleaned = [l for l in lines if l and l != command]
         return cleaned
+
+

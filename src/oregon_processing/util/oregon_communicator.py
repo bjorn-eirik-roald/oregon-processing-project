@@ -16,6 +16,7 @@ from typing import Union
 from oregon_processing.util.oregon_connector import OregonConnector
 from oregon_processing.util.command_manager import CommandManager
 from oregon_processing.util.clock_manager import ClockManager
+from oregon_processing.util.device_mode_manager import DeviceModeManager
 from oregon_processing.util.interactive_terminal import InteractiveTerminal
 from oregon_processing.util.firmware_updater import FirmwareUpdater
 from oregon_processing.util.format_manager import FormatManager
@@ -28,12 +29,12 @@ class OregonCommunicator:
     CRITICAL_VOLTAGE_THRESHOLD = 14.0  # volts
 
     def __init__(self):
-        self._connector = OregonConnector()
         self._connection = None
         self._port = None
         self._baudrate = None
 
         self._command_manager = None
+        self._mode_manager = None
         self._clock_manager = None
         self._format_manager = None
         self._data_exporter = None
@@ -64,11 +65,11 @@ class OregonCommunicator:
         """Check if there is an active connection."""
         return self._connection is not None
 
-
-
     @property
     def mode(self):
         """Get the current operating mode from the system status."""
+        if self._mode_manager:
+            return self._mode_manager._get_current_mode()
         status = self.get_system_status()
         return status['mode']
 
@@ -77,35 +78,27 @@ class OregonCommunicator:
         self._connect()
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, exc_type, exc_value, traceback):
         """Ensure the connection is closed when leaving context."""
-        if self._connection:
-            self._return_to_startup_mode()
-            if self._format_manager:
-                self._format_manager.restore_startup_format()
-
-        self._close()
-
-    def _connect(self):
-        """Attempt to connect to Oregon RFID sensor using the OregonConnector."""
-        result = self._connector.connect()
-
-        if result:
-            self._connection = result['connection']
-            self._port = result['port']
-            self._baudrate = result['baudrate']
-
-            self._command_manager = CommandManager(self)
-            self._format_manager = FormatManager(self, self._command_manager)
-            self._data_exporter = DataExporter(self, self._format_manager, self._command_manager)
-            self._clock_manager = ClockManager(self, self._command_manager)
-
-            self._post_connect_handshake()
-
+        self.exit()
         return False
 
-    def _close(self):
-        """Close serial connection."""
+    def exit(self):
+        """Ensure the connection is closed when leaving context."""
+
+        # Call exit handlers for all managers in reverse initialization order
+        if self._clock_manager:
+            self._clock_manager.exit()
+        if self._data_exporter:
+            self._data_exporter.exit()
+        if self._format_manager:
+            self._format_manager.exit()
+        if self._mode_manager:
+            self._mode_manager.exit()
+        if self._command_manager:
+            self._command_manager.exit()
+
+        # Close serial connection and cleanup
         if self._connection:
             try:
                 self._connection.close()
@@ -117,28 +110,36 @@ class OregonCommunicator:
                 self._port = None
                 self._baudrate = None
                 self._command_manager = None
+                self._mode_manager = None
                 self._format_manager = None
                 self._clock_manager = None
+                self._data_exporter = None
+
+    def _connect(self):
+        """Attempt to connect to Oregon RFID sensor using the OregonConnector."""
+
+        with OregonConnector() as connector:
+            result = connector.connect()
+
+        if result:
+            self._connection = result['connection']
+            self._port = result['port']
+            self._baudrate = result['baudrate']
+
+            self._command_manager = CommandManager(self)
+            self._mode_manager = DeviceModeManager(self, self._command_manager)
+            self._format_manager = FormatManager(self, self._command_manager)
+            self._data_exporter = DataExporter(self, self._format_manager, self._command_manager)
+            self._clock_manager = ClockManager(self, self._command_manager)
+
+            self._post_connect_handshake()
+
+        return False
 
     def _return_to_startup_mode(self):
-        """Return the Oregon RFID device to its start-up mode."""
-        if self._connection is None:
-            return
-
-        # Map startup mode to mode names used by change_mode()
-        mode_map = {
-            'standby': 'Standby',
-            'run': 'Run',
-            'sleep': 'Sleep'
-        }
-
-        startup_mode_lower = self._start_up_mode.lower()
-        target_mode = mode_map[startup_mode_lower]
-
-        if startup_mode_lower not in mode_map:
-            print("WARNING: Unknown start-up mode. Reader has been set to Sleep mode to be safe.")
-
-        self.change_mode(target_mode)
+        """Return the Oregon RFID device to its start-up mode. Delegates to DeviceModeManager."""
+        if self._mode_manager:
+            self._mode_manager.return_to_startup_mode()
 
     def _post_connect_handshake(self):
         """Send a quick SY command to verify connection and capture prompt signature. Store reader name and FM format"""
@@ -147,11 +148,15 @@ class OregonCommunicator:
             return
 
         self._get_reader_name()
-        self._start_up_mode = self.mode
+        startup_mode = self.mode
+        if self._mode_manager:
+            self._mode_manager.startup_mode = startup_mode
 
     def change_mode(self, mode_name: str) -> bool:
         """
         Change the device operating mode.
+
+        Delegates to DeviceModeManager.
 
         Parameters
         ----------
@@ -163,46 +168,10 @@ class OregonCommunicator:
         bool
             True if mode change successful, False otherwise.
         """
-        # Map mode names to commands
-        mode_commands = {
-            'Standby': 'ST',
-            'Run': 'ON',
-            'Sleep': 'OF'
-        }
-
-        if mode_name not in mode_commands:
-            print(f"Invalid mode: {mode_name}. Valid modes are: Standby, Run, Sleep")
+        if not self._mode_manager:
+            print("Mode manager not initialized.")
             return False
-
-        if not self._connection:
-            print("Not connected to device.")
-            return False
-
-        command = mode_commands[mode_name]
-
-        print("\n" + "=" * 70, flush=True)
-        print(f"SETTING DEVICE TO {mode_name.upper()} MODE")
-        print("=" * 70, flush=True)
-
-        if self.mode != mode_name:
-            print(f"\nDevice is in '{self.mode}' mode.", flush=True)
-            print(f"\nSending {command} command to device...", end="", flush=True)
-            self._command_manager.send_command(command)
-            print(" Done.", flush=True)
-            print("Verifying device mode...", end="", flush=True)
-            if self.mode == mode_name:
-                print(f" SUCCESS! Device is now in '{mode_name}' mode.", flush=True)
-            else:
-                print(f" FAILED! Device is still in '{self.mode}' mode.", flush=True)
-                return False
-        else:
-            print(f"\nDevice is already in '{mode_name}' mode.", flush=True)
-
-        print("\n" + "=" * 70)
-        print(f"DEVICE SET TO {mode_name.upper()} MODE")
-        print("=" * 70)
-
-        return True
+        return self._mode_manager.change_mode(mode_name)
 
     def check_system_status_health(self):
         """
@@ -304,6 +273,11 @@ class OregonCommunicator:
 
         terminal = InteractiveTerminal(self, self._command_manager)
         terminal.run()
+
+        print("\nInteractive terminal session ended.")
+        print("As a safety measure, reconnecting to device to refresh state...", end="", flush=True)
+        self._post_connect_handshake()
+        print(" Done.", flush=True)
 
     def get_system_status(self):
         """
@@ -649,11 +623,11 @@ class OregonCommunicator:
         """
         return self._data_exporter.export_system_status_logs(first_date, last_date, output_dir)
 
-    def export_records(self, first_date: date, last_date: Union[date, None] = None, output_dir: Path = Path(""), sep=',') -> bool:
+    def export_detection_records(self, first_date: date, last_date: Union[date, None] = None, output_dir: Path = Path(""), sep=',') -> bool:
         """
         Export detection records for a date range.
 
-        Delegates to DataExporter.export_records().
+        Delegates to DataExporter.export_detection_records().
 
         Parameters
         ----------
@@ -671,5 +645,5 @@ class OregonCommunicator:
         bool
             True if all exports completed successfully, False if any failed.
         """
-        return self._data_exporter.export_records(first_date, last_date, output_dir, sep)
+        return self._data_exporter.export_detection_records(first_date, last_date, output_dir, sep)
 
