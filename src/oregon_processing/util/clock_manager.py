@@ -16,7 +16,7 @@ class ClockManager:
         'E': "Ellapsed time since power-up"
     }
 
-    def __init__(self, communicator):
+    def __init__(self, communicator, command_manager):
         """
         Initialize ClockManager.
 
@@ -24,8 +24,11 @@ class ClockManager:
         ----------
         communicator : OregonCommunicator
             OregonCommunicator instance for device communication.
+        command_manager : CommandManager
+            CommandManager instance for sending commands to device.
         """
         self._communicator = communicator
+        self._command_manager = command_manager
 
     def _parse_tz_response(self, tz_line: str) -> timezone:
         """
@@ -197,7 +200,7 @@ class ClockManager:
 
         # Send DT command and get response
         try:
-            lines = self._communicator.send_command("DT")
+            lines = self._command_manager.send_command("DT")
         except Exception as e:
             raise Exception(f"Error sending DT command: {e}")
 
@@ -209,7 +212,7 @@ class ClockManager:
         # If elapsed time (sync_status 'E'), return without querying timezone
         # Always fetch timezone so it is available even in elapsed-time mode
         try:
-            lines = self._communicator.send_command("TZ")
+            lines = self._command_manager.send_command("TZ")
         except Exception as e:
             raise Exception(f"Error sending TZ command: {e}")
 
@@ -274,12 +277,12 @@ class ClockManager:
             print("-" * 70)
 
             print("Setting device timezone to UTC...", end="", flush=True)
-            self._communicator.send_command("TZ 0")
+            self._command_manager.send_command("TZ 0")
             print("Done.")
 
             print("Sending device time...", end="", flush=True)
             dt_command = system_datetime_utc.strftime("DT %Y-%m-%d %H:%M:%S")
-            response_lines = self._communicator.send_command(dt_command)
+            response_lines = self._command_manager.send_command(dt_command)
             print("Done.")
 
             report['was_updated'] = True

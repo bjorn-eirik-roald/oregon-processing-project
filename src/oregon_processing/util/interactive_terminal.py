@@ -15,7 +15,7 @@ except ImportError:
 class InteractiveTerminal:
     """Interactive terminal for sending commands to Oregon RFID device."""
 
-    def __init__(self, communicator):
+    def __init__(self, communicator, command_manager):
         """
         Initialize the interactive terminal.
 
@@ -23,8 +23,11 @@ class InteractiveTerminal:
         ----------
         communicator : OregonCommunicator
             OregonCommunicator instance for device communication.
+        command_manager : CommandManager
+            CommandManager instance for sending commands to device.
         """
         self._communicator = communicator
+        self._command_manager = command_manager
 
     def run(self):
         """
@@ -37,7 +40,7 @@ class InteractiveTerminal:
 
         try:
             while True:
-                prompt = f"\n{self._communicator.prompt_signature or ''}>> "
+                prompt = f"\n{self._command_manager.prompt_signature or ''}>> "
                 cmd = input(prompt).strip()
                 if not cmd:
                     continue
@@ -54,7 +57,7 @@ class InteractiveTerminal:
                     continue
 
                 # send command and get cleaned response
-                lines = self._communicator.send_command(cmd)
+                lines = self._command_manager.send_command(cmd)
                 if lines:
                     print("\n".join(lines))
                 else:

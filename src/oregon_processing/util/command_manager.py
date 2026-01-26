@@ -219,7 +219,7 @@ class CommandManager:
 
         return valid_signature
 
-    def _send_command(self, command: str):
+    def _transmit_command(self, command: str):
         """
         Send a command to the device.
 
@@ -251,7 +251,7 @@ class CommandManager:
         self._communicator._connection.write((command + "\r\n").encode())
         self._communicator._connection.flush()
 
-    def send_command_and_receive_response(self, command: str, timeout: float = 5) -> list:
+    def send_command(self, command: str, timeout: float = 5) -> list:
         """
         Send a command and read lines until a prompt signature indicates completion.
 
@@ -287,7 +287,7 @@ class CommandManager:
             raise ConnectionError("Not connected to device.")
 
         # Send command
-        self._send_command(command)
+        self._transmit_command(command)
 
         lines = []
         last_data_time = time.time()

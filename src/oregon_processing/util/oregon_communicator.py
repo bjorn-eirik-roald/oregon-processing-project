@@ -41,7 +41,7 @@ class OregonCommunicator:
         self._last_upload_date = None
         self._reader_name = None
         self._serial_number = None
-        self._event_record_format = None
+        self._detection_record_format = None
 
     @property
     def reader_name(self):
@@ -64,12 +64,7 @@ class OregonCommunicator:
         """Check if there is an active connection."""
         return self._connection is not None
 
-    @property
-    def prompt_signature(self):
-        """Get the last received prompt signature from the command manager."""
-        if self._command_manager:
-            return self._command_manager.prompt_signature
-        return None
+
 
     @property
     def mode(self):
@@ -79,7 +74,7 @@ class OregonCommunicator:
 
     def __enter__(self):
         """Allow use in 'with' statement."""
-        self.connect()
+        self._connect()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -89,9 +84,9 @@ class OregonCommunicator:
             if self._format_manager:
                 self._format_manager.restore_startup_format()
 
-        self.close()
+        self._close()
 
-    def connect(self):
+    def _connect(self):
         """Attempt to connect to Oregon RFID sensor using the OregonConnector."""
         result = self._connector.connect()
 
@@ -101,15 +96,15 @@ class OregonCommunicator:
             self._baudrate = result['baudrate']
 
             self._command_manager = CommandManager(self)
-            self._format_manager = FormatManager(self)
-            self._data_exporter = DataExporter(self)
-            self._clock_manager = ClockManager(self)
+            self._format_manager = FormatManager(self, self._command_manager)
+            self._data_exporter = DataExporter(self, self._format_manager, self._command_manager)
+            self._clock_manager = ClockManager(self, self._command_manager)
 
             self._post_connect_handshake()
 
         return False
 
-    def close(self):
+    def _close(self):
         """Close serial connection."""
         if self._connection:
             try:
@@ -130,15 +125,20 @@ class OregonCommunicator:
         if self._connection is None:
             return
 
-        if self._start_up_mode.lower() == "standby":
-            self.standby_mode()
-        elif self._start_up_mode.lower() == "run":
-            self.run_mode()
-        elif self._start_up_mode.lower() == "sleep":
-            self.sleep_mode()
-        else:
-            self.sleep_mode()
+        # Map startup mode to mode names used by change_mode()
+        mode_map = {
+            'standby': 'Standby',
+            'run': 'Run',
+            'sleep': 'Sleep'
+        }
+
+        startup_mode_lower = self._start_up_mode.lower()
+        target_mode = mode_map[startup_mode_lower]
+
+        if startup_mode_lower not in mode_map:
             print("WARNING: Unknown start-up mode. Reader has been set to Sleep mode to be safe.")
+
+        self.change_mode(target_mode)
 
     def _post_connect_handshake(self):
         """Send a quick SY command to verify connection and capture prompt signature. Store reader name and FM format"""
@@ -187,7 +187,7 @@ class OregonCommunicator:
         if self.mode != mode_name:
             print(f"\nDevice is in '{self.mode}' mode.", flush=True)
             print(f"\nSending {command} command to device...", end="", flush=True)
-            self.send_command(command)
+            self._command_manager.send_command(command)
             print(" Done.", flush=True)
             print("Verifying device mode...", end="", flush=True)
             if self.mode == mode_name:
@@ -203,18 +203,6 @@ class OregonCommunicator:
         print("=" * 70)
 
         return True
-
-    def standby_mode(self) -> bool:
-        """Set device to standby mode."""
-        return self.change_mode('Standby')
-
-    def run_mode(self) -> bool:
-        """Set device to run mode."""
-        return self.change_mode('Run')
-
-    def sleep_mode(self) -> bool:
-        """Set device to sleep mode."""
-        return self.change_mode('Sleep')
 
     def check_system_status_health(self):
         """
@@ -300,7 +288,7 @@ class OregonCommunicator:
             print("Not connected to device.")
             return False
 
-        updater = FirmwareUpdater(self)
+        updater = FirmwareUpdater(self, self._command_manager)
         return updater.update(firmware_file_path, new_version)
 
     def start_interactive_terminal(self):
@@ -314,11 +302,8 @@ class OregonCommunicator:
             print("Not connected to device.")
             return
 
-        terminal = InteractiveTerminal(self)
+        terminal = InteractiveTerminal(self, self._command_manager)
         terminal.run()
-
-    def send_command(self, command: str):
-        return self._command_manager.send_command_and_receive_response(command)
 
     def get_system_status(self):
         """
@@ -329,7 +314,7 @@ class OregonCommunicator:
         and keyword matching for the remaining fields.
         """
 
-        status_lines = self.send_command("SY")
+        status_lines = self._command_manager.send_command("SY")
 
         status = {
             'device_type': None,
@@ -451,7 +436,7 @@ class OregonCommunicator:
             Parsed upload history with upload records and metadata.
         """
 
-        upload_history_lines = self.send_command("UH")
+        upload_history_lines = self._command_manager.send_command("UH")
 
         history = {
             'reader_name': None,
@@ -580,22 +565,6 @@ class OregonCommunicator:
             print(f"Error retrieving serial number: {e}")
             return None
 
-    def get_device_datetime(self) -> dict:
-        """
-        Retrieve the device's current date and time using the DT and TZ commands.
-
-        Delegates to ClockManager. Returns parsed device datetime with timezone awareness.
-
-        Returns
-        -------
-        dict
-            Device datetime with keys: datetime, elapsed_time, milliseconds, sync_status
-        """
-        if not self._connection:
-            raise ConnectionError("Not connected to device.")
-
-        return self._clock_manager.get_device_datetime()
-
     def control_device_datetime(self, tolerance_seconds: int = 15, attempt_sync: bool = True) -> dict:
         """
         Check if device datetime is synchronized with system time and optionally update it.
@@ -682,7 +651,7 @@ class OregonCommunicator:
 
     def export_records(self, first_date: date, last_date: Union[date, None] = None, output_dir: Path = Path(""), sep=',') -> bool:
         """
-        Export event records for a date range.
+        Export detection records for a date range.
 
         Delegates to DataExporter.export_records().
 

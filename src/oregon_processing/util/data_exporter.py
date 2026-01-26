@@ -10,22 +10,30 @@ from typing import Union, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from oregon_processing.util.oregon_communicator import OregonCommunicator
+    from oregon_processing.util.format_manager import FormatManager
+    from oregon_processing.util.command_manager import CommandManager
 
 
 class DataExporter:
     """Handles exporting data from the Oregon RFID communicator."""
 
     DEFAULT_DETECTION_RECORD_FORMAT = 'DTY ARR SPC TRF DUR SPC TTY SPC TAG SCD NCD EFA'
-    def __init__(self, communicator: "OregonCommunicator"):
+    def __init__(self, communicator: "OregonCommunicator", format_manager: "FormatManager", command_manager: "CommandManager"):
         """
-        Initialize DataExporter with a communicator instance.
+        Initialize DataExporter with communicator and manager instances.
 
         Parameters
         ----------
         communicator : OregonCommunicator
             Connected OregonCommunicator instance to use for data retrieval.
+        format_manager : FormatManager
+            Format manager instance for handling detection record format operations.
+        command_manager : CommandManager
+            Command manager instance for sending commands to device.
         """
         self._communicator = communicator
+        self._format_manager = format_manager
+        self._command_manager = command_manager
 
     def _split_detection_record(self, record_line: str, format_info: dict) -> list:
         """
@@ -42,7 +50,7 @@ class DataExporter:
         record_line : str
             The detection record line to split
         format_info : dict
-            Format information from _fetch_event_record_format(), must contain 'columns' and 'column_indices'
+            Format information containing 'columns' and 'column_indices'
 
         Returns
         -------
@@ -190,7 +198,7 @@ class DataExporter:
 
         try:
             print(f"\nExporting upload log to file:", flush=True)
-            upload_history_lines = self._communicator.send_command("UH")
+            upload_history_lines = self._command_manager.send_command("UH")
 
             with open(output_filepath, 'w') as f:
                 f.write("Oregon RFID Upload Log\n")
@@ -289,12 +297,12 @@ class DataExporter:
 
                 # Generate output filename with date
                 with open(output_filepath, 'w') as f:
-                    f.write("Oregon RFID Event Record\n")
+                    f.write("Oregon RFID System Log (Event Records)\n")
                     f.write("Export Date/Time: " + time.strftime("%Y-%m-%d %H:%M:%S") + "\n")
-                    f.write("Date of Record: " + current.strftime("%Y-%m-%d") + "\n")
+                    f.write("Date of Log: " + current.strftime("%Y-%m-%d") + "\n")
                     f.write("=========================\n\n")
 
-                    # Write event record
+                    # Write system log (event records)
                     f.write('\n'.join(response))
 
                 if success:
@@ -328,7 +336,14 @@ class DataExporter:
 
     def export_records(self, first_date: date, last_date: Union[date, None] = None, output_dir: Path = Path(""), sep=',') -> bool:
         """
-        Export event records for a date range using the ER command.
+        Export all records (detection records, event records, GNSS records) for a date range using the UP* command.
+
+        The UP* command returns all record types:
+        - S: Detection records
+        - E: Event records
+        - G: GNSS location records
+
+        This method filters for detection records (S-type) in the date range.
 
         Parameters
         ----------
@@ -372,7 +387,7 @@ class DataExporter:
         total_number_of_records = upload_history["total_records"]
 
         print("\n" + "=" * 70)
-        print("EXPORTING EVENT RECORDS")
+        print("EXPORTING DETECTION RECORDS")
         print("=" * 70)
         print(f"Date range: {first_date} to {last_date}")
         print(f"Total records on device: {total_number_of_records}")
@@ -381,49 +396,49 @@ class DataExporter:
         print("\n" + "-" * 70)
         print("PHASE 1: Retrieving Records from Device")
         print("-" * 70)
-        print("Setting event record format to default for export...", end="", flush=True)
-        if not self._communicator._format_manager.set_event_record_format(self.DEFAULT_DETECTION_RECORD_FORMAT):
-            print("Failed to set event record format. Cannot continue.")
+        print("Setting detection record format to default for export...", end="", flush=True)
+        if not self._format_manager.set_detection_record_format(self.DEFAULT_DETECTION_RECORD_FORMAT):
+            print("Failed to set detection record format. Cannot continue.")
             return False
         print("Done.")
         print("Requesting all records from device...", end="", flush=True)
-        response = self._communicator.send_command("UP*")
+        response = self._command_manager.send_command("UP*")
         print("Done.")
 
         print("\n" + "-" * 70)
         print("PHASE 2: Processing Records")
         print("-" * 70)
-        # Retrieve event record format to determine column order, tag index, and datetime index
+        # Retrieve detection record format to determine column order, tag index, and datetime index
 
-        format_info = self._communicator._format_manager.get_format_info()
+        format_info = self._format_manager.get_format_info()
         format_columns_str = sep.join(format_info['columns'])
         column_indices = format_info['column_indices']
         arr_idx = column_indices.get('ARR')
         tag_idx = column_indices.get('TAG')
 
         if arr_idx is None:
-            raise RuntimeError("ARR index not found in event record format info. This is required for date filtering. Cannot continue.")
+            raise RuntimeError("ARR index not found in detection record format info. This is required for date filtering. Cannot continue.")
 
         if tag_idx is None:
-            raise RuntimeError("Tag index not found in event record format info. This is required for unique tag counting. Cannot continue.")
+            raise RuntimeError("Tag index not found in detection record format info. This is required for unique tag counting. Cannot continue.")
 
         print("Filtering detection records in date range...", end="", flush=True)
         # Convert dates to strings for comparison (YYYY-MM-DD format sorts chronologically)
         first_date_str = first_date.strftime("%Y-%m-%d")
         last_date_str = last_date.strftime("%Y-%m-%d")
 
-        # Filter records in date range - single pass with early termination
-        filtered_records = []
+        # Filter detection records (S-type) in date range - single pass with early termination
+        filtered_detection_records = []
         for line in response:
             if not line.startswith("S"):
                 continue
 
-            # Split record properly handling ARR datetime field
+            # Split detection record properly handling ARR datetime field
             try:
                 parts = self._split_detection_record(line, format_info)
             except ValueError:
-                print(f"Warning: Skipping malformed record during filtering: {line}")
-                continue  # Skip malformed records
+                print(f"Warning: Skipping malformed detection record during filtering: {line}")
+                continue  # Skip malformed detection records
 
 
             # Extract date portion from ARR field (YYYY-MM-DD HH:MM:SS.ddd)
@@ -432,28 +447,28 @@ class DataExporter:
             if record_date_str > last_date_str:
                 break  # Early exit - records are chronological, no need to continue
             if record_date_str >= first_date_str:
-                filtered_records.append(parts)
+                filtered_detection_records.append(parts)
 
         print("Done.")
 
-        print("Organizing records by date..................", end="", flush=True)
-        records = {} # dict with date keys and list of records values
+        print("Organizing detection records by date........", end="", flush=True)
+        detection_records_by_date = {} # dict with date keys and list of detection records values
         all_dates = [first_date + timedelta(days=i) for i in range((last_date - first_date).days + 1)]
         num_dates = len(all_dates)
 
         unique_tags = set()
 
         current_date = None
-        for record in filtered_records:
+        for detection_record in filtered_detection_records:
 
-            record_date = datetime.strptime(record[arr_idx].split()[0], "%Y-%m-%d").date()
-            record_tag = record[tag_idx]
+            record_date = datetime.strptime(detection_record[arr_idx].split()[0], "%Y-%m-%d").date()
+            record_tag = detection_record[tag_idx]
 
             if record_date != current_date:
                 current_date = record_date
-                records[current_date] = []
+                detection_records_by_date[current_date] = []
 
-            records[current_date].append(sep.join(record))
+            detection_records_by_date[current_date].append(sep.join(detection_record))
             unique_tags.add(record_tag)
 
         print("Done.")
@@ -464,14 +479,14 @@ class DataExporter:
 
         # Calculate max width for summary number alignment
         max_summary_width = max(
-            len(str(len(filtered_records))),
-            len(str(len(records))),
-            len(str(num_dates - len(records)))
+            len(str(len(filtered_detection_records))),
+            len(str(len(detection_records_by_date))),
+            len(str(num_dates - len(detection_records_by_date)))
         )
 
-        print(f"Total detection records in date range: {str(len(filtered_records)).rjust(max_summary_width)}")
-        print(f"Number of dates with records:          {str(len(records)).rjust(max_summary_width)}")
-        print(f"Number of dates without records:       {str(num_dates - len(records)).rjust(max_summary_width)}")
+        print(f"Total detection records in date range: {str(len(filtered_detection_records)).rjust(max_summary_width)}")
+        print(f"Number of dates with records:          {str(len(detection_records_by_date)).rjust(max_summary_width)}")
+        print(f"Number of dates without records:       {str(num_dates - len(detection_records_by_date)).rjust(max_summary_width)}")
         print(f"Number of unique tags:                 {str(len(unique_tags)).rjust(max_summary_width)}")
 
         print("\n" + "-" * 70)
@@ -482,7 +497,7 @@ class DataExporter:
         max_counter_width = len(f"({num_dates}/{num_dates})")
 
         # Calculate max width for record count alignment
-        max_record_count = max((len(recs) for recs in records.values()), default=0)
+        max_record_count = max((len(recs) for recs in detection_records_by_date.values()), default=0)
         max_count_width = len(str(max_record_count))
 
         for date_num, current_date in enumerate(all_dates):
@@ -490,11 +505,11 @@ class DataExporter:
             spacing = " " * (max_counter_width - len(counter))
             print(f"  - {spacing}{counter} {current_date}. ", end="", flush=True)
 
-            if current_date not in records:
+            if current_date not in detection_records_by_date:
                 count_str = "0".rjust(max_count_width)
                 unique_tags_count = 0
             else:
-                count_str = str(len(records[current_date])).rjust(max_count_width)
+                count_str = str(len(detection_records_by_date[current_date])).rjust(max_count_width)
                 # Compute unique tags using FM-derived tag index when available; fallback to slice
                 if tag_idx is not None:
                     def _extract_tag(line: str) -> str:
@@ -503,33 +518,28 @@ class DataExporter:
                             return parts[tag_idx] if tag_idx < len(parts) else line[22:34]
                         except (ValueError, IndexError):
                             return line[22:34]
-                    unique_tags_count = len(set(_extract_tag(r) for r in records.get(current_date, [])))
+                    unique_tags_count = len(set(_extract_tag(r) for r in detection_records_by_date.get(current_date, [])))
                 else:
-                    unique_tags_count = len(set(r[22:34] for r in records.get(current_date, [])))
+                    unique_tags_count = len(set(r[22:34] for r in detection_records_by_date.get(current_date, [])))
 
-            print(f"Number of records: {count_str}. Unique tags: {unique_tags_count}. Exporting file...", end="", flush=True)
+            print(f"Number of detection records: {count_str}. Unique tags: {unique_tags_count}. Exporting file...", end="", flush=True)
 
             output_filepath = output_dir / f"{self._communicator.reader_name}_records_{current_date.strftime('%Y_%m_%d')}.txt"
             with open(output_filepath, 'w') as f:
-                f.write("Oregon RFID Event Records\n")
+                f.write("Oregon RFID Detection Records\n")
                 f.write("Export Date/Time: " + time.strftime("%Y-%m-%d %H:%M:%S") + "\n")
                 f.write("Date of Record: " + current_date.strftime("%Y-%m-%d") + "\n")
                 f.write("Number of Records: " + count_str.strip() + "\n")
                 f.write("Number of unique tags: " + str(unique_tags_count) + "\n")
                 f.write("=========================\n\n")
                 f.write(f"{format_columns_str.replace(' ', sep)}\n\n")
-                # Write event records for the date
-                if current_date in records:
-                    f.write('\n'.join(records[current_date]))
+                # Write detection records for the date
+                if current_date in detection_records_by_date:
+                    f.write('\n'.join(detection_records_by_date[current_date]))
 
             print("Done.")
 
-        print("\n" + "-" * 70)
-        print("Restoring original event record format...", end="", flush=True)
-        if not self._communicator._format_manager.restore_startup_format():
-            print("WARNING: Failed to restore original event record format.")
-        print("Done.")
-        print("-" * 70)
+        self._format_manager.restore_startup_format()
 
         print("\n" + "=" * 70, flush=True)
         print("EXPORT COMPLETE", flush=True)

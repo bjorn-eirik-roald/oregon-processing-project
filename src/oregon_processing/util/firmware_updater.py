@@ -11,7 +11,7 @@ import time
 class FirmwareUpdater:
     """Handles firmware update process for Oregon RFID devices."""
 
-    def __init__(self, communicator):
+    def __init__(self, communicator, command_manager):
         """
         Initialize the FirmwareUpdater.
 
@@ -19,8 +19,11 @@ class FirmwareUpdater:
         ----------
         communicator : OregonCommunicator
             OregonCommunicator instance for device communication.
+        command_manager : CommandManager
+            CommandManager instance for sending commands to device.
         """
         self._communicator = communicator
+        self._command_manager = command_manager
 
     def update(self, firmware_file_path: str, new_version: str) -> bool:
         """
@@ -90,13 +93,13 @@ class FirmwareUpdater:
 
             # Step 2: Turn off reader
             print("\nStep 2: Turning off reader...", end="", flush=True)
-            self._communicator.send_command("OF")
+            self._command_manager.send_command("OF")
             time.sleep(2)
             print("Done.")
 
             # Step 3: Send FW command
             print("Step 3: Initiating firmware update mode...", end="", flush=True)
-            self._communicator.send_command("FW")
+            self._command_manager.send_command("FW")
             print("Done.")
 
             # Step 4: Wait for "Update(Y)?" prompt and send Y
@@ -119,7 +122,7 @@ class FirmwareUpdater:
                 return False
 
             print("Step 5: Starting update execution...", end="", flush=True)
-            self._communicator.send_command("Y")
+            self._command_manager.send_command("Y")
             print("Started.")
 
             # Step 6: Wait for "Start" prompt
@@ -143,7 +146,7 @@ class FirmwareUpdater:
 
             # Step 7: Send firmware content
             print("Step 7: Uploading firmware data...", end="", flush=True)
-            self._communicator.send_command(firmware_content)
+            self._command_manager.send_command(firmware_content)
             print("Done.")
 
             # Step 8: Capture response from device
