@@ -18,6 +18,7 @@ from oregon_processing.util.command_manager import CommandManager
 from oregon_processing.util.clock_manager import ClockManager
 from oregon_processing.util.interactive_terminal import InteractiveTerminal
 from oregon_processing.util.firmware_updater import FirmwareUpdater
+from oregon_processing.util.data_exporter import DataExporter
 
 
 class OregonCommunicator:
@@ -30,11 +31,15 @@ class OregonCommunicator:
         self._connection = None
         self._port = None
         self._baudrate = None
+
         self._command_manager = None
         self._clock_manager = None
+        self._data_exporter = None
+
         self._last_upload_date = None
         self._reader_name = None
         self._serial_number = None
+        self._event_record_format = None
 
     @property
     def port(self):
@@ -89,6 +94,8 @@ class OregonCommunicator:
         """Ensure the connection is closed when leaving context."""
         if self._connection:
             self.return_to_startup_mode()
+            if self._data_exporter:
+                self._data_exporter.restore_startup_format()
         self.close()
 
     def connect(self):
@@ -99,8 +106,12 @@ class OregonCommunicator:
             self._connection = result['connection']
             self._port = result['port']
             self._baudrate = result['baudrate']
-            self._command_manager = CommandManager(self._connection)
-            self._clock_manager = ClockManager(self._command_manager)
+
+
+            self._command_manager = CommandManager(self)
+            self._data_exporter = DataExporter(self)
+            self._clock_manager = ClockManager(self)
+
             self._post_connect_handshake()
 
         return False
@@ -136,13 +147,14 @@ class OregonCommunicator:
             print("WARNING: Unknown start-up mode. Reader has been set to Sleep mode to be safe.")
 
     def _post_connect_handshake(self):
-        """Send a quick SY command to verify connection and capture prompt signature. Store reader name"""
+        """Send a quick SY command to verify connection and capture prompt signature. Store reader name and FM format"""
 
         if not self._connection:
             return
 
         self._get_reader_name()
         self._start_up_mode = self.mode
+
 
     def standby_mode(self) -> bool:
         """
@@ -336,7 +348,7 @@ class OregonCommunicator:
             print("Not connected to device.")
             return False
 
-        updater = FirmwareUpdater(self._connection, self._command_manager)
+        updater = FirmwareUpdater(self)
         return updater.update(firmware_file_path, new_version)
 
     def start_interactive_terminal(self):
@@ -350,7 +362,7 @@ class OregonCommunicator:
             print("Not connected to device.")
             return
 
-        terminal = InteractiveTerminal(self._command_manager)
+        terminal = InteractiveTerminal(self)
         terminal.run()
 
     def send_command(self, command: str):
@@ -616,10 +628,6 @@ class OregonCommunicator:
             print(f"Error retrieving serial number: {e}")
             return None
 
-
-
-
-
     def get_device_datetime(self) -> dict:
         """
         Retrieve the device's current date and time using the DT and TZ commands.
@@ -664,7 +672,9 @@ class OregonCommunicator:
 
     def export_system_status(self, output_dir: Path) -> bool:
         """
-        Run the SY (system status) command and write the response to a text file.
+        Export system status to a file.
+
+        Delegates to DataExporter.export_system_status().
 
         Parameters
         ----------
@@ -676,236 +686,31 @@ class OregonCommunicator:
         bool
             True if successful, False otherwise.
         """
-
-        if isinstance(output_dir, str):
-            try:
-                output_dir = Path(output_dir)
-            except Exception as e:
-                print(f"Error converting output directory string to Path object: {e}")
-                return False
-
-        if not self._connection:
-            print("Not connected to device.")
-            return False
-
-        if not output_dir.exists():
-            output_dir.mkdir(parents=True, exist_ok=True)
-
-        output_filepath = output_dir / f"{self.reader_name}_system_status_{datetime.now().strftime('%Y_%m_%d_%H%M%S')}.txt"
-
-        try:
-            print(f"\nExporting system status to file...", end="")
-            parsed_status = self.get_system_status()
-
-
-            with open(output_filepath, 'w') as f:
-                f.write("Oregon RFID System Status\n")
-                f.write("Export Date/Time: " + time.strftime("%Y-%m-%d %H:%M:%S") + "\n")
-                f.write("=========================\n\n")
-
-                # Write system status
-                f.write(f"Device Type: {parsed_status['device_type']}\n")
-                f.write(f"Version: {parsed_status['version']}\n")
-                f.write(f"Serial Number: {parsed_status['serial_number']}\n")
-                f.write(f"Reader Name: {parsed_status['reader_name']}\n")
-                f.write(f"Mode: {parsed_status['mode']}\n")
-                f.write(f"Supply Voltage: {parsed_status['supply_voltage']}\n")
-                f.write(f"Standby Amps: {parsed_status['standby_amps']}\n")
-                f.write(f"Noise: {parsed_status['noise']}\n")
-                f.write(f"Shutdown Supercap: {parsed_status['shutdown_supercap']}\n")
-                f.write(f"Sleep Battery: {parsed_status['sleep_battery']}\n")
-                f.write(f"Tags in Archive: {parsed_status['tags_in_archive']}\n\n")
-
-                if parsed_status['warnings']:
-                    f.write("Warnings:\n")
-                    for warning in parsed_status['warnings']:
-                        f.write(f"  - {warning}\n")
-                    f.write("\n")
-                else:
-                    f.write("No warnings detected.\n\n")
-
-            print("Done.")
-            print(f"System status written to {output_filepath}")
-
-            return True
-
-        except Exception as e:
-            print(f"Error writing system status to file: {e}")
-            return False
+        return self._data_exporter.export_system_status(output_dir)
 
     def export_upload_log(self, output_dir: Path) -> bool:
         """
-        Run the UH (upload log) command and write the response to a text file.
+        Export upload log to a file.
+
+        Delegates to DataExporter.export_upload_log().
 
         Parameters
         ----------
         output_dir : str or Path
-            Directory where output file will be written.
+            Directory where upload log will be written.
 
         Returns
         -------
         bool
             True if successful, False otherwise.
         """
-
-        if isinstance(output_dir, str):
-            try:
-                output_dir = Path(output_dir)
-            except Exception as e:
-                print(f"Error converting output directory string to Path object: {e}")
-                return False
-
-        if not self._connection:
-            print("Not connected to device.")
-            return False
-
-        if not output_dir.exists():
-            output_dir.mkdir(parents=True, exist_ok=True)
-
-        output_filepath = output_dir / f"{self.reader_name}_upload_log_{datetime.now().strftime('%Y_%m_%d_%H%M%S')}.txt"
-
-        try:
-            print(f"\nExporting upload log to file:", flush=True)
-            upload_history_lines = self.send_command("UH")
-
-            with open(output_filepath, 'w') as f:
-                f.write("Oregon RFID Upload Log\n")
-                f.write("Export Date/Time: " + time.strftime("%Y-%m-%d %H:%M:%S") + "\n")
-                f.write("=========================\n\n")
-
-                # Write upload log
-                f.write('\n'.join(upload_history_lines))
-
-            print(f"  Upload log written to {output_filepath}")
-            print(f"  Total lines written: {len(upload_history_lines)}")
-
-            return True
-
-        except Exception as e:
-            print(f"Error writing upload log to file: {e}")
-            return False
+        return self._data_exporter.export_upload_log(output_dir)
 
     def export_system_status_logs(self, first_date: date, last_date: Union[date, None] = None, output_dir: Path = Path("")) -> bool:
         """
-        Export system status logs for all dates since specifed date
+        Export system status logs for a date range.
 
-        This method retrieves the last upload date, then runs export_system_status_log()
-        for each day in the range up to and including today.
-
-        Parameters
-        ----------
-        first_date : date object
-        output_dir : str or Path
-            Directory where output files will be written (default: current directory)
-
-        Returns
-        -------
-        bool
-            True if all exports completed successfully, False if any failed.
-        """
-
-        if last_date is None:
-            last_date = date.today()
-
-        if isinstance(output_dir, str):
-            try:
-                output_dir = Path(output_dir)
-            except Exception as e:
-                print(f"Error converting output directory string to Path object: {e}")
-                return False
-
-        if not self._connection:
-            print("Not connected to device.")
-            return False
-
-
-        try:
-
-            if first_date > last_date:
-                print(f"First date ({first_date}) is in the future. No logs to export.")
-                return False
-
-            # Header
-            print("\n" + "=" * 70)
-            print("EXPORTING SYSTEM STATUS LOGS")
-            print("=" * 70)
-            print(f"Date range: {first_date} to {last_date}")
-            print(f"Output directory: {output_dir}")
-
-            # Prepare ranges and formatting
-            num_dates = (last_date - first_date).days + 1
-            all_dates = [first_date + timedelta(days=i) for i in range(num_dates)]
-            max_counter_width = len(f"({num_dates}/{num_dates})")
-            max_line_width = len(str(1440))  # assume up to one line per minute per day
-
-            print("\n" + "-" * 70)
-            print("Exporting Logs")
-            print("-" * 70)
-
-            all_successful = True
-            export_count = 0
-
-            for date_num, current in enumerate(all_dates, start=1):
-
-                output_filepath = f"{output_dir}/{self.reader_name}_system_log_{current.strftime('%Y_%m_%d')}.txt"
-
-                counter = f"({date_num}/{num_dates})"
-                spacing = " " * (max_counter_width - len(counter))
-                print(f"  - {spacing}{counter} {current}. Exporting...", end="", flush=True)
-
-                try:
-                    success = True
-                    # Send ER command with date
-                    command = f"ER {current.strftime('%Y-%m-%d')}"
-                    response = self.send_command(command)
-                except Exception as e:
-                    print(f"ERROR. {e}")
-                    success = False
-                    all_successful = False
-                    response = []
-
-                # Generate output filename with date
-                with open(output_filepath, 'w') as f:
-                    f.write("Oregon RFID Event Record\n")
-                    f.write("Export Date/Time: " + time.strftime("%Y-%m-%d %H:%M:%S") + "\n")
-                    f.write("Date of Record: " + current.strftime("%Y-%m-%d") + "\n")
-                    f.write("=========================\n\n")
-
-                    # Write event record
-                    f.write('\n'.join(response))
-
-                if success:
-                    print(f"Done. Lines written: {len(response)}.")
-                    export_count += 1
-
-            failed_exports = num_dates - export_count
-
-            print("\n" + "-" * 70)
-            print("SUMMARY")
-            print("-" * 70)
-            print(f"Total dates processed: {num_dates}")
-            print(f"Successful exports:    {export_count}")
-            print(f"Failed exports:        {failed_exports}")
-
-            print("\n" + "=" * 70)
-            if all_successful:
-                print("EXPORT COMPLETE")
-            else:
-                print("EXPORT COMPLETE WITH ERRORS")
-            print("=" * 70)
-
-            return True if all_successful else False
-
-        except Exception as e:
-            print(f"Error during batch export: {e}")
-            print("\n" + "=" * 70)
-            print("EXPORT FAILED")
-            print("=" * 70)
-            return False
-
-    def export_records(self, first_date: date, last_date: Union[date, None] = None, output_dir: Path = Path("")) -> bool:
-        """
-        Export event records for a date range using the ER command.
+        Delegates to DataExporter.export_system_status_logs().
 
         Parameters
         ----------
@@ -921,144 +726,29 @@ class OregonCommunicator:
         bool
             True if all exports completed successfully, False if any failed.
         """
+        return self._data_exporter.export_system_status_logs(first_date, last_date, output_dir)
 
-        if last_date is None:
-            last_date = date.today()
+    def export_records(self, first_date: date, last_date: Union[date, None] = None, output_dir: Path = Path(""), sep=',') -> bool:
+        """
+        Export event records for a date range.
 
-        if isinstance(output_dir, str):
-            try:
-                output_dir = Path(output_dir)
-            except Exception as e:
-                print(f"Error converting output directory string to Path object: {e}")
-                return False
+        Delegates to DataExporter.export_records().
 
-        if not self._connection:
-            print("Not connected to device.")
-            return False
+        Parameters
+        ----------
+        first_date : date object
+            Start date for export (inclusive)
+        last_date : date object, optional
+            End date for export (inclusive). If None, defaults to current date.
+        output_dir : str or Path
+            Directory where output files will be written (default: current directory)
+        sep : str, optional
+            Separator to use in the output file (default: ',')
 
-        if not output_dir.exists():
-            output_dir.mkdir(parents=True, exist_ok=True)
-
-        if first_date > last_date:
-            print(f"First date ({first_date}) is after last date ({last_date}). No records to export.")
-            return False
-
-        upload_history = self.get_upload_history()
-        total_number_of_records = upload_history["total_records"]
-
-        try:
-            print("\n" + "=" * 70)
-            print("EXPORTING EVENT RECORDS")
-            print("=" * 70)
-            print(f"Date range: {first_date} to {last_date}")
-            print(f"Total records on device: {total_number_of_records}")
-            print(f"Output directory: {output_dir}")
-
-            print("\n" + "-" * 70)
-            print("PHASE 1: Retrieving Records from Device")
-            print("-" * 70)
-            print("Requesting all records from device...", end="", flush=True)
-            response = self.send_command("UP*")
-            print("Done.")
-
-            print("\n" + "-" * 70)
-            print("PHASE 2: Processing Records")
-            print("-" * 70)
-            print("Filtering detection records in date range...", end="", flush=True)
-            # Convert dates to strings for comparison (YYYY-MM-DD format sorts chronologically)
-            first_date_str = first_date.strftime("%Y-%m-%d")
-            last_date_str = last_date.strftime("%Y-%m-%d")
-
-            # Filter records in date range - single pass with early termination
-            filtered_records = []
-            for line in response:
-                if not line.startswith("S"):
-                    continue
-                record_date = line[3:13]  # Extract "YYYY-MM-DD" from "S  2021-09-25 05:14:56.400"
-                if record_date > last_date_str:
-                    break  # Early exit - records are chronological, no need to continue
-                if record_date >= first_date_str:
-                    filtered_records.append(line)
-            print("Done.")
-
-            print("Organizing records by date..................", end="", flush=True)
-            records = {} # dict with date keys and list of records values
-            all_dates = [first_date + timedelta(days=i) for i in range((last_date - first_date).days + 1)]
-            num_dates = len(all_dates)
-
-            current_date = None
-            for record in filtered_records:
-                record_date = datetime.strptime(record[3:13], "%Y-%m-%d").date()
-
-                if record_date != current_date:
-                    current_date = record_date
-                    records[current_date] = []
-
-                records[current_date].append(record)
-
-            print("Done.")
-
-            print("\n" + "-" * 70)
-            print("SUMMARY")
-            print("-" * 70)
-
-            # Calculate max width for summary number alignment
-            max_summary_width = max(
-                len(str(len(filtered_records))),
-                len(str(len(records))),
-                len(str(num_dates - len(records)))
-            )
-
-            print(f"Total detection records in date range: {str(len(filtered_records)).rjust(max_summary_width)}")
-            print(f"Number of dates with records:          {str(len(records)).rjust(max_summary_width)}")
-            print(f"Number of dates without records:       {str(num_dates - len(records)).rjust(max_summary_width)}")
-
-            print("\n" + "-" * 70)
-            print("PHASE 3: Exporting Files")
-            print("-" * 70)
-
-            # Calculate max width for counter alignment
-            max_counter_width = len(f"({num_dates}/{num_dates})")
-
-            # Calculate max width for record count alignment
-            max_record_count = max((len(recs) for recs in records.values()), default=0)
-            max_count_width = len(str(max_record_count))
-
-            for date_num, current_date in enumerate(all_dates):
-                counter = f"({date_num + 1}/{num_dates})"
-                spacing = " " * (max_counter_width - len(counter))
-                print(f"  - {spacing}{counter} {current_date}. ", end="", flush=True)
-
-                if current_date not in records:
-                    count_str = "0".rjust(max_count_width)
-                    print(f"Number of records: {count_str}. Exporting file...", end="", flush=True)
-                else:
-                    count_str = str(len(records[current_date])).rjust(max_count_width)
-                    print(f"Number of records: {count_str}. Exporting file...", end="", flush=True)
-
-                output_filepath = output_dir / f"{self.reader_name}_records_{current_date.strftime('%Y-%m-%d')}.txt"
-                with open(output_filepath, 'w') as f:
-                    f.write("Oregon RFID Event Records\n")
-                    f.write("Export Date/Time: " + time.strftime("%Y-%m-%d %H:%M:%S") + "\n")
-                    f.write("Date of Record: " + current_date.strftime("%Y-%m-%d") + "\n")
-                    f.write("=========================\n\n")
-
-                    # Write event records for the date
-                    if current_date in records:
-                        f.write('\n'.join(records[current_date]))
-
-                print("Done.")
-
-            print("\n" + "=" * 70, flush=True)
-            print("EXPORT COMPLETE", flush=True)
-            print("=" * 70, flush=True)
-            return True
-
-        except Exception as e:
-            print(f"\nError during batch export: {e}")
-            return False
-
-
-
-
+        Returns
+        -------
+        bool
+            True if all exports completed successfully, False if any failed.
+        """
+        return self._data_exporter.export_records(first_date, last_date, output_dir, sep)
 

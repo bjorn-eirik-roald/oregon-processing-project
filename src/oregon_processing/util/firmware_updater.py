@@ -11,19 +11,16 @@ import time
 class FirmwareUpdater:
     """Handles firmware update process for Oregon RFID devices."""
 
-    def __init__(self, connection, command_manager):
+    def __init__(self, communicator):
         """
         Initialize the FirmwareUpdater.
 
         Parameters
         ----------
-        connection : serial.Serial
-            Open serial connection to the Oregon RFID device.
-        command_manager : CommandManager
-            CommandManager instance for sending commands.
+        communicator : OregonCommunicator
+            OregonCommunicator instance for device communication.
         """
-        self._connection = connection
-        self._command_manager = command_manager
+        self._communicator = communicator
 
     def update(self, firmware_file_path: str, new_version: str) -> bool:
         """
@@ -51,7 +48,7 @@ class FirmwareUpdater:
             True if update completed successfully, False otherwise.
         """
 
-        if not self._connection:
+        if not self._communicator.is_connected:
             print("Not connected to device.")
             return False
 
@@ -93,13 +90,13 @@ class FirmwareUpdater:
 
             # Step 2: Turn off reader
             print("\nStep 2: Turning off reader...", end="", flush=True)
-            self._command_manager._send_command("OF")
+            self._communicator.send_command("OF")
             time.sleep(2)
             print("Done.")
 
             # Step 3: Send FW command
             print("Step 3: Initiating firmware update mode...", end="", flush=True)
-            self._command_manager._send_command("FW")
+            self._communicator.send_command("FW")
             print("Done.")
 
             # Step 4: Wait for "Update(Y)?" prompt and send Y
@@ -122,7 +119,7 @@ class FirmwareUpdater:
                 return False
 
             print("Step 5: Starting update execution...", end="", flush=True)
-            self._command_manager._send_command("Y")
+            self._communicator.send_command("Y")
             print("Started.")
 
             # Step 6: Wait for "Start" prompt
@@ -131,8 +128,8 @@ class FirmwareUpdater:
             timeout = time.time() + 30  # 30 second timeout
 
             while time.time() < timeout:
-                if self._connection.in_waiting:
-                    line = self._connection.readline().decode(errors="ignore").strip()
+                if self._communicator._connection.in_waiting:
+                    line = self._communicator._connection.readline().decode(errors="ignore").strip()
                     if "start" in line.lower():
                         start_found = True
                         print("Received!")
@@ -146,7 +143,7 @@ class FirmwareUpdater:
 
             # Step 7: Send firmware content
             print("Step 7: Uploading firmware data...", end="", flush=True)
-            self._command_manager._send_command(firmware_content)
+            self._communicator.send_command(firmware_content)
             print("Done.")
 
             # Step 8: Capture response from device
@@ -156,8 +153,8 @@ class FirmwareUpdater:
             last_data_time = time.time()
 
             while time.time() < response_timeout:
-                if self._connection.in_waiting:
-                    line = self._connection.readline().decode(errors="ignore").strip()
+                if self._communicator._connection.in_waiting:
+                    line = self._communicator._connection.readline().decode(errors="ignore").strip()
                     if line:
                         response_lines.append(line)
                         last_data_time = time.time()

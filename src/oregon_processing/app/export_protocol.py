@@ -33,7 +33,6 @@ class _ExportProtocolSession:
         self._start_up_mode = None
         self._config_manager = None
         self._communicator = None
-        self._previous_export_date = None
         self._records_dir = None
         self._system_logs_dir = None
 
@@ -154,14 +153,25 @@ class _ExportProtocolSession:
                 print("⚠ Warning: Mismatch in last dates between records and system logs.")
 
 
-        last_date_candidates = [d for d in [last_record_date, last_system_log_date] if d is not None]
-        self._previous_export_date = min(last_date_candidates, default=None)
-
-        if self._previous_export_date is None:
-            self._previous_export_date = self.DEFAULT_FIRST_DATE
-            print(f"No previous export dates found. Using default first export date: {self._previous_export_date}")
+        # Determine separate previous export dates for records and system logs (no storage; return values)
+        if last_record_date is None:
+            records_prev_date = self.DEFAULT_FIRST_DATE
+            print(f"No previous record export dates found. Using default first export date: {records_prev_date}")
         else:
-            print(f"Previous export date determined. Next export will start from: {self._previous_export_date}")
+            records_prev_date = last_record_date
+            print(f"Previous record export date determined. Next records export will start from: {records_prev_date}")
+
+        if last_system_log_date is None:
+            system_logs_prev_date = self.DEFAULT_FIRST_DATE
+            print(f"No previous system log export dates found. Using default first export date: {system_logs_prev_date}")
+        else:
+            system_logs_prev_date = last_system_log_date
+            print(f"Previous system log export date determined. Next system logs export will start from: {system_logs_prev_date}")
+
+        return {
+            'records': records_prev_date,
+            'system_logs': system_logs_prev_date
+        }
 
     def run_export_protocol(self):
         print("\n"+"=" * SECTION_LINE_LENGTH, flush=True)
@@ -191,11 +201,10 @@ class _ExportProtocolSession:
             print("\nDevice clock is not in sync. Please address the issues before proceeding.", flush=True)
             return
 
-        self._get_export_dates()
+        previous_export_dates = self._get_export_dates()
 
-
-        self._communicator.export_system_status_logs(first_date=self._previous_export_date, last_date=None, output_dir=self._system_logs_dir)
-        self._communicator.export_records(first_date=self._previous_export_date, last_date=None, output_dir=self._records_dir)
+        self._communicator.export_system_status_logs(first_date=previous_export_dates['system_logs'], last_date=None, output_dir=self._system_logs_dir)
+        self._communicator.export_records(first_date=previous_export_dates['records'], last_date=None, output_dir=self._records_dir)
 
         self._communicator.return_to_startup_mode()
 

@@ -16,16 +16,16 @@ class ClockManager:
         'E': "Ellapsed time since power-up"
     }
 
-    def __init__(self, command_manager):
+    def __init__(self, communicator):
         """
         Initialize ClockManager.
 
         Parameters
         ----------
-        command_manager : CommandManager
-            Reference to the CommandManager for sending device commands.
+        communicator : OregonCommunicator
+            OregonCommunicator instance for device communication.
         """
-        self.command_manager = command_manager
+        self._communicator = communicator
 
     def _parse_tz_response(self, tz_line: str) -> timezone:
         """
@@ -119,13 +119,12 @@ class ClockManager:
         if len(parts) < 2:
             raise ValueError(f"Unrecognized DT response format: {dt_line}")
 
-        sync_status = parts[-1]  # Last element is always sync status
-
         # Handle elapsed time format: HH:MM:SS.milliseconds E
-        if sync_status == 'E':
+        if parts[-1] == 'E' or (len(parts) == 2 and parts[-1] in 'GNUE'):
             if len(parts) != 2:
                 raise ValueError(f"Unrecognized DT response format: {dt_line}")
 
+            sync_status = parts[-1]
             time_str = parts[0]  # HH:MM:SS.milliseconds
 
             # Parse time and milliseconds
@@ -152,12 +151,17 @@ class ClockManager:
                 'sync_status': sync_status
             }
 
-        # Handle absolute datetime format: YYYY-MM-DD HH:MM:SS.milliseconds [G|N|U]
+        # Handle absolute datetime format: YYYY-MM-DD HH:MM:SS.milliseconds [G|N|U] [optional timezone]
         if len(parts) < 3:
             raise ValueError(f"Unrecognized DT response format: {dt_line}")
 
         date_str = parts[0]  # YYYY-MM-DD
         time_str = parts[1]  # HH:MM:SS.milliseconds
+        sync_status = parts[2]  # G, N, or U (single character)
+
+        # Validate sync status is a single recognized character
+        if sync_status not in self.TIME_STATUSES_SYNCED:
+            raise ValueError(f"Unrecognized sync status '{sync_status}' in DT response: {dt_line}")
 
         # Parse time and milliseconds
         if '.' in time_str:
@@ -193,7 +197,7 @@ class ClockManager:
 
         # Send DT command and get response
         try:
-            lines = self.command_manager.send_command_and_receive_response("DT")
+            lines = self._communicator.send_command("DT")
         except Exception as e:
             raise Exception(f"Error sending DT command: {e}")
 
@@ -203,22 +207,26 @@ class ClockManager:
         parsed_dt = self._parse_dt_response(lines[0].strip())
 
         # If elapsed time (sync_status 'E'), return without querying timezone
+        # Always fetch timezone so it is available even in elapsed-time mode
+        try:
+            lines = self._communicator.send_command("TZ")
+        except Exception as e:
+            raise Exception(f"Error sending TZ command: {e}")
+
+        if len(lines) != 2: # TODO is it always two lines or does it vary based on sync status?
+            raise ValueError(f"Unexpected number of lines in TZ response: {len(lines)}")
+
+        tz_line = lines[0].strip()
+        device_tz = self._parse_tz_response(tz_line)
+
         if parsed_dt['sync_status'] == 'E':
             return {
                 'datetime': None,
                 'elapsed_time': parsed_dt['elapsed_time'],
                 'milliseconds': parsed_dt['milliseconds'],
                 'sync_status': parsed_dt['sync_status'],
+                'timezone': device_tz
             }
-
-        # For absolute datetime, query timezone offset
-        try:
-            lines = self.command_manager.send_command_and_receive_response("TZ")
-        except Exception as e:
-            raise Exception(f"Error sending TZ command: {e}")
-
-        tz_line = lines[0].strip()
-        device_tz = self._parse_tz_response(tz_line)
 
         device_dt = parsed_dt['datetime']
         datetime_aware = device_dt.replace(tzinfo=device_tz)
@@ -228,6 +236,7 @@ class ClockManager:
             'elapsed_time': None,
             'milliseconds': parsed_dt['milliseconds'],
             'sync_status': parsed_dt['sync_status'],
+            'timezone': device_tz
         }
 
     def control_device_datetime(self, tolerance_seconds: int = 15, attempt_sync: bool = True) -> dict:
@@ -259,6 +268,40 @@ class ClockManager:
         system_datetime = datetime.now()
         system_datetime_utc = system_datetime.astimezone(timezone.utc)
 
+        def _sync_device_time():
+            print("\n" + "-" * 70)
+            print("UPDATING DEVICE TIME")
+            print("-" * 70)
+
+            print("Setting device timezone to UTC...", end="", flush=True)
+            self._communicator.send_command("TZ 0")
+            print("Done.")
+
+            print("Sending device time...", end="", flush=True)
+            dt_command = system_datetime_utc.strftime("DT %Y-%m-%d %H:%M:%S")
+            response_lines = self._communicator.send_command(dt_command)
+            print("Done.")
+
+            report['was_updated'] = True
+            report['update_command_sent'] = dt_command
+            report['update_response'] = response_lines
+            report['error'] = None
+            report['elapsed_time'] = None
+
+        def _refresh_after_update():
+            refreshed = self.get_device_datetime()
+            if refreshed['datetime']:
+                device_dt = refreshed['datetime']
+                device_dt_utc = device_dt.astimezone(timezone.utc)
+                diff = (device_dt_utc - system_datetime_utc).total_seconds()
+                report['device_datetime'] = device_dt
+                report['difference_seconds'] = diff
+                report['synced'] = abs(diff) <= tolerance_seconds
+            else:
+                report['device_datetime'] = None
+                report['difference_seconds'] = None
+                report['synced'] = False
+
         # Initialize report with defaults
         report = {
             'synced': False,
@@ -272,49 +315,50 @@ class ClockManager:
             'error': None
         }
 
-        # Handle elapsed time case (device not synchronized)
-        if device_result['datetime'] is None:
+        def _print_clock_status(label: str, is_synced: bool, device_dt, device_tz, elapsed, sys_dt, time_diff):
             print("\n" + "-" * 70)
-            print("TIME STATUS")
+            print(label)
             print("-" * 70)
-            print(f"Status: ⚠ OUT OF SYNC", flush=True)
-            sync_status_name = self.TIME_STATUSES_SYNCED.get(device_result['sync_status'], "Unknown")
-            print(f"Sync Source: {sync_status_name}")
-            print(f"Elapsed Time: {device_result['elapsed_time']}", flush=True)
-            print(f"System Time: {system_datetime.strftime('%Y-%m-%d %H:%M:%S')} (local)", flush=True)
-            print("\n⚠ Device clock is not synchronized. Cannot perform time-dependent operations.")
 
-            report['elapsed_time'] = device_result['elapsed_time']
-            report['error'] = 'Device clock not synchronized (elapsed time mode)'
+            device_tz_str = f"(UT{device_tz.utcoffset(None).total_seconds() / 3600:+.1f})" if device_tz else "(unknown)"
+            system_offset_hours = sys_dt.astimezone().utcoffset().total_seconds() / 3600
+            system_tz_str = f"(UT{system_offset_hours:+.1f})"
 
-            print("\n" + "=" * 70)
-            print("CHECK COMPLETE")
-            print("=" * 70)
-            return report
+            print(f"Status: {'✓ IN SYNC' if is_synced else '⚠ OUT OF SYNC'}", flush=True)
+            print(f"Device Clock Source: {sync_status_name}")
 
-        # Handle absolute datetime
+            if device_dt:
+                print(f"Device Time: {device_dt.strftime('%Y-%m-%d %H:%M:%S')} {device_tz_str}")
+            else:
+                # Format timedelta as HH:MM:SS.mmm
+                total_seconds = int(elapsed.total_seconds())
+                hours, remainder = divmod(total_seconds, 3600)
+                minutes, seconds = divmod(remainder, 60)
+                milliseconds = elapsed.microseconds // 1000
+                print(f"Device Time: elapsed-only (no absolute time): {hours:02d}:{minutes:02d}:{seconds:02d}.{milliseconds:03d}")
+
+            print(f"System Time: {sys_dt.strftime('%Y-%m-%d %H:%M:%S')} {system_tz_str}")
+
+            if time_diff is not None and not is_synced:
+                print(f"Difference: {time_diff:+.1f}s ({abs(time_diff):.1f}s {'ahead' if time_diff > 0 else 'behind'})")
+
+        sync_status = device_result['sync_status']
+        sync_status_name = self.TIME_STATUSES_SYNCED[sync_status]
+
+        device_tz = device_result['timezone']
+        device_elapsed_time = device_result['elapsed_time']
         device_datetime = device_result['datetime']
-        device_datetime_utc = device_datetime.astimezone(timezone.utc)
-        time_diff = (device_datetime_utc - system_datetime_utc).total_seconds()
-        is_synced = abs(time_diff) <= tolerance_seconds
 
-        # Display sync status
-        print("\n" + "-" * 70)
-        print("SYNC STATUS")
-        print("-" * 70)
+        if sync_status == 'E':
+            # No absolute datetime available
+            time_diff = None
+            is_synced = False
+        else:
+            device_datetime_utc = device_datetime.astimezone(timezone.utc)
+            time_diff = (device_datetime_utc - system_datetime_utc).total_seconds()
+            is_synced = abs(time_diff) <= tolerance_seconds
 
-        device_offset_hours = device_datetime.utcoffset().total_seconds() / 3600
-        system_offset_hours = system_datetime.astimezone().utcoffset().total_seconds() / 3600
-        device_tz_str = f"(UT{device_offset_hours:+.1f})"
-        system_tz_str = f"(UT{system_offset_hours:+.1f})"
-
-        print(f"Status: {'✓ IN SYNC' if is_synced else '⚠ OUT OF SYNC'}", flush=True)
-        sync_status_name = self.TIME_STATUSES_SYNCED.get(device_result['sync_status'], "Unknown")
-        print(f"Device Time: {device_datetime.strftime('%Y-%m-%d %H:%M:%S')} {device_tz_str} [Source: {sync_status_name}]")
-        print(f"System Time: {system_datetime.strftime('%Y-%m-%d %H:%M:%S')} {system_tz_str}")
-
-        if not is_synced:
-            print(f"Difference: {time_diff:+.1f}s ({abs(time_diff):.1f}s {'ahead' if time_diff > 0 else 'behind'})")
+        _print_clock_status("TIME STATUS", is_synced, device_datetime, device_tz, device_elapsed_time, system_datetime, time_diff)
 
         # Update report
         report['synced'] = is_synced
@@ -339,28 +383,23 @@ class ClockManager:
                 return report
 
             try:
-                print("\n" + "-" * 70)
-                print("UPDATING DEVICE TIME")
-                print("-" * 70)
-
-                print("Setting device timezone to UTC...", end="", flush=True)
-                self.command_manager.send_command_and_receive_response("TZ 0")
-                print("Done.")
-
-                print("Sending device time...", end="", flush=True)
-                dt_command = system_datetime_utc.strftime("DT %Y-%m-%d %H:%M:%S")
-                response_lines = self.command_manager.send_command_and_receive_response(dt_command)
-                print("Done.")
-
-                report['was_updated'] = True
-                report['update_command_sent'] = dt_command
-                report['update_response'] = response_lines
-                report['synced'] = True
-
+                _sync_device_time()
+                _refresh_after_update()
             except Exception as e:
                 report['error'] = f'Failed to update device datetime: {e}'
                 print("ERROR.")
                 print(f"\nError: {e}")
+
+            # Final report of clock status after attempted update
+            _print_clock_status(
+                "FINAL DEVICE TIME STATUS",
+                report['synced'],
+                report['device_datetime'],
+                device_tz,
+                device_elapsed_time,
+                report['system_datetime'],
+                report['difference_seconds']
+            )
 
         print("\n" + "=" * 70)
         print("CHECK COMPLETE")

@@ -82,16 +82,16 @@ class CommandManager:
         "FR", "FRD", "FRR", "FRA",
     }
 
-    def __init__(self, connection):
+    def __init__(self, communicator):
         """
         Initialize the CommandManager.
 
         Parameters
         ----------
-        connection : serial.Serial
-            Open serial connection to the Oregon RFID device.
+        communicator : OregonCommunicator
+            OregonCommunicator instance for device communication.
         """
-        self._connection = connection
+        self._communicator = communicator
         self._last_prompt_signature = None
 
     @property
@@ -234,22 +234,22 @@ class CommandManager:
             If not connected to device.
         """
 
-        if not self._connection:
+        if not self._communicator.is_connected:
             raise ConnectionError("Not connected to device.")
 
         # Clear buffer by actually reading and discarding stray bytes
-        self._connection.reset_input_buffer()
+        self._communicator._connection.reset_input_buffer()
         time.sleep(0.05)  # Brief pause to let buffer clear
 
         # Drain any remaining bytes that reset_input_buffer() missed
-        self._connection.timeout = 0.1
-        while self._connection.in_waiting > 0:
-            self._connection.read(self._connection.in_waiting)
+        self._communicator._connection.timeout = 0.1
+        while self._communicator._connection.in_waiting > 0:
+            self._communicator._connection.read(self._communicator._connection.in_waiting)
             time.sleep(0.01)
 
         # Send the command
-        self._connection.write((command + "\r\n").encode())
-        self._connection.flush()
+        self._communicator._connection.write((command + "\r\n").encode())
+        self._communicator._connection.flush()
 
     def send_command_and_receive_response(self, command: str, timeout: float = 5) -> list:
         """
@@ -283,7 +283,7 @@ class CommandManager:
         ConnectionError
             If not connected to device.
         """
-        if not self._connection:
+        if not self._communicator.is_connected:
             raise ConnectionError("Not connected to device.")
 
         # Send command
@@ -293,7 +293,7 @@ class CommandManager:
         last_data_time = time.time()
 
         while True:
-            line = self._connection.readline().decode(errors="ignore").strip()
+            line = self._communicator._connection.readline().decode(errors="ignore").strip()
 
             if line:
                 raw_line = line
