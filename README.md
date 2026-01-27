@@ -19,8 +19,8 @@ If you already have Anaconda/Miniconda installed:
 
 ```Anaconda prompt
 # Create and activate the environment
-conda create -n orgegon_env python=3.11 -y
-conda activate orgegon_env
+conda create -n oregon_env python=3.11 -y
+conda activate oregon_env
 
 # (Optional) Upgrade pip
 python -m pip install --upgrade pip

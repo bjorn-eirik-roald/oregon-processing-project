@@ -27,7 +27,8 @@ test = [
 ]
 
 [project.scripts]
-oregon-terminal = "test.terminal:run"
+open-terminal = "oregon_processing.app.terminal:run"
+run-export = "oregon_processing.app.export_protocol:run"
 
 [project.urls]
 Homepage = "https://github.com/yourusername/oregon-processing-project"
