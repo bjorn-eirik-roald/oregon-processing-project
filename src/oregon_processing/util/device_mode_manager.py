@@ -77,9 +77,9 @@ class DeviceModeManager:
 
         command = mode_commands[mode_name]
 
-        print("\n" + "=" * 70, flush=True)
+        print("\n" + display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH, flush=True)
         print(f"SETTING DEVICE TO {mode_name.upper()} MODE")
-        print("=" * 70, flush=True)
+        print(display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH, flush=True)
 
         current_mode = self._get_current_mode()
         if current_mode != mode_name:
@@ -96,9 +96,9 @@ class DeviceModeManager:
         else:
             print(f"\nDevice is already in '{mode_name}' mode.", flush=True)
 
-        print("\n" + "=" * 70)
+        print("\n" + display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
         print(f"DEVICE SET TO {mode_name.upper()} MODE")
-        print("=" * 70)
+        print(display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
 
         return True
 

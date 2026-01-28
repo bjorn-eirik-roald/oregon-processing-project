@@ -271,18 +271,18 @@ class ClockManager:
             difference_seconds, was_updated, update_command_sent, update_response, error
         """
 
-        print("\n" + "=" * 70, flush=True)
+        print("\n" + display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH, flush=True)
         print("DEVICE DATE/TIME CHECK", flush=True)
-        print("=" * 70, flush=True)
+        print(display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH, flush=True)
 
         device_result = self.get_device_datetime()
         system_datetime = datetime.now()
         system_datetime_utc = system_datetime.astimezone(timezone.utc)
 
         def _sync_device_time():
-            print("\n" + "-" * 70)
+            print("\n" + display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
             print("UPDATING DEVICE TIME")
-            print("-" * 70)
+            print(display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
 
             print("Setting device timezone to UTC...", end="", flush=True)
             self._command_manager.send_command("TZ 0")
@@ -327,9 +327,9 @@ class ClockManager:
         }
 
         def _print_clock_status(label: str, is_synced: bool, device_dt, device_tz, elapsed, sys_dt, time_diff):
-            print("\n" + "-" * 70)
+            print("\n" + display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
             print(label)
-            print("-" * 70)
+            print(display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
 
             device_tz_str = f"(UT{device_tz.utcoffset(None).total_seconds() / 3600:+.1f})" if device_tz else "(unknown)"
             system_offset_hours = sys_dt.astimezone().utcoffset().total_seconds() / 3600
@@ -378,9 +378,9 @@ class ClockManager:
 
         # Attempt sync if out of sync and requested
         if not is_synced and attempt_sync:
-            print("\n" + "-" * 70)
+            print("\n" + display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
             print("CLOCK SYNC ACTION REQUIRED")
-            print("-" * 70)
+            print(display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
 
             confirm = None
             while confirm not in ['y', 'yes', 'n', 'no']:
@@ -388,9 +388,9 @@ class ClockManager:
 
             if confirm not in ['y', 'yes']:
                 print("Device time sync cancelled.")
-                print("\n" + "=" * 70)
+                print("\n" + display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
                 print("CHECK COMPLETE")
-                print("=" * 70)
+                print(display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
                 return report
 
             try:
@@ -412,9 +412,9 @@ class ClockManager:
                 report['difference_seconds']
             )
 
-        print("\n" + "=" * 70)
+        print("\n" + display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
         print("CHECK COMPLETE")
-        print("=" * 70)
+        print(display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
         return report
 
 

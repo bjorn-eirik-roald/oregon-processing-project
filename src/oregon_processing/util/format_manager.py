@@ -129,13 +129,13 @@ class FormatManager:
         if current_format['columns_raw'] == self._startup_format['columns_raw']:
             return True
 
-        print("\n" + "-" * 70)
+        print("\n" + display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
         print("Restoring original detection record format...", end="", flush=True)
         success = self.set_detection_record_format(self._startup_format['columns_raw'])
         if not success:
             print("WARNING: Failed to restore original detection record format.")
         print("Done.")
-        print("-" * 70)
+        print(display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
 
         # Format has changed - restore to startup format using set_detection_record_format
         return success

@@ -74,24 +74,24 @@ class FirmwareUpdater:
             print(f"\nError reading firmware file: {e}")
             return False
 
-        print("\n" + "="*60)
+        print("\n" + display.SECTION_SEPARATOR*60)
         print("FIRMWARE UPDATE PROCESS")
-        print("="*60)
+        print(display.SECTION_SEPARATOR*60)
 
         try:
             # Final confirmation with version info
-            print("\n" + "-"*60)
+            print("\n" + display.SUBSECTION_SEPARATOR*60)
             print(f"Current firmware version: {new_version}")
             print(f"New firmware version:     {new_version}")
-            print("-"*60)
+            print(display.SUBSECTION_SEPARATOR*60)
             confirm = input("\nConfirm firmware update (yes/no): ").strip().lower()
             if confirm not in ['yes', 'y']:
                 print("Firmware update cancelled by user.")
                 return False
 
-            print("\n" + "="*60)
+            print("\n" + display.SECTION_SEPARATOR*60)
             print("Starting firmware update process...")
-            print("="*60)
+            print(display.SECTION_SEPARATOR*60)
 
             # Step 1: Read firmware file content
             print(f"\nStep 1: Reading firmware file: {firmware_file_path}...", end="", flush=True)
@@ -181,10 +181,10 @@ class FirmwareUpdater:
             # Display response
             if response_lines:
                 print("\nDevice Response:")
-                print("-"*60)
+                print(display.SUBSECTION_SEPARATOR*60)
                 for line in response_lines:
                     print(line)
-                print("-"*60)
+                print(display.SUBSECTION_SEPARATOR*60)
             else:
                 print("\nNo response received from device.")
 
@@ -200,9 +200,9 @@ class FirmwareUpdater:
             else:
                 print("Firmware update reported as successful by user.")
 
-            print("\n" + "="*60)
+            print("\n" + display.SECTION_SEPARATOR*60)
             print("FIRMWARE UPDATE COMPLETED")
-            print("="*60)
+            print(display.SECTION_SEPARATOR*60)
 
             return True
 

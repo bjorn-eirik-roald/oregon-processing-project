@@ -9,20 +9,20 @@ Usage:
 """
 
 from oregon_processing.util.config_manager import ConfigManager
-
+from oregon_processing.util.display_constants import display
 
 def run():
     """Run the configuration setup wizard."""
-    print("\n" + "=" * 70)
+    print("\n" + display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
     print("Oregon RFID Communicator - Configuration Setup")
-    print("=" * 70)
+    print(display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
 
     config = ConfigManager.create_new_config()
 
     if config:
-        print("\n" + "=" * 70)
+        print("\n" + display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
         print("Configuration Setup Complete!")
-        print("=" * 70)
+        print(display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
         with config:
             pass  # The __enter__ method prints the configuration summary
     else:
