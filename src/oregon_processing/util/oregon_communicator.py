@@ -23,6 +23,7 @@ from oregon_processing.util.interactive_terminal import InteractiveTerminal
 from oregon_processing.util.firmware_updater import FirmwareUpdater
 from oregon_processing.util.format_manager import FormatManager
 from oregon_processing.util.data_exporter import DataExporter
+from oregon_processing.util.device_health_checker import DeviceHealthChecker
 from oregon_processing.util.display_constants import display
 
 
@@ -39,8 +40,6 @@ class OregonCommunicator:
 class _OregonCommunicatorSession:
     """Class to communicate with Oregon device via serial port."""
 
-    CRITICAL_VOLTAGE_THRESHOLD = 14.0  # volts
-
     def __init__(self):
         self._connector = OregonConnector()
         self._connection = None
@@ -54,6 +53,7 @@ class _OregonCommunicatorSession:
         self._clock_manager = None
         self._format_manager = None
         self._data_exporter = None
+        self._health_manager = None
 
         self._last_upload_date = None
         self._reader_name = None
@@ -103,6 +103,7 @@ class _OregonCommunicatorSession:
                 self._format_manager = self._exit_stack.enter_context(FormatManager(self, self._command_manager))
                 self._data_exporter = self._exit_stack.enter_context(DataExporter(self, self._format_manager, self._command_manager))
                 self._clock_manager = self._exit_stack.enter_context(ClockManager(self, self._command_manager))
+                self._health_checker = self._exit_stack.enter_context(DeviceHealthChecker(self))
 
                 self._post_connect_handshake()
         except Exception:
@@ -162,62 +163,20 @@ class _OregonCommunicatorSession:
             return False
         return self._mode_manager.change_mode(mode_name)
 
-    def check_system_status_health(self):
+    def check_device_health(self):
         """
-        Calls for system status and checks parsed system status for potential issues.
+        Check system status and health.
 
+        Delegates to DeviceHealthChecker.check_device_health().
         Returns
         -------
         dict
             Dictionary with 'healthy' (bool) and 'warnings' (list of str) keys.
         """
-
-        print("\n" + display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH, flush=True)
-        print("SYSTEM STATUS HEALTH CHECK", flush=True)
-        print(display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH, flush=True)
-
-        print("\n" + display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
-        print("Retrieving System Status")
-        print(display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
-        print("Requesting system status from device...", end="", flush=True)
-
-        warnings = []
-        parsed_status = self.get_system_status()
-
-        print("Done.")
-
-        # Check supply voltage
-        print("\n" + display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
-        print("Health Analysis")
-        print(display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
-
-        if parsed_status['supply_voltage']:
-            try:
-                voltage = float(parsed_status['supply_voltage'])
-                if voltage < self.CRITICAL_VOLTAGE_THRESHOLD:
-                    warnings.append(f"Low supply voltage: {voltage}V (should be >= {self.CRITICAL_VOLTAGE_THRESHOLD}V)")
-            except (ValueError, TypeError):
-                warnings.append(f"Could not parse supply voltage: {parsed_status['supply_voltage']}")
-
-        health_report = {
-            'healthy': len(warnings) == 0,
-            'warnings': warnings
-        }
-
-        # Report health status
-        if not health_report['healthy']:
-            print(f"\n⚠ WARNING: {len(health_report['warnings'])} issue(s) detected:")
-            for warning in health_report['warnings']:
-                print(f"  - {warning}")
-        else:
-            print("\n✓ System status check: All parameters within normal range")
-
-        print("\n" + display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
-        print("CHECK COMPLETE")
-        print(display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
-
-        return health_report
-
+        if not self._health_checker:
+            print("Health checker not initialized.")
+            return {'healthy': False, 'warnings': ['Health checker not initialized']}
+        return self._health_checker.check_device_health()
     def update_firmware(self, firmware_file_path: Path, new_version: str) -> bool:
         """
         Update the firmware on the Oregon RFID reader.

@@ -76,7 +76,7 @@ class _ExportProtocolSession:
 
         self._communicator.change_mode('Standby')
 
-        health_report = self._communicator.check_system_status_health()
+        health_report = self._communicator.check_device_health()
         if not health_report['healthy']:
             print("\nDevice health check failed. Please address the issues before proceeding.", flush=True)
             return
