@@ -40,9 +40,9 @@ class _ExportProtocolSession:
         self._database_manager = self._exit_stack.enter_context(DatabaseManager(self._config_manager, self._communicator))
         self._database_manager.prepare_directories()
 
-        # Create log file in the database root directory with timestamp
+        # Create log file in the export logs directory with timestamp
         log_filename = f"export_protocol_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
-        log_file_path = self._database_manager.log_dir / log_filename
+        log_file_path = self._database_manager.export_logs_dir / log_filename
         self._tee_stream = self._exit_stack.enter_context(TeeStream(log_file_path))
 
         return self
