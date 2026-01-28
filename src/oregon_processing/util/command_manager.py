@@ -94,12 +94,12 @@ class CommandManager:
         self._communicator = communicator
         self._last_prompt_signature = None
 
-    def exit(self) -> None:
-        """
-        Cleanup handler for CommandManager.
+    def __enter__(self):
+        """Enter context manager."""
+        return self
 
-        Called by OregonCommunicator.__exit__().
-        """
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Exit context manager."""
         pass
 
     @property
@@ -147,7 +147,7 @@ class CommandManager:
 
         return False
 
-    def validate_prompt_signature(self, signature: str) -> bool:
+    def _validate_prompt_signature(self, signature: str) -> bool:
         """
         Validate an Oregon RFID prompt signature.
 
@@ -305,7 +305,7 @@ class CommandManager:
 
             if line:
                 raw_line = line
-                prompt_found = self.validate_prompt_signature(line[:4])
+                prompt_found = self._validate_prompt_signature(line[:4])
 
                 if prompt_found:
                     self._last_prompt_signature = line[:4]

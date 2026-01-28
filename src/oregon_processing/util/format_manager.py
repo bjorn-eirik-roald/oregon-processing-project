@@ -27,14 +27,13 @@ class FormatManager:
         if self._communicator.is_connected:
             self._startup_format = self._fetch_detection_record_format()
 
-    def exit(self) -> None:
-        """
-        Cleanup handler for FormatManager.
+    def __enter__(self):
+        """Enter context manager."""
+        return self
 
-        Called by OregonCommunicator.__exit__().
-        """
-
-        self.restore_startup_format()
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Exit context manager; restore startup format."""
+        self._restore_startup_format()
 
     def _fetch_detection_record_format(self) -> dict:
         """
@@ -108,7 +107,7 @@ class FormatManager:
             print(f"Error setting detection record format: {e}")
             return False
 
-    def restore_startup_format(self) -> bool:
+    def _restore_startup_format(self) -> bool:
         """
         Restore the device to its startup detection record format.
 
@@ -132,13 +131,14 @@ class FormatManager:
 
         print("\n" + "-" * 70)
         print("Restoring original detection record format...", end="", flush=True)
-        if not self.restore_startup_format():
+        success = self.set_detection_record_format(self._startup_format['columns_raw'])
+        if not success:
             print("WARNING: Failed to restore original detection record format.")
         print("Done.")
         print("-" * 70)
 
         # Format has changed - restore to startup format using set_detection_record_format
-        return self.set_detection_record_format(self._startup_format['columns_raw'])
+        return success
 
     def get_format_info(self) -> dict:
         """
@@ -150,13 +150,5 @@ class FormatManager:
             Format information with 'columns_raw', 'columns', and 'column_indices'
         """
         return self._fetch_detection_record_format()
-
-    def exit(self) -> None:
-        """
-        Cleanup handler for FormatManager.
-
-        Called by OregonCommunicator.__exit__().
-        """
-        pass
 
 

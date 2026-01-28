@@ -28,14 +28,13 @@ class DeviceModeManager:
         self._command_manager = command_manager
         self._startup_mode = None
 
-    def exit(self) -> None:
-        """
-        Cleanup handler for DeviceModeManager.
+    def __enter__(self):
+        """Enter context manager."""
+        return self
 
-        Called by OregonCommunicator.__exit__().
-        """
-
-        self.return_to_startup_mode()
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Exit context manager; return to startup mode."""
+        self._return_to_startup_mode()
 
     @property
     def startup_mode(self) -> str:
@@ -103,7 +102,7 @@ class DeviceModeManager:
 
         return True
 
-    def return_to_startup_mode(self) -> None:
+    def _return_to_startup_mode(self) -> None:
         """Return the Oregon RFID device to its start-up mode."""
         if not self._communicator._connection:
             return
@@ -138,13 +137,5 @@ class DeviceModeManager:
         """
         status = self._communicator.get_system_status()
         return status.get('mode', 'Unknown')
-
-    def exit(self) -> None:
-        """
-        Cleanup handler for DeviceModeManager.
-
-        Called by OregonCommunicator.__exit__().
-        """
-        pass
 
 

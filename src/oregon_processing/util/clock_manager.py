@@ -30,12 +30,12 @@ class ClockManager:
         self._communicator = communicator
         self._command_manager = command_manager
 
-    def exit(self) -> None:
-        """
-        Cleanup handler for ClockManager.
+    def __enter__(self):
+        """Enter context manager."""
+        return self
 
-        Called by OregonCommunicator.__exit__().
-        """
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Exit context manager."""
         pass
 
     def _parse_tz_response(self, tz_line: str) -> timezone:

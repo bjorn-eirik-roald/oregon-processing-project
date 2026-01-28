@@ -1,4 +1,5 @@
 from oregon_processing.util.config_manager import ConfigManager
+from oregon_processing.util.oregon_communicator import OregonCommunicator
 from oregon_processing.util.util_functions import extract_filename_date
 
 from datetime import date, datetime
@@ -16,7 +17,7 @@ class DatabaseManager:
     SYSTEM_LOGS_DIR_NAME = "system_logs"
     DEFAULT_FIRST_DATE = date(2021, 1, 1)
 
-    def __init__(self, config_manager: ConfigManager, reader_name: str):
+    def __init__(self, config_manager: ConfigManager, communicator: "OregonCommunicator"):
         """
         Initialize DatabaseManager.
 
@@ -24,13 +25,21 @@ class DatabaseManager:
         ----------
         config_manager : ConfigManager
             Configuration manager instance for data directory
-        reader_name : str
-            Name of the reader for directory organization
+        communicator : OregonCommunicator
+            OregonCommunicator instance for device information
         """
         self._config_manager = config_manager
-        self._reader_name = reader_name
+        self._communicator = communicator
         self._records_dir = None
         self._system_logs_dir = None
+
+    def __enter__(self):
+        """Enter context manager."""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Exit context manager."""
+        pass
 
     def exit(self) -> None:
         """
@@ -48,7 +57,7 @@ class DatabaseManager:
         print("=" * 70, flush=True)
 
         data_dir = self._config_manager.data_dir
-        reader_data_dir = data_dir / self._reader_name
+        reader_data_dir = data_dir / self._communicator.serial_number
         self._records_dir = reader_data_dir / self.RECORD_DIR_NAME
         self._system_logs_dir = reader_data_dir / self.SYSTEM_LOGS_DIR_NAME
 

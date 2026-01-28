@@ -35,12 +35,12 @@ class DataExporter:
         self._format_manager = format_manager
         self._command_manager = command_manager
 
-    def exit(self):
-        """
-        Cleanup handler for DataExporter.
+    def __enter__(self):
+        """Enter context manager."""
+        return self
 
-        Called by OregonCommunicator.__exit__().
-        """
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Exit context manager."""
         pass
 
     def _split_detection_record(self, record_line: str, format_info: dict) -> list:
@@ -132,7 +132,7 @@ class DataExporter:
         if not output_dir.exists():
             output_dir.mkdir(parents=True, exist_ok=True)
 
-        output_filepath = output_dir / f"{self._communicator.reader_name}_system_status_{datetime.now().strftime('%Y_%m_%d_%H%M%S')}.txt"
+        output_filepath = output_dir / f"{self._communicator.serial_number}_system_status_{datetime.now().strftime('%Y_%m_%d_%H%M%S')}.txt"
 
         try:
             print(f"\nExporting system status to file...", end="")
@@ -202,7 +202,7 @@ class DataExporter:
         if not output_dir.exists():
             output_dir.mkdir(parents=True, exist_ok=True)
 
-        output_filepath = output_dir / f"{self._communicator.reader_name}_upload_log_{datetime.now().strftime('%Y_%m_%d_%H%M%S')}.txt"
+        output_filepath = output_dir / f"{self._communicator.serial_number}_upload_log_{datetime.now().strftime('%Y_%m_%d_%H%M%S')}.txt"
 
         try:
             print(f"\nExporting upload log to file:", flush=True)
@@ -286,7 +286,7 @@ class DataExporter:
 
             for date_num, current in enumerate(all_dates, start=1):
 
-                output_filepath = f"{output_dir}/{self._communicator.reader_name}_system_log_{current.strftime('%Y_%m_%d')}.txt"
+                output_filepath = f"{output_dir}/{self._communicator.serial_number}_system_log_{current.strftime('%Y_%m_%d')}.txt"
 
                 counter = f"({date_num}/{num_dates})"
                 spacing = " " * (max_counter_width - len(counter))
@@ -529,7 +529,7 @@ class DataExporter:
 
             print(f"Number of detection records: {count_str}. Unique tags: {unique_tags_count}. Exporting file...", end="", flush=True)
 
-            output_filepath = output_dir / f"{self._communicator.reader_name}_records_{current_date.strftime('%Y_%m_%d')}.txt"
+            output_filepath = output_dir / f"{self._communicator.serial_number}_records_{current_date.strftime('%Y_%m_%d')}.txt"
             with open(output_filepath, 'w') as f:
                 f.write("Oregon RFID Detection Records\n")
                 f.write("Export Date/Time: " + time.strftime("%Y-%m-%d %H:%M:%S") + "\n")
@@ -544,7 +544,6 @@ class DataExporter:
 
             print("Done.")
 
-        self._format_manager.restore_startup_format()
 
         print("\n" + "=" * 70, flush=True)
         print("EXPORT COMPLETE", flush=True)

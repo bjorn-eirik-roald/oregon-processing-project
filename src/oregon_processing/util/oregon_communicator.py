@@ -6,8 +6,10 @@ Oregon RFID Communicator
 from inspect import signature
 import time
 import os
+import sys
+from contextlib import ExitStack
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime
 from pathlib import Path
 from typing import Union
 
@@ -24,14 +26,27 @@ from oregon_processing.util.data_exporter import DataExporter
 
 
 class OregonCommunicator:
+    def __enter__(self):
+        self._exit_stack = ExitStack()
+
+        self._session = self._exit_stack.enter_context(_OregonCommunicatorSession())
+        return self._session
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self._exit_stack.__exit__(exc_type, exc_value, traceback)
+
+class _OregonCommunicatorSession:
     """Class to communicate with Oregon device via serial port."""
 
     CRITICAL_VOLTAGE_THRESHOLD = 14.0  # volts
 
     def __init__(self):
+        self._connector = OregonConnector()
         self._connection = None
         self._port = None
         self._baudrate = None
+
+        self._exit_stack = None
 
         self._command_manager = None
         self._mode_manager = None
@@ -49,7 +64,7 @@ class OregonCommunicator:
         """Get the reader name if known."""
 
         if not self._reader_name:
-            self._get_reader_name()
+            self._update_reader_name()
         return self._reader_name
 
     @property
@@ -57,7 +72,7 @@ class OregonCommunicator:
         """Get the serial number if known."""
 
         if not self._serial_number:
-            self._get_serial_number()
+            self._update_serial_number()
         return self._serial_number
 
     @property
@@ -75,49 +90,31 @@ class OregonCommunicator:
 
     def __enter__(self):
         """Allow use in 'with' statement."""
-        self._connect()
+        self._exit_stack = ExitStack()
+        self._exit_stack.__enter__()
+
+        success = self._connect()
+        if success:
+            # Enter all managers via ExitStack (they are context managers)
+            # Register in reverse order so they exit in LIFO order
+            self._command_manager = self._exit_stack.enter_context(CommandManager(self))
+            self._mode_manager = self._exit_stack.enter_context(DeviceModeManager(self, self._command_manager))
+            self._format_manager = self._exit_stack.enter_context(FormatManager(self, self._command_manager))
+            self._data_exporter = self._exit_stack.enter_context(DataExporter(self, self._format_manager, self._command_manager))
+            self._clock_manager = self._exit_stack.enter_context(ClockManager(self, self._command_manager))
+
+            self._post_connect_handshake()
+
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
-        """Ensure the connection is closed when leaving context."""
-        self.exit()
+        """Ensure all managers and connection are properly cleaned up."""
+        if self._exit_stack:
+            return self._exit_stack.__exit__(exc_type, exc_value, traceback)
         return False
-
-    def exit(self):
-        """Ensure the connection is closed when leaving context."""
-
-        # Call exit handlers for all managers in reverse initialization order
-        if self._clock_manager:
-            self._clock_manager.exit()
-        if self._data_exporter:
-            self._data_exporter.exit()
-        if self._format_manager:
-            self._format_manager.exit()
-        if self._mode_manager:
-            self._mode_manager.exit()
-        if self._command_manager:
-            self._command_manager.exit()
-
-        # Close serial connection and cleanup
-        if self._connection:
-            try:
-                self._connection.close()
-                print(f"\nConnection to {self._port} closed.")
-            except Exception as e:
-                print(f"\nError closing connection: {e}")
-            finally:
-                self._connection = None
-                self._port = None
-                self._baudrate = None
-                self._command_manager = None
-                self._mode_manager = None
-                self._format_manager = None
-                self._clock_manager = None
-                self._data_exporter = None
 
     def _connect(self):
         """Attempt to connect to Oregon RFID sensor using the OregonConnector."""
-
         with OregonConnector() as connector:
             result = connector.connect()
 
@@ -125,21 +122,9 @@ class OregonCommunicator:
             self._connection = result['connection']
             self._port = result['port']
             self._baudrate = result['baudrate']
-
-            self._command_manager = CommandManager(self)
-            self._mode_manager = DeviceModeManager(self, self._command_manager)
-            self._format_manager = FormatManager(self, self._command_manager)
-            self._data_exporter = DataExporter(self, self._format_manager, self._command_manager)
-            self._clock_manager = ClockManager(self, self._command_manager)
-
-            self._post_connect_handshake()
+            return True
 
         return False
-
-    def _return_to_startup_mode(self):
-        """Return the Oregon RFID device to its start-up mode. Delegates to DeviceModeManager."""
-        if self._mode_manager:
-            self._mode_manager.return_to_startup_mode()
 
     def _post_connect_handshake(self):
         """Send a quick SY command to verify connection and capture prompt signature. Store reader name and FM format"""
@@ -147,7 +132,7 @@ class OregonCommunicator:
         if not self._connection:
             return
 
-        self._get_reader_name()
+        self._update_reader_name()
         startup_mode = self.mode
         if self._mode_manager:
             self._mode_manager.startup_mode = startup_mode
@@ -493,7 +478,7 @@ class OregonCommunicator:
 
         return history
 
-    def _get_reader_name(self) -> str:
+    def _update_reader_name(self) -> str:
         """
         Retrieve the reader name from the device using the SY command.
 
@@ -505,18 +490,18 @@ class OregonCommunicator:
 
         if not self._connection:
             print("Not connected to device.")
-            return None
+            return False
 
         try:
             parsed_status = self.get_system_status()
             self._reader_name = parsed_status["reader_name"]
-            return self._reader_name
+            return True
 
         except Exception as e:
             print(f"Error retrieving reader name: {e}")
-            return None
+            return False
 
-    def _get_serial_number(self) -> str:
+    def _update_serial_number(self) -> str:
         """
         Retrieve the serial number from the device using the SY command.
 
@@ -528,16 +513,16 @@ class OregonCommunicator:
 
         if not self._connection:
             print("Not connected to device.")
-            return None
+            return False
 
         try:
             parsed_status = self.get_system_status()
-            serial_number = parsed_status["serial_number"]
-            return serial_number
+            self._serial_number = parsed_status["serial_number"]
+            return True
 
         except Exception as e:
             print(f"Error retrieving serial number: {e}")
-            return None
+            return False
 
     def control_device_datetime(self, tolerance_seconds: int = 15, attempt_sync: bool = True) -> dict:
         """

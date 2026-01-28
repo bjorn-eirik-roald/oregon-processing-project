@@ -4,6 +4,9 @@ import getpass
 from pathlib import Path
 
 
+SECTION_LINE_LENGTH = 70
+
+
 class ConfigManager:
     APP_NAME = "oregon_communicator"
     CONFIG_FILENAME = "config.json"
@@ -22,6 +25,21 @@ class ConfigManager:
             ConfigManager.create_new_config()
             self._load_and_validate()
 
+    def __enter__(self):
+        """Enter context manager; print configuration summary."""
+        print("\n" + "=" * SECTION_LINE_LENGTH, flush=True)
+        print("CONFIGURATION", flush=True)
+        print("=" * SECTION_LINE_LENGTH, flush=True)
+        self.summarize()
+        print("\n" + "=" * SECTION_LINE_LENGTH, flush=True)
+        print("END OF CONFIGURATION", flush=True)
+        print("=" * SECTION_LINE_LENGTH, flush=True)
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Exit context manager."""
+        pass
+
     @property
     def config_path(self) -> Path:
         """Get the config file path."""
@@ -36,6 +54,12 @@ class ConfigManager:
     def data_dir(self) -> Path:
         """Get the data directory path from the config."""
         return Path(self._config["data_dir_path"])
+
+    def summarize(self) -> None:
+        """Print a concise summary of the loaded configuration."""
+        print("Configuration summary:")
+        print(f"  User: {self.user}")
+        print(f"  Data directory: {self.data_dir}")
 
     @staticmethod
     def _strip_quotes(value: str) -> str:
