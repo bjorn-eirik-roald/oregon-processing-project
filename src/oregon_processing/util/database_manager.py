@@ -5,9 +5,7 @@ from oregon_processing.util.util_functions import extract_filename_date
 from datetime import date, datetime
 from pathlib import Path
 
-
-
-SECTION_LINE_LENGTH = 40
+from oregon_processing.util.display_constants import display
 
 
 class DatabaseManager:

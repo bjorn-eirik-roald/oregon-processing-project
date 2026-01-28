@@ -7,10 +7,7 @@ from oregon_processing.util.oregon_communicator import OregonCommunicator
 from oregon_processing.util.config_manager import ConfigManager
 from oregon_processing.util.database_manager import DatabaseManager
 from oregon_processing.util.managed_log_stream import ManagedLogStream
-
-
-
-SECTION_LINE_LENGTH = 70
+from oregon_processing.util.display_constants import display
 
 class ExportProtocol:
     def __enter__(self):
@@ -63,11 +60,11 @@ class _ExportProtocolSession:
         return False
 
     def run_export_protocol(self):
-        print("\n"+"=" * SECTION_LINE_LENGTH, flush=True)
-        print("=" * SECTION_LINE_LENGTH, flush=True)
+        print("\n"+display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH, flush=True)
+        print(display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH, flush=True)
         print("Oregon RFID Export Protocol", flush=True)
-        print("=" * SECTION_LINE_LENGTH, flush=True)
-        print("=" * SECTION_LINE_LENGTH, flush=True)
+        print(display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH, flush=True)
+        print(display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH, flush=True)
 
         if self._config_manager is None:
             print("Configuration manager not initialized. Aborting.", flush=True)

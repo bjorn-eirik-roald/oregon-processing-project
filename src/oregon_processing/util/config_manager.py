@@ -3,8 +3,7 @@ import json
 import getpass
 from pathlib import Path
 
-
-SECTION_LINE_LENGTH = 70
+from oregon_processing.util.display_constants import display
 
 
 class ConfigManager:
@@ -39,13 +38,13 @@ class ConfigManager:
 
     def __enter__(self):
         """Enter context manager; print configuration summary."""
-        print("\n" + "=" * SECTION_LINE_LENGTH, flush=True)
+        print("\n" + display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH, flush=True)
         print("CONFIGURATION", flush=True)
-        print("=" * SECTION_LINE_LENGTH, flush=True)
+        print(display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH, flush=True)
         self.summarize()
-        print("\n" + "=" * SECTION_LINE_LENGTH, flush=True)
+        print("\n" + display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH, flush=True)
         print("END OF CONFIGURATION", flush=True)
-        print("=" * SECTION_LINE_LENGTH, flush=True)
+        print(display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH, flush=True)
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
