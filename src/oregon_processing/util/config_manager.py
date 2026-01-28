@@ -12,14 +12,26 @@ class ConfigManager:
     CONFIG_FILENAME = "config.json"
     REQUIRED_KEYS = {"user", "data_dir_path"}
 
-    def __init__(self):
+    def __init__(self, validate: bool = True):
+        """
+        Initialize ConfigManager.
+
+        Parameters
+        ----------
+        validate : bool
+            If True, validate the config file. If False, load it without validation.
+            Set to False when reading an existing config for setup/migration purposes.
+        """
         self._username = getpass.getuser()
         self._appdata_dir = self._get_appdata_dir()
         self._config_path = self._appdata_dir / self.CONFIG_FILENAME
         self._config = None
 
         if self._config_path.exists():
-            self._load_and_validate()
+            if validate:
+                self._load_and_validate()
+            else:
+                self._load_without_validation()
         else:
             print(f"Config file not found at {self._config_path}. Creating a new one before continuing.")
             ConfigManager.create_new_config()
@@ -108,6 +120,15 @@ class ConfigManager:
 
         self._config = data
 
+    def _load_without_validation(self):
+        """Load config without validation. Used when reading existing config for setup purposes."""
+        try:
+            with open(self._config_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            self._config = data
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Invalid JSON in config file: {e}")
+
     @classmethod
     def config_exists(cls) -> bool:
         """Check if the config file exists without initializing an instance."""
@@ -125,8 +146,8 @@ class ConfigManager:
 
         existing_config = None
         if config_path.exists():
-            instance = cls()
-            existing_config = instance.config
+            instance = cls(validate=False)  # Load without validation
+            existing_config = instance._config
             while True:
                 response = input(f"\nA config file for this user ({instance.user}) already exists: {config_path}\nDo you want to overwrite it? (y/n): ").strip().lower()
                 if response in ('y', 'n', 'yes', 'no'):
