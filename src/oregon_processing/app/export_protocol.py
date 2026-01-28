@@ -1,8 +1,12 @@
 import sys
 from contextlib import ExitStack
+from pathlib import Path
+from datetime import datetime
+
 from oregon_processing.util.oregon_communicator import OregonCommunicator
 from oregon_processing.util.config_manager import ConfigManager
 from oregon_processing.util.database_manager import DatabaseManager
+from oregon_processing.util.tee_stream import TeeStream
 
 
 
@@ -26,15 +30,21 @@ class _ExportProtocolSession:
         self._config_manager = None
         self._communicator = None
         self._database_manager = None
+        self._tee_stream = None
 
     def __enter__(self):
         self._exit_stack = ExitStack()
-        self._exit_stack.__enter__()
 
         self._config_manager = self._exit_stack.enter_context(ConfigManager())
         self._communicator = self._exit_stack.enter_context(OregonCommunicator())
         self._database_manager = self._exit_stack.enter_context(DatabaseManager(self._config_manager, self._communicator))
         self._database_manager.prepare_directories()
+
+        # Create log file in the database root directory with timestamp
+        log_filename = f"export_protocol_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+        log_file_path = self._database_manager.log_dir / log_filename
+        self._tee_stream = self._exit_stack.enter_context(TeeStream(log_file_path))
+
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):

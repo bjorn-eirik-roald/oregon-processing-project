@@ -13,7 +13,7 @@ SECTION_LINE_LENGTH = 40
 class DatabaseManager:
     """Manages database directories and date range tracking for exports."""
 
-    RECORD_DIR_NAME = "records"
+    RECORD_DIR_NAME = ""
     SYSTEM_LOGS_DIR_NAME = "system_logs"
     DEFAULT_FIRST_DATE = date(2021, 1, 1)
 
@@ -95,6 +95,11 @@ class DatabaseManager:
         if self._system_logs_dir is None:
             raise RuntimeError("Directories not prepared yet.")
         return self._system_logs_dir
+
+    @property
+    def log_dir(self) -> Path:
+        """Get the log directory path (same as data directory)."""
+        return self._config_manager.data_dir
 
     def get_export_dates(self) -> dict:
         """
