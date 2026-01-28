@@ -91,19 +91,22 @@ class _OregonCommunicatorSession:
     def __enter__(self):
         """Allow use in 'with' statement."""
         self._exit_stack = ExitStack()
-        self._exit_stack.__enter__()
 
-        success = self._connect()
-        if success:
-            # Enter all managers via ExitStack (they are context managers)
-            # Register in reverse order so they exit in LIFO order
-            self._command_manager = self._exit_stack.enter_context(CommandManager(self))
-            self._mode_manager = self._exit_stack.enter_context(DeviceModeManager(self, self._command_manager))
-            self._format_manager = self._exit_stack.enter_context(FormatManager(self, self._command_manager))
-            self._data_exporter = self._exit_stack.enter_context(DataExporter(self, self._format_manager, self._command_manager))
-            self._clock_manager = self._exit_stack.enter_context(ClockManager(self, self._command_manager))
+        try:
+            success = self._connect()
+            if success:
+                # Enter all managers via ExitStack (they are context managers)
+                # Register in reverse order so they exit in LIFO order
+                self._command_manager = self._exit_stack.enter_context(CommandManager(self))
+                self._mode_manager = self._exit_stack.enter_context(DeviceModeManager(self, self._command_manager))
+                self._format_manager = self._exit_stack.enter_context(FormatManager(self, self._command_manager))
+                self._data_exporter = self._exit_stack.enter_context(DataExporter(self, self._format_manager, self._command_manager))
+                self._clock_manager = self._exit_stack.enter_context(ClockManager(self, self._command_manager))
 
-            self._post_connect_handshake()
+                self._post_connect_handshake()
+        except Exception:
+            self._exit_stack.close()
+            raise
 
         return self
 

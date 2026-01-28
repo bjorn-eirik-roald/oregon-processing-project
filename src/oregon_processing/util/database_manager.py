@@ -18,8 +18,17 @@ class DatabaseManager:
     EXPORT_DATA_DIR_NAME = "02_export_data"
     DETECTION_RECORDS_DIR_NAME = "01_detection_records"
     EVENT_RECORDS_DIR_NAME = "02_event_records"
+    CRASH_LOGS_DIR_NAME = "00_crash_logs"
 
     DEFAULT_FIRST_DATE = date(2021, 1, 1)
+
+    @classmethod
+    def prepare_crash_logs_dir(cls, config_manager: ConfigManager) -> Path:
+        """Create and return the crash logs directory path."""
+        data_dir = config_manager.data_dir
+        crash_logs_dir = data_dir / cls.EXPORT_LOGS_DIR_NAME / cls.CRASH_LOGS_DIR_NAME
+        crash_logs_dir.mkdir(parents=True, exist_ok=True)
+        return crash_logs_dir
 
     def __init__(self, config_manager: ConfigManager, communicator: "OregonCommunicator"):
         """
@@ -37,7 +46,9 @@ class DatabaseManager:
 
         # Root directories
         self._data_dir = None
+        self._export_logs_base_dir = None
         self._export_logs_dir = None
+        self._crash_logs_dir = None
         self._export_data_dir = None
 
         # Export data subdirectories
@@ -62,10 +73,17 @@ class DatabaseManager:
 
     @property
     def export_logs_dir(self) -> Path:
-        """Get the export logs directory path."""
+        """Get the export logs directory path (for specific serial number)."""
         if self._export_logs_dir is None:
             raise RuntimeError("Directories not prepared yet.")
         return self._export_logs_dir
+
+    @property
+    def crash_logs_dir(self) -> Path:
+        """Get the crash logs directory path (for undefined/pre-connection crashes)."""
+        if self._crash_logs_dir is None:
+            raise RuntimeError("Directories not prepared yet.")
+        return self._crash_logs_dir
 
     @property
     def export_data_dir(self) -> Path:
@@ -109,10 +127,12 @@ class DatabaseManager:
         serial_number = self._communicator.serial_number
 
         self._data_dir = self._config_manager.data_dir
-        self._export_logs_dir = self._data_dir / self.EXPORT_LOGS_DIR_NAME
+        self._export_logs_base_dir = self._data_dir / self.EXPORT_LOGS_DIR_NAME
         self._export_data_dir = self._data_dir / self.EXPORT_DATA_DIR_NAME
 
-        # Add serial number subdirectory to detection and event records
+        # Add serial number subdirectory to export logs, detection records, and event records
+        self._export_logs_dir = self._export_logs_base_dir / serial_number
+        self._crash_logs_dir = self._export_logs_base_dir / "undefined"
         self._detection_records_dir = self._export_data_dir / self.DETECTION_RECORDS_DIR_NAME / serial_number
         self._event_records_dir = self._export_data_dir / self.EVENT_RECORDS_DIR_NAME / serial_number
 
@@ -125,6 +145,7 @@ class DatabaseManager:
         # Create all directories
         directories = [
             (self._export_logs_dir, "Export logs directory"),
+            (self._crash_logs_dir, "Crash logs directory"),
             (self._export_data_dir, "Export data directory"),
             (self._detection_records_dir, "Detection records directory"),
             (self._event_records_dir, "Event records directory"),

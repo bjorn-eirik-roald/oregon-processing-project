@@ -17,7 +17,7 @@ class TeeStream:
     requiring any changes to existing print statements.
     """
 
-    def __init__(self, log_file_path: Path):
+    def __init__(self, log_file_path: Path, mode: str = 'w'):
         """
         Initialize TeeStream.
 
@@ -25,9 +25,11 @@ class TeeStream:
         ----------
         log_file_path : Path
             Path to the log file where output will be written.
+        mode : str
+            File mode: 'w' for write (default), 'a' for append.
         """
         self.terminal = sys.stdout
-        self.log_file = open(log_file_path, 'w', encoding='utf-8')
+        self.log_file = open(log_file_path, mode, encoding='utf-8')
 
     def write(self, message):
         """Write message to both terminal and log file."""

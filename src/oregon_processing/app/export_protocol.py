@@ -6,7 +6,7 @@ from datetime import datetime
 from oregon_processing.util.oregon_communicator import OregonCommunicator
 from oregon_processing.util.config_manager import ConfigManager
 from oregon_processing.util.database_manager import DatabaseManager
-from oregon_processing.util.tee_stream import TeeStream
+from oregon_processing.util.managed_log_stream import ManagedLogStream
 
 
 
@@ -30,21 +30,31 @@ class _ExportProtocolSession:
         self._config_manager = None
         self._communicator = None
         self._database_manager = None
-        self._tee_stream = None
+        self._log_stream = None
 
     def __enter__(self):
         self._exit_stack = ExitStack()
 
-        self._config_manager = self._exit_stack.enter_context(ConfigManager())
-        self._communicator = self._exit_stack.enter_context(OregonCommunicator())
-        self._database_manager = self._exit_stack.enter_context(DatabaseManager(self._config_manager, self._communicator))
-        self._database_manager.prepare_directories()
+        try:
+            self._config_manager = self._exit_stack.enter_context(ConfigManager())
 
-        # Create log file in the export logs directory with timestamp
-        log_filename = f"export_protocol_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
-        log_file_path = self._database_manager.export_logs_dir / log_filename
-        self._tee_stream = self._exit_stack.enter_context(TeeStream(log_file_path))
+            # Start logging immediately with crash logs directory prepared without communicator
+            crash_logs_dir = DatabaseManager.prepare_crash_logs_dir(self._config_manager)
+            self._log_stream = self._exit_stack.enter_context(
+                ManagedLogStream("export_protocol", crash_logs_dir=crash_logs_dir)
+            )
 
+            self._communicator = self._exit_stack.enter_context(OregonCommunicator())
+
+            if self._communicator.is_connected:
+                self._database_manager = self._exit_stack.enter_context(DatabaseManager(self._config_manager, self._communicator))
+                self._database_manager.prepare_directories()
+
+                # Transition from temporary log to final location now that we have export_logs_dir
+                self._log_stream.temp_to_final(self._database_manager.export_logs_dir)
+        except Exception:
+            self._exit_stack.close()
+            raise
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
