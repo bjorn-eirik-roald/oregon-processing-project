@@ -1,5 +1,6 @@
 import serial
 import serial.tools.list_ports
+from oregon_processing.util.display_constants import display
 
 
 class OregonConnector:
@@ -20,9 +21,9 @@ class OregonConnector:
 
     def _select_baud_rate(self):
         """Allow user to select baud rate(s) to use for connection."""
-        print("\n" + "-" * 70)
+        print("\n" + display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
         print("BAUD RATE SELECTION")
-        print("-" * 70)
+        print(display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
         print("Available baud rates:")
         for i, baud in enumerate(self.BAUD_RATES, 1):
             print(f"  {i}. {baud}")
@@ -111,9 +112,9 @@ class OregonConnector:
         return port_devices
 
     def _select_ports(self):
-        print("\n" + "-" * 70)
+        print("\n" + display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
         print("PORT SELECTION")
-        print("-" * 70)
+        print(display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
 
         while True:
             ports = [p for p in serial.tools.list_ports.comports()]
@@ -150,17 +151,17 @@ class OregonConnector:
                     return selected_ports
                 else:
                     # No valid selection; re-display options
-                    print("\n" + "-" * 70)
+                    print("\n" + display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
                     print("PORT SELECTION")
-                    print("-" * 70)
+                    print(display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
                     break
 
 
     def _attempt_connection(self, ports, bauds):
         """Helper method to attempt connection on a list of ports with specified baud rates."""
-        print("\n" + "-" * 70)
+        print("\n" + display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
         print("ATTEMPTING CONNECTION")
-        print("-" * 70)
+        print(display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
 
         for port in ports:
             for baud in bauds:
@@ -198,43 +199,43 @@ class OregonConnector:
             Dictionary with 'connection', 'port', and 'baudrate' keys if successful, None otherwise.
         """
 
-        print("\n" + "=" * 70)
+        print("\n" + display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
         print("OREGON RFID COMMUNICATOR CONNECTION")
-        print("=" * 70)
+        print(display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
 
         while True:
             # Ask user to select baud rate
             bauds = self._select_baud_rate()
             if not bauds:
-                print("\n" + "=" * 70)
+                print("\n" + display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
                 print("CONNECTION FAILED")
-                print("=" * 70)
+                print(display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
                 return None
 
             # Ask user to select port(s)
             selected_ports = self._select_ports()
 
             if not selected_ports:
-                print("\n" + "=" * 70)
+                print("\n" + display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
                 print("CONNECTION FAILED")
-                print("=" * 70)
+                print(display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
                 return None
 
             result = self._attempt_connection(selected_ports, bauds)
 
             if result:
-                print("\n" + "-" * 70)
+                print("\n" + display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
                 print(f"Successfully connected to {result['port']} at {result['baudrate']} baud")
-                print("-" * 70)
-                print("\n" + "=" * 70)
+                print(display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
+                print("\n" + display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
                 print("CONNECTION SUCCESSFUL")
-                print("=" * 70)
+                print(display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
                 return result
 
             # Connection failed, ask if user wants to retry
-            print("\n" + "-" * 70)
+            print("\n" + display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
             print("Connection failed on all attempted port/baud combinations.")
-            print("-" * 70)
+            print(display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
 
             while True:
                 retry = input("\nWould you like to retry? (y/n): ").strip().lower()
@@ -242,13 +243,13 @@ class OregonConnector:
                     break
 
             if retry not in ['y', 'yes']:
-                print("\n" + "=" * 70)
+                print("\n" + display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
                 print("CONNECTION FAILED")
-                print("=" * 70)
+                print(display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
                 return None
 
-            print("\n" + "=" * 70)
+            print("\n" + display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
             print("END OF OREGON RFID COMMUNICATOR CONNECTION")
-            print("=" * 70)
+            print(display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
 
 

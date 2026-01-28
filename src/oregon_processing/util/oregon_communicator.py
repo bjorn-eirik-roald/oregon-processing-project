@@ -23,6 +23,7 @@ from oregon_processing.util.interactive_terminal import InteractiveTerminal
 from oregon_processing.util.firmware_updater import FirmwareUpdater
 from oregon_processing.util.format_manager import FormatManager
 from oregon_processing.util.data_exporter import DataExporter
+from oregon_processing.util.display_constants import display
 
 
 class OregonCommunicator:
@@ -171,13 +172,13 @@ class _OregonCommunicatorSession:
             Dictionary with 'healthy' (bool) and 'warnings' (list of str) keys.
         """
 
-        print("\n" + "=" * 70, flush=True)
+        print("\n" + display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH, flush=True)
         print("SYSTEM STATUS HEALTH CHECK", flush=True)
-        print("=" * 70, flush=True)
+        print(display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH, flush=True)
 
-        print("\n" + "-" * 70)
+        print("\n" + display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
         print("Retrieving System Status")
-        print("-" * 70)
+        print(display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
         print("Requesting system status from device...", end="", flush=True)
 
         warnings = []
@@ -186,9 +187,9 @@ class _OregonCommunicatorSession:
         print("Done.")
 
         # Check supply voltage
-        print("\n" + "-" * 70)
+        print("\n" + display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
         print("Health Analysis")
-        print("-" * 70)
+        print(display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
 
         if parsed_status['supply_voltage']:
             try:
@@ -211,9 +212,9 @@ class _OregonCommunicatorSession:
         else:
             print("\n✓ System status check: All parameters within normal range")
 
-        print("\n" + "=" * 70)
+        print("\n" + display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
         print("CHECK COMPLETE")
-        print("=" * 70)
+        print(display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
 
         return health_report
 

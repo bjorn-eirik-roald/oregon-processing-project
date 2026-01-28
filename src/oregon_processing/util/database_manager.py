@@ -117,9 +117,9 @@ class DatabaseManager:
     def prepare_directories(self) -> None:
         """Prepare and create necessary directories for export."""
 
-        print("\n" + "=" * 70, flush=True)
+        print("\n" + display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH, flush=True)
         print("PREPARING DIRECTORIES", flush=True)
-        print("=" * 70, flush=True)
+        print(display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH, flush=True)
 
         # Get serial number from communicator
         serial_number = self._communicator.serial_number
@@ -134,9 +134,9 @@ class DatabaseManager:
         self._detection_records_dir = self._export_data_dir / self.DETECTION_RECORDS_DIR_NAME / serial_number
         self._event_records_dir = self._export_data_dir / self.EVENT_RECORDS_DIR_NAME / serial_number
 
-        print("\n" + "-" * 70)
+        print("\n" + display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
         print("Directory Setup")
-        print("-" * 70)
+        print(display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
         print(f"Data directory: {self._data_dir}")
         print(f"Serial number: {serial_number}")
 
@@ -156,9 +156,9 @@ class DatabaseManager:
             else:
                 print(f"{dir_name} exists: {dir_path}")
 
-        print("\n" + "=" * 70)
+        print("\n" + display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
         print("DIRECTORIES READY")
-        print("=" * 70)
+        print(display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
 
     def get_export_dates(self) -> dict:
         """
@@ -173,13 +173,13 @@ class DatabaseManager:
         if self._detection_records_dir is None or self._event_records_dir is None:
             raise RuntimeError("Directories not prepared yet.")
 
-        print("\n" + "=" * 70, flush=True)
+        print("\n" + display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH, flush=True)
         print("DETERMINING EXPORT DATE RANGE", flush=True)
-        print("=" * 70, flush=True)
+        print(display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH, flush=True)
 
-        print("\n" + "-" * 70)
+        print("\n" + display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
         print("Scanning Existing Files")
-        print("-" * 70)
+        print(display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
         print("Scanning for existing detection record files...", end="", flush=True)
         record_files = list(self._detection_records_dir.glob("*.txt"))
         print(f" Found {len(record_files)} file(s).")
@@ -188,9 +188,9 @@ class DatabaseManager:
         event_files = list(self._event_records_dir.glob("*.txt"))
         print(f" Found {len(event_files)} file(s).")
 
-        print("\n" + "-" * 70)
+        print("\n" + display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
         print("Extracting Dates from Filenames")
-        print("-" * 70)
+        print(display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
 
         record_file_dates = [extract_filename_date(f.name) for f in record_files]
         event_file_dates = [extract_filename_date(f.name) for f in event_files]
@@ -203,9 +203,9 @@ class DatabaseManager:
         print(f"Detection records date range: {first_record_date or 'N/A'} to {last_record_date or 'N/A'}")
         print(f"Event records date range: {first_event_date or 'N/A'} to {last_event_date or 'N/A'}")
 
-        print("\n" + "-" * 70)
+        print("\n" + display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
         print("Determining Export Range")
-        print("-" * 70)
+        print(display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
 
         if first_record_date and first_event_date:
             if first_record_date != first_event_date:

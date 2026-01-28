@@ -8,6 +8,8 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Union, TYPE_CHECKING
 
+from oregon_processing.util.display_constants import display
+
 if TYPE_CHECKING:
     from oregon_processing.util.oregon_communicator import OregonCommunicator
     from oregon_processing.util.format_manager import FormatManager
@@ -265,9 +267,9 @@ class DataExporter:
                 return False
 
             # Header
-            print("\n" + "=" * 70)
+            print("\n" + display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
             print("EXPORTING EVENT RECORDS")
-            print("=" * 70)
+            print(display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
             print(f"Date range: {first_date} to {last_date}")
             print(f"Output directory: {output_dir}")
 
@@ -277,9 +279,9 @@ class DataExporter:
             max_counter_width = len(f"({num_dates}/{num_dates})")
             max_line_width = len(str(1440))  # assume up to one line per minute per day
 
-            print("\n" + "-" * 70)
+            print("\n" + display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
             print("Exporting Logs")
-            print("-" * 70)
+            print(display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
 
             all_successful = True
             export_count = 0
@@ -319,27 +321,27 @@ class DataExporter:
 
             failed_exports = num_dates - export_count
 
-            print("\n" + "-" * 70)
+            print("\n" + display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
             print("SUMMARY")
-            print("-" * 70)
+            print(display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
             print(f"Total dates processed: {num_dates}")
             print(f"Successful exports:    {export_count}")
             print(f"Failed exports:        {failed_exports}")
 
-            print("\n" + "=" * 70)
+            print("\n" + display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
             if all_successful:
                 print("EXPORT COMPLETE")
             else:
                 print("EXPORT COMPLETE WITH ERRORS")
-            print("=" * 70)
+            print(display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
 
             return True if all_successful else False
 
         except Exception as e:
             print(f"Error during batch export: {e}")
-            print("\n" + "=" * 70)
+            print("\n" + display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
             print("EXPORT FAILED")
-            print("=" * 70)
+            print(display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
             return False
 
     def export_detection_records(self, first_date: date, last_date: Union[date, None] = None, output_dir: Path = Path(""), sep=',') -> bool:
@@ -391,16 +393,16 @@ class DataExporter:
         upload_history = self._communicator.get_upload_history()
         total_number_of_records = upload_history["total_records"]
 
-        print("\n" + "=" * 70)
+        print("\n" + display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
         print("EXPORTING DETECTION RECORDS")
-        print("=" * 70)
+        print(display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
         print(f"Date range: {first_date} to {last_date}")
         print(f"Total records on device: {total_number_of_records}")
         print(f"Output directory: {output_dir}")
 
-        print("\n" + "-" * 70)
+        print("\n" + display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
         print("PHASE 1: Retrieving Records from Device")
-        print("-" * 70)
+        print(display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
         print("Setting detection record format to default for export...", end="", flush=True)
         if not self._format_manager.set_detection_record_format(self.DEFAULT_DETECTION_RECORD_FORMAT):
             print("Failed to set detection record format. Cannot continue.")
@@ -410,9 +412,9 @@ class DataExporter:
         response = self._command_manager.send_command("UP*")
         print("Done.")
 
-        print("\n" + "-" * 70)
+        print("\n" + display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
         print("PHASE 2: Processing Records")
-        print("-" * 70)
+        print(display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
         # Retrieve detection record format to determine column order, tag index, and datetime index
 
         format_info = self._format_manager.get_format_info()
@@ -481,9 +483,9 @@ class DataExporter:
 
         print("Done.")
 
-        print("\n" + "-" * 70)
+        print("\n" + display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
         print("SUMMARY")
-        print("-" * 70)
+        print(display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
 
         # Calculate max width for summary number alignment
         max_summary_width = max(
@@ -497,9 +499,9 @@ class DataExporter:
         print(f"Number of dates without records:       {str(num_dates - len(detection_records_by_date)).rjust(max_summary_width)}")
         print(f"Number of unique tags:                 {str(len(unique_tags)).rjust(max_summary_width)}")
 
-        print("\n" + "-" * 70)
+        print("\n" + display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
         print("PHASE 3: Exporting Files")
-        print("-" * 70)
+        print(display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
 
         # Calculate max width for counter alignment
         max_counter_width = len(f"({num_dates}/{num_dates})")
@@ -542,8 +544,8 @@ class DataExporter:
             print("Done.")
 
 
-        print("\n" + "=" * 70, flush=True)
+        print("\n" + display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH, flush=True)
         print("EXPORT COMPLETE", flush=True)
-        print("=" * 70, flush=True)
+        print(display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH, flush=True)
         return True
 

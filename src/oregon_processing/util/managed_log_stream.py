@@ -69,6 +69,9 @@ class ManagedLogStream:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Exit context manager; close log and move to crash folder if not yet transitioned."""
+        # Close the exit stack FIRST to ensure TeeStream and file are closed
+        if self._exit_stack:
+            self._exit_stack.__exit__(exc_type, exc_val, exc_tb)
 
         # If we never transitioned to final location, this is a crash - save to crash log folder
         if self._final_log_path is None and self._temp_log_path and self._temp_log_path.exists():
@@ -77,8 +80,7 @@ class ManagedLogStream:
             shutil.move(str(self._temp_log_path), str(crash_log_path))
             print(f"Log saved to crash log: {crash_log_path}")
 
-        if self._exit_stack:
-            return self._exit_stack.__exit__(exc_type, exc_val, exc_tb)
+        return False
 
     def temp_to_final(self, final_log_dir: Path):
         """
