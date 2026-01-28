@@ -225,12 +225,12 @@ class DataExporter:
             print(f"Error writing upload log to file: {e}")
             return False
 
-    def export_system_status_logs(self, first_date: date, last_date: Union[date, None] = None, output_dir: Path = Path("")) -> bool:
+    def export_event_records(self, first_date: date, last_date: Union[date, None] = None, output_dir: Path = Path("")) -> bool:
         """
-        Export system status logs for all dates in a range.
+        Export event records for all dates in a range.
 
-        This method retrieves the last upload date, then runs export_system_status_log()
-        for each day in the range up to and including today.
+        This method retrieves event records for each day in the specified date range
+        using the ER command.
 
         Parameters
         ----------
@@ -266,7 +266,7 @@ class DataExporter:
 
             # Header
             print("\n" + "=" * 70)
-            print("EXPORTING SYSTEM STATUS LOGS")
+            print("EXPORTING EVENT RECORDS")
             print("=" * 70)
             print(f"Date range: {first_date} to {last_date}")
             print(f"Output directory: {output_dir}")
@@ -284,18 +284,18 @@ class DataExporter:
             all_successful = True
             export_count = 0
 
-            for date_num, current in enumerate(all_dates, start=1):
+            for date_num, current_date in enumerate(all_dates):
 
-                output_filepath = f"{output_dir}/{self._communicator.serial_number}_system_log_{current.strftime('%Y_%m_%d')}.txt"
+                output_filepath = f"{output_dir}/{self._communicator.serial_number}_event_records_{current_date.strftime('%Y_%m_%d')}.txt"
 
-                counter = f"({date_num}/{num_dates})"
+                counter = f"({date_num + 1}/{num_dates})"
                 spacing = " " * (max_counter_width - len(counter))
-                print(f"  - {spacing}{counter} {current}. Exporting...", end="", flush=True)
+                print(f"  - {spacing}{counter} {current_date}. Exporting...", end="", flush=True)
 
                 try:
                     success = True
                     # Send ER command with date
-                    command = f"ER {current.strftime('%Y-%m-%d')}"
+                    command = f"ER {current_date.strftime('%Y-%m-%d')}"
                     response = self._command_manager.send_command(command)
                 except Exception as e:
                     print(f"ERROR. {e}")
@@ -305,12 +305,12 @@ class DataExporter:
 
                 # Generate output filename with date
                 with open(output_filepath, 'w') as f:
-                    f.write("Oregon RFID System Log (Event Records)\n")
+                    f.write("Oregon RFID Event Records\n")
                     f.write("Export Date/Time: " + time.strftime("%Y-%m-%d %H:%M:%S") + "\n")
-                    f.write("Date of Log: " + current.strftime("%Y-%m-%d") + "\n")
+                    f.write("Date of Records: " + current_date.strftime("%Y-%m-%d") + "\n")
                     f.write("=========================\n\n")
 
-                    # Write system log (event records)
+                    # Write event records
                     f.write('\n'.join(response))
 
                 if success:
@@ -458,6 +458,7 @@ class DataExporter:
 
         print("Organizing detection records by date........", end="", flush=True)
         detection_records_by_date = {} # dict with date keys and list of detection records values
+        unique_tags_by_date = {} # dict with date keys and set of unique tags values
         all_dates = [first_date + timedelta(days=i) for i in range((last_date - first_date).days + 1)]
         num_dates = len(all_dates)
 
@@ -472,8 +473,10 @@ class DataExporter:
             if record_date != current_date:
                 current_date = record_date
                 detection_records_by_date[current_date] = []
+                unique_tags_by_date[current_date] = set()
 
             detection_records_by_date[current_date].append(sep.join(detection_record))
+            unique_tags_by_date[current_date].add(record_tag)
             unique_tags.add(record_tag)
 
         print("Done.")
@@ -505,37 +508,31 @@ class DataExporter:
         max_record_count = max((len(recs) for recs in detection_records_by_date.values()), default=0)
         max_count_width = len(str(max_record_count))
 
+        # Calculate max width for unique tags alignment
+        max_unique_tags = max((len(tags) for tags in unique_tags_by_date.values()), default=0)
+        max_unique_tags_width = len(str(max_unique_tags))
+
         for date_num, current_date in enumerate(all_dates):
+            output_filepath = f"{output_dir}/{self._communicator.serial_number}_detection_records_{current_date.strftime('%Y_%m_%d')}.txt"
             counter = f"({date_num + 1}/{num_dates})"
             spacing = " " * (max_counter_width - len(counter))
             print(f"  - {spacing}{counter} {current_date}. ", end="", flush=True)
 
             if current_date not in detection_records_by_date:
                 count_str = "0".rjust(max_count_width)
-                unique_tags_count = 0
+                unique_tags_str = "0".rjust(max_unique_tags_width)
             else:
                 count_str = str(len(detection_records_by_date[current_date])).rjust(max_count_width)
-                # Compute unique tags using FM-derived tag index when available; fallback to slice
-                if tag_idx is not None:
-                    def _extract_tag(line: str) -> str:
-                        try:
-                            parts = self._split_detection_record(line, format_info)
-                            return parts[tag_idx] if tag_idx < len(parts) else line[22:34]
-                        except (ValueError, IndexError):
-                            return line[22:34]
-                    unique_tags_count = len(set(_extract_tag(r) for r in detection_records_by_date.get(current_date, [])))
-                else:
-                    unique_tags_count = len(set(r[22:34] for r in detection_records_by_date.get(current_date, [])))
+                unique_tags_str = str(len(unique_tags_by_date[current_date])).rjust(max_unique_tags_width)
 
-            print(f"Number of detection records: {count_str}. Unique tags: {unique_tags_count}. Exporting file...", end="", flush=True)
+            print(f"Number of detection records: {count_str}. Unique tags: {unique_tags_str}. Exporting file...", end="", flush=True)
 
-            output_filepath = output_dir / f"{self._communicator.serial_number}_records_{current_date.strftime('%Y_%m_%d')}.txt"
             with open(output_filepath, 'w') as f:
                 f.write("Oregon RFID Detection Records\n")
                 f.write("Export Date/Time: " + time.strftime("%Y-%m-%d %H:%M:%S") + "\n")
                 f.write("Date of Record: " + current_date.strftime("%Y-%m-%d") + "\n")
                 f.write("Number of Records: " + count_str.strip() + "\n")
-                f.write("Number of unique tags: " + str(unique_tags_count) + "\n")
+                f.write("Number of unique tags: " + unique_tags_str.strip() + "\n")
                 f.write("=========================\n\n")
                 f.write(f"{format_columns_str.replace(' ', sep)}\n\n")
                 # Write detection records for the date

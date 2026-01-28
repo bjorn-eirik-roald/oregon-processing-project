@@ -586,11 +586,11 @@ class _OregonCommunicatorSession:
         """
         return self._data_exporter.export_upload_log(output_dir)
 
-    def export_system_status_logs(self, first_date: date, last_date: Union[date, None] = None, output_dir: Path = Path("")) -> bool:
+    def export_event_records(self, first_date: date, last_date: Union[date, None] = None, output_dir: Path = Path("")) -> bool:
         """
-        Export system status logs for a date range.
+        Export event records for a date range.
 
-        Delegates to DataExporter.export_system_status_logs().
+        Delegates to DataExporter.export_event_records().
 
         Parameters
         ----------
@@ -606,7 +606,7 @@ class _OregonCommunicatorSession:
         bool
             True if all exports completed successfully, False if any failed.
         """
-        return self._data_exporter.export_system_status_logs(first_date, last_date, output_dir)
+        return self._data_exporter.export_event_records(first_date, last_date, output_dir)
 
     def export_detection_records(self, first_date: date, last_date: Union[date, None] = None, output_dir: Path = Path(""), sep=',') -> bool:
         """

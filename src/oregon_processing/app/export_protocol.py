@@ -81,10 +81,10 @@ class _ExportProtocolSession:
 
         previous_export_dates = self._database_manager.get_export_dates()
 
-        self._communicator.export_system_status_logs(
+        self._communicator.export_event_records(
             first_date=previous_export_dates['system_logs'],
             last_date=None,
-            output_dir=self._database_manager.system_logs_dir
+            output_dir=self._database_manager.event_records_dir
         )
         self._communicator.export_detection_records(
             first_date=previous_export_dates['records'],
