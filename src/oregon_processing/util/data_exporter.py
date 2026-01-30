@@ -227,16 +227,17 @@ class DataExporter:
             print(f"Error writing upload log to file: {e}")
             return False
 
-    def export_event_records(self, first_date: date, last_date: Union[date, None] = None, output_dir: Path = Path("")) -> bool:
+    def export_event_records(self, dates: list, output_dir: Path = Path("")) -> bool:
         """
-        Export event records for all dates in a range.
+        Export event records for specified dates.
 
-        This method retrieves event records for each day in the specified date range
+        This method retrieves event records for each day in the specified date list
         using the ER command.
 
         Parameters
         ----------
-        first_date : date object
+        dates : list
+            List of date objects to export
         output_dir : str or Path
             Directory where output files will be written (default: current directory)
 
@@ -245,9 +246,6 @@ class DataExporter:
         bool
             True if all exports completed successfully, False if any failed.
         """
-
-        if last_date is None:
-            last_date = date.today()
 
         if isinstance(output_dir, str):
             try:
@@ -260,22 +258,22 @@ class DataExporter:
             print("Not connected to device.")
             return False
 
-        try:
+        if not dates:
+            print("No dates provided for export.")
+            return False
 
-            if first_date > last_date:
-                print(f"First date ({first_date}) is in the future. No logs to export.")
-                return False
+        try:
 
             # Header
             print("\n" + display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
             print("EXPORTING EVENT RECORDS")
             print(display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
-            print(f"Date range: {first_date} to {last_date}")
+            print(f"Dates to export: {len(dates)} date(s)")
             print(f"Output directory: {output_dir}")
 
             # Prepare ranges and formatting
-            num_dates = (last_date - first_date).days + 1
-            all_dates = [first_date + timedelta(days=i) for i in range(num_dates)]
+            num_dates = len(dates)
+            all_dates = sorted(dates)
             max_counter_width = len(f"({num_dates}/{num_dates})")
             max_line_width = len(str(1440))  # assume up to one line per minute per day
 
@@ -344,20 +342,18 @@ class DataExporter:
             print(display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
             return False
 
-    def export_detection_records(self, first_date: date, last_date: Union[date, None] = None, output_dir: Path = Path(""), sep=',') -> bool:
+    def export_detection_records(self, dates: list, output_dir: Path = Path(""), sep=',') -> bool:
         """
-        Export detection records (S-type) for a date range using the UP* command.
+        Export detection records (S-type) for specified dates using the UP* command.
 
         The UP* command returns all record types (S: Detection, E: Event, G: GNSS),
-        but this method filters and exports only detection records (S-type) within
-        the specified date range.
+        but this method filters and exports only detection records (S-type) for
+        the specified dates.
 
         Parameters
         ----------
-        first_date : date object
-            Start date for export (inclusive)
-        last_date : date object, optional
-            End date for export (inclusive). If None, defaults to current date.
+        dates : list
+            List of date objects to export
         output_dir : str or Path
             Directory where output files will be written (default: current directory)
         sep : str, optional
@@ -368,9 +364,6 @@ class DataExporter:
         bool
             True if all exports completed successfully, False if any failed.
         """
-
-        if last_date is None:
-            last_date = date.today()
 
         if isinstance(output_dir, str):
             try:
@@ -386,8 +379,8 @@ class DataExporter:
         if not output_dir.exists():
             output_dir.mkdir(parents=True, exist_ok=True)
 
-        if first_date > last_date:
-            print(f"First date ({first_date}) is after last date ({last_date}). No records to export.")
+        if not dates:
+            print("No dates provided for export.")
             return False
 
         upload_history = self._communicator.get_upload_history()
@@ -396,7 +389,7 @@ class DataExporter:
         print("\n" + display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
         print("EXPORTING DETECTION RECORDS")
         print(display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
-        print(f"Date range: {first_date} to {last_date}")
+        print(f"Dates to export: {len(dates)} date(s)")
         print(f"Total records on device: {total_number_of_records}")
         print(f"Output directory: {output_dir}")
 
@@ -429,12 +422,11 @@ class DataExporter:
         if tag_idx is None:
             raise RuntimeError("Tag index not found in detection record format info. This is required for unique tag counting. Cannot continue.")
 
-        print("Filtering detection records in date range...", end="", flush=True)
+        print("Filtering detection records for specified dates...", end="", flush=True)
         # Convert dates to strings for comparison (YYYY-MM-DD format sorts chronologically)
-        first_date_str = first_date.strftime("%Y-%m-%d")
-        last_date_str = last_date.strftime("%Y-%m-%d")
+        target_dates_set = set(d.strftime("%Y-%m-%d") for d in dates)
 
-        # Filter detection records (S-type) in date range - single pass with early termination
+        # Filter detection records (S-type) for specified dates
         filtered_detection_records = []
         for line in response:
             if not line.startswith("S"):
@@ -447,13 +439,10 @@ class DataExporter:
                 print(f"Warning: Skipping malformed detection record during filtering: {line}")
                 continue  # Skip malformed detection records
 
-
             # Extract date portion from ARR field (YYYY-MM-DD HH:MM:SS.ddd)
             record_date_str = parts[arr_idx].split()[0]  # Get YYYY-MM-DD part
 
-            if record_date_str > last_date_str:
-                break  # Early exit - records are chronological, no need to continue
-            if record_date_str >= first_date_str:
+            if record_date_str in target_dates_set:
                 filtered_detection_records.append(parts)
 
         print("Done.")
@@ -461,7 +450,7 @@ class DataExporter:
         print("Organizing detection records by date........", end="", flush=True)
         detection_records_by_date = {} # dict with date keys and list of detection records values
         unique_tags_by_date = {} # dict with date keys and set of unique tags values
-        all_dates = [first_date + timedelta(days=i) for i in range((last_date - first_date).days + 1)]
+        all_dates = sorted(dates)
         num_dates = len(all_dates)
 
         unique_tags = set()

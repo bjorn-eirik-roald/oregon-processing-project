@@ -86,16 +86,14 @@ class _ExportProtocolSession:
             print("\nDevice clock is not in sync. Please address the issues before proceeding.", flush=True)
             return
 
-        previous_export_dates = self._database_manager.get_export_dates()
+        missing_export_dates = self._database_manager.get_export_dates()
 
         self._communicator.export_event_records(
-            first_date=previous_export_dates['system_logs'],
-            last_date=None,
+            dates=missing_export_dates['system_logs'],
             output_dir=self._database_manager.event_records_dir
         )
         self._communicator.export_detection_records(
-            first_date=previous_export_dates['records'],
-            last_date=None,
+            dates=missing_export_dates['records'],
             output_dir=self._database_manager.records_dir
         )
 

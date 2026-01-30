@@ -341,7 +341,7 @@ class _OregonCommunicatorSession:
             elif 'tags in archive' in line_lower:
                 parts = line.split()
                 status['tags_in_archive'] = parts[-1] if parts else None
-            elif "gnss logged every / minutes" in line_lower:
+            elif "gnss logged every / minutes" in line_lower or 'GNSS log is off':
                 status['gnss_log_interval_minutes'] = True
             else:
                 raise ValueError(f"Unrecognized line format in system status at row {line_num + 1}: '{line}'")
@@ -549,18 +549,16 @@ class _OregonCommunicatorSession:
         """
         return self._data_exporter.export_upload_log(output_dir)
 
-    def export_event_records(self, first_date: date, last_date: Union[date, None] = None, output_dir: Path = Path("")) -> bool:
+    def export_event_records(self, dates: list, output_dir: Path = Path("")) -> bool:
         """
-        Export event records for a date range.
+        Export event records for specified dates.
 
         Delegates to DataExporter.export_event_records().
 
         Parameters
         ----------
-        first_date : date object
-            Start date for export (inclusive)
-        last_date : date object, optional
-            End date for export (inclusive). If None, defaults to current date.
+        dates : list
+            List of date objects to export
         output_dir : str or Path
             Directory where output files will be written (default: current directory)
 
@@ -569,20 +567,18 @@ class _OregonCommunicatorSession:
         bool
             True if all exports completed successfully, False if any failed.
         """
-        return self._data_exporter.export_event_records(first_date, last_date, output_dir)
+        return self._data_exporter.export_event_records(dates, output_dir)
 
-    def export_detection_records(self, first_date: date, last_date: Union[date, None] = None, output_dir: Path = Path(""), sep=',') -> bool:
+    def export_detection_records(self, dates: list, output_dir: Path = Path(""), sep=',') -> bool:
         """
-        Export detection records for a date range.
+        Export detection records for specified dates.
 
         Delegates to DataExporter.export_detection_records().
 
         Parameters
         ----------
-        first_date : date object
-            Start date for export (inclusive)
-        last_date : date object, optional
-            End date for export (inclusive). If None, defaults to current date.
+        dates : list
+            List of date objects to export
         output_dir : str or Path
             Directory where output files will be written (default: current directory)
         sep : str, optional
@@ -593,5 +589,5 @@ class _OregonCommunicatorSession:
         bool
             True if all exports completed successfully, False if any failed.
         """
-        return self._data_exporter.export_detection_records(first_date, last_date, output_dir, sep)
+        return self._data_exporter.export_detection_records(dates, output_dir, sep)
 

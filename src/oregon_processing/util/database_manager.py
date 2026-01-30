@@ -2,7 +2,7 @@ from oregon_processing.util.config_manager import ConfigManager
 from oregon_processing.util.oregon_communicator import OregonCommunicator
 from oregon_processing.util.util_functions import extract_filename_date
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from oregon_processing.util.display_constants import display
@@ -18,7 +18,7 @@ class DatabaseManager:
     EVENT_RECORDS_DIR_NAME = "02_event_records"
     CRASH_LOGS_DIR_NAME = "00_crash_logs"
 
-    DEFAULT_FIRST_DATE = date(2021, 1, 1)
+    DEFAULT_FIRST_DATE = date(2018, 1, 1)
 
     @classmethod
     def prepare_crash_logs_dir(cls, config_manager: ConfigManager) -> Path:
@@ -160,14 +160,59 @@ class DatabaseManager:
         print("DIRECTORIES READY")
         print(display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
 
+    def _format_date_intervals(self, dates: list) -> str:
+        """
+        Convert a list of dates into formatted intervals.
+
+        Parameters
+        ----------
+        dates : list
+            Sorted list of date objects
+
+        Returns
+        -------
+        str
+            Formatted string of date intervals (e.g., "2021-01-01 to 2021-01-15, 2021-02-01 to 2021-02-10")
+        """
+        if not dates:
+            return "None"
+
+        intervals = []
+        interval_start = dates[0]
+        interval_end = dates[0]
+
+        for date_obj in dates[1:]:
+            if (date_obj - interval_end).days == 1:
+                # Consecutive date, extend interval
+                interval_end = date_obj
+            else:
+                # Gap found, save interval and start new one
+                if interval_start == interval_end:
+                    intervals.append(str(interval_start))
+                else:
+                    intervals.append(f"{interval_start} to {interval_end}")
+                interval_start = date_obj
+                interval_end = date_obj
+
+        # Add final interval
+        if interval_start == interval_end:
+            intervals.append(str(interval_start))
+        else:
+            intervals.append(f"{interval_start} to {interval_end}")
+
+        return ", ".join(intervals)
+
     def get_export_dates(self) -> dict:
         """
-        Determine the export date range based on existing files.
+        Determine missing dates by comparing present dates with expected date range.
+
+        Includes the last available date as missing to account for potential incomplete
+        exports (if exported mid-day, the last date's files may be incomplete).
 
         Returns
         -------
         dict
-            Dictionary with 'records' and 'system_logs' keys containing the start date for next export
+            Dictionary with 'records' and 'system_logs' keys containing lists of missing dates
         """
 
         if self._detection_records_dir is None or self._event_records_dir is None:
@@ -192,45 +237,43 @@ class DatabaseManager:
         print("Extracting Dates from Filenames")
         print(display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
 
-        record_file_dates = [extract_filename_date(f.name) for f in record_files]
-        event_file_dates = [extract_filename_date(f.name) for f in event_files]
+        record_file_dates = set(d for d in [extract_filename_date(f.name) for f in record_files] if d is not None)
+        event_file_dates = set(d for d in [extract_filename_date(f.name) for f in event_files] if d is not None)
 
-        first_record_date = min((d for d in record_file_dates if d is not None), default=None)
-        last_record_date = max((d for d in record_file_dates if d is not None), default=None)
-        first_event_date = min((d for d in event_file_dates if d is not None), default=None)
-        last_event_date = max((d for d in event_file_dates if d is not None), default=None)
+        # Generate expected date range from DEFAULT_FIRST_DATE to today
+        today = date.today()
+        current_date = self.DEFAULT_FIRST_DATE
+        expected_dates = []
+        while current_date <= today:
+            expected_dates.append(current_date)
+            current_date += timedelta(days=1)
 
-        print(f"Detection records date range: {first_record_date or 'N/A'} to {last_record_date or 'N/A'}")
-        print(f"Event records date range: {first_event_date or 'N/A'} to {last_event_date or 'N/A'}")
+        # Find missing dates for each file type
+        missing_record_dates = sorted([d for d in expected_dates if d not in record_file_dates])
+        missing_event_dates = sorted([d for d in expected_dates if d not in event_file_dates])
+
+        # Get last available dates
+        last_record_date = max(record_file_dates) if record_file_dates else None
+        last_event_date = max(event_file_dates) if event_file_dates else None
+
+        # Add last available dates to missing list to account for potential incomplete exports
+        if last_record_date and last_record_date not in missing_record_dates:
+            missing_record_dates = sorted(missing_record_dates + [last_record_date])
+        if last_event_date and last_event_date not in missing_event_dates:
+            missing_event_dates = sorted(missing_event_dates + [last_event_date])
 
         print("\n" + display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
-        print("Determining Export Range")
+        print("Data Gap Analysis")
         print(display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
+        print(f"Detection records: {len(missing_record_dates)} missing/incomplete date(s) out of {len(expected_dates)}")
+        print(f"Event records: {len(missing_event_dates)} missing/incomplete date(s) out of {len(expected_dates)}")
 
-        if first_record_date and first_event_date:
-            if first_record_date != first_event_date:
-                print("⚠ Warning: Mismatch in first dates between detection records and event records.")
-
-        if last_record_date and last_event_date:
-            if last_record_date != last_event_date:
-                print("⚠ Warning: Mismatch in last dates between detection records and event records.")
-
-        # Determine separate previous export dates for records and event records
-        if last_record_date is None:
-            records_prev_date = self.DEFAULT_FIRST_DATE
-            print(f"No previous detection record export dates found. Using default first export date: {records_prev_date}")
-        else:
-            records_prev_date = last_record_date
-            print(f"Previous detection record export date determined. Next export will start from: {records_prev_date}")
-
-        if last_event_date is None:
-            event_prev_date = self.DEFAULT_FIRST_DATE
-            print(f"No previous event record export dates found. Using default first export date: {event_prev_date}")
-        else:
-            event_prev_date = last_event_date
-            print(f"Previous event record export date determined. Next export will start from: {event_prev_date}")
+        if missing_record_dates:
+            print(f"  Missing detection dates: {self._format_date_intervals(missing_record_dates)}")
+        if missing_event_dates:
+            print(f"  Missing event dates: {self._format_date_intervals(missing_event_dates)}")
 
         return {
-            'records': records_prev_date,
-            'system_logs': event_prev_date
+            'records': missing_record_dates,
+            'system_logs': missing_event_dates
         }
