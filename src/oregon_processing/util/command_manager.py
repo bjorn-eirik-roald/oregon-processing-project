@@ -147,9 +147,9 @@ class CommandManager:
 
         return False
 
-    def _validate_prompt_signature(self, signature: str) -> bool:
+    def _is_ready_prompt(self, line: str) -> bool:
         """
-        Validate an Oregon RFID prompt signature.
+        Check if a line is a ready prompt (unit is ready to receive a new command).
 
         Oregon RFID devices prepend each serial output line with a
         4-character prompt signature describing the current device state.
@@ -186,26 +186,32 @@ class CommandManager:
         Validation rules:
             - Signature must be exactly 4 characters long
             - Each character must be valid for its position
-            - Signature must be a string (not None)
+            - The line must contain ONLY the signature (and optional '>') with nothing after
+            - This indicates the unit is ready to receive a new command
 
         Example:
-            "HRGB" → valid
-            "HSU*" → valid
-            "HRGX" → invalid (unknown beeper state)
-            "ABCD" → invalid
-            "HRG"  → invalid (wrong length)
+            "HRGB>" → valid (unit ready)
+            "HRGB" → valid (unit ready)
+            "HSU*> RFM009 ORMR ready" → invalid (has data after prompt)
+            "HRGX>" → invalid (unknown beeper state)
+            "HRG>" → invalid (wrong length)
 
         Parameters
         ----------
-        signature : str
-            Four-character prompt signature (e.g. "HRGB").
+        line : str
+            Full line from device (e.g. "HRGB>", "HSU*> data here").
 
         Returns
         -------
         bool
-            True if the signature is valid according to the Oregon RFID
-            prompt signature specification, otherwise False.
+            True if line contains a valid signature with nothing following it (unit is ready),
+            False otherwise.
         """
+
+        if not isinstance(line, str) or len(line) < 4:
+            return False
+
+        signature = line[:4]
 
         if not isinstance(signature, str):
             raise TypeError("Signature must be a string.")
@@ -222,10 +228,19 @@ class CommandManager:
 
         valid_signature = all(c in valid for c, valid in zip(signature, valid_sets))
 
-        if valid_signature:
-            self._last_prompt_signature = signature
+        if not valid_signature:
+            return False
 
-        return valid_signature
+        # Check if there's anything after the signature except optional '>' and whitespace
+        remainder = line[4:].lstrip('>').strip()
+
+        if not remainder:
+            # Signature is valid and nothing follows - unit is ready
+            self._last_prompt_signature = signature
+            return True
+
+        # Signature is valid but data follows - unit is not ready
+        return False
 
     def _transmit_command(self, command: str):
         """
@@ -305,23 +320,36 @@ class CommandManager:
 
             if line:
                 raw_line = line
-                prompt_found = self._validate_prompt_signature(line[:4])
+                prompt_ready = self._is_ready_prompt(line)
 
-                if prompt_found:
-                    self._last_prompt_signature = line[:4]
-                    # Strip the prompt signature (and optional '>') and keep any data that follows.
-                    line = line[4:].lstrip('>').strip()
+                if prompt_ready:
+                    # Signature is valid and nothing follows - unit is ready, we can stop
+                    break
 
+                # Check if line starts with valid signature
+                if len(line) >= 4 and self._is_ready_prompt(line):
+                    # This shouldn't happen (would be caught above), but handle it gracefully
+                    pass
+                elif len(line) >= 4:
+                    # Try to extract data after a potential prompt
+                    potential_sig = line[:4]
+                    try:
+                        if all(c in valid for c, valid in zip(potential_sig, (
+                            {'0', 'H', 'N'}, {'R', 'S', 'Z'}, {'G', 'N', 'U', 'E'}, {'B', '*'}
+                        ))):
+                            # Valid signature with data after it
+                            data = line[4:].lstrip('>').strip()
+                            if data:
+                                lines.append(data)
+                                last_data_time = time.time()
+                                continue
+                    except:
+                        pass
+
+                # Line doesn't start with valid signature, treat as data
                 if line:
                     lines.append(line)
                     last_data_time = time.time()
-
-                    # If the device sent data on the same line as the prompt, continue reading.
-                    continue
-
-                # If we saw a prompt-only line after collecting data, stop; otherwise ignore stray prompt.
-                if prompt_found and lines:
-                    break
 
             # Idle timeout: only break if no new data arrives within timeout
             if time.time() - last_data_time > timeout:

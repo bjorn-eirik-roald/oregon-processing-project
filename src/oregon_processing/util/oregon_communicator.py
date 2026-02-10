@@ -77,6 +77,13 @@ class _OregonCommunicatorSession:
         return self._serial_number
 
     @property
+    def device_type(self):
+        """Get the device type from system status."""
+        if not self._device_type:
+            self._update_device_type()
+        return self._device_type
+
+    @property
     def is_connected(self):
         """Check if there is an active connection."""
         return self._connection is not None
@@ -138,6 +145,7 @@ class _OregonCommunicatorSession:
             return
 
         self._update_reader_name()
+        self._update_device_type()
         startup_mode = self.mode
         if self._mode_manager:
             self._mode_manager.startup_mode = startup_mode
@@ -177,6 +185,7 @@ class _OregonCommunicatorSession:
             print("Health checker not initialized.")
             return {'healthy': False, 'warnings': ['Health checker not initialized']}
         return self._health_checker.check_device_health()
+
     def update_firmware(self, firmware_file_path: Path, new_version: str) -> bool:
         """
         Update the firmware on the Oregon RFID reader.
@@ -247,9 +256,14 @@ class _OregonCommunicatorSession:
             'supply_voltage': None,
             'standby_amps': None,
             'noise': None,
+            'antenna_1': None,
+            'antenna_2': None,
+            'antenna_3': None,
+            'antenna_4': None,
             'shutdown_supercap': None,
             'sleep_battery': None,
             'tags_in_archive': None,
+            'bluetooth_status': None,
             'gnss_log_interval_minutes': False,
             'raw_output': status_lines,
             'warnings': []
@@ -272,7 +286,13 @@ class _OregonCommunicatorSession:
                 if not "oregon rfid" in line_lower:
                     raise ValueError(f"Unexpected device type line format at row 1: '{line}'")
 
-                status['device_type'] = line
+                if 'single antenna' in line_lower:
+                    status['device_type'] = 'ORSR'
+                elif 'multiple antenna' in line_lower:
+                    status['device_type'] = 'ORMR'
+                else:
+                    raise ValueError(f"Could not determine device type from line 1: '{line}'")
+
 
             # Line 1: version and serial number
             elif line_num == 1:
@@ -281,23 +301,26 @@ class _OregonCommunicatorSession:
                     raise ValueError(f"Unexpected version/serial line format at row 2: '{line}'")
 
                 version = line_splits[0]
-                # Validate version format: Vx.xxM/N/F (e.g., V2.74M)
-                if not (len(version) >= 3 and
-                        version[0].upper() == 'V' and
-                        version[-1].upper() in ['M', 'N', 'F']):
-                    raise ValueError(f"Unexpected version/serial line format at row 2: '{line}'")
+                version_valid = True
+                if status['device_type']=='ORSR':
+                    if len(version) != 6: version_valid = False
+                    if version[0].upper() != 'V': version_valid = False
+                    if version[-1].upper() not in ['M', 'N', 'F']: version_valid = False
+                elif status['device_type']  == 'ORMR':
+                    if len(version) != 5: version_valid = False
+                    if version[0].upper() != 'V': version_valid = False
+                else:
+                    raise ValueError(f"Unknown device type '{status['device_type']}' for version/serial parsing.")
 
-                # Validate that the middle part is numerical (digits and decimal point)
-                version_number = version[1:-1]
-                if not all(c.isdigit() or c == '.' for c in version_number):
-                    raise ValueError(f"Unexpected version/serial line format at row 2: '{line}'")
+                if not version_valid:
+                    raise ValueError(f"Unexpected version format in row 2: '{line}'")
 
                 serial_number = line_splits[1].strip()
                 # Validate serial number format: hex digits separated by hyphens (e.g., 0011-000C-0C36-3039-3455-37)
                 if not all(c in '0123456789ABCDEFabcdef-' for c in serial_number):
-                    raise ValueError(f"Unexpected version/serial line format at row 2: '{line}'")
+                    raise ValueError(f"Unexpected serial number in row 2: '{line}'")
                 if not serial_number or serial_number.startswith('-') or serial_number.endswith('-'):
-                    raise ValueError(f"Unexpected version/serial line format at row 2: '{line}'")
+                    raise ValueError(f"Unexpected serial number in row 2: '{line}'")
 
                 status['version'] = version
                 status['serial_number'] = serial_number
@@ -327,6 +350,23 @@ class _OregonCommunicatorSession:
                 parts = line.split()
                 status['noise'] = parts[-1] if parts else None
 
+            # Antenna readings (Antenna #1, #2, #3, #4)
+            elif 'antenna' in line_lower and '#' in line:
+                parts = line.split()
+                try:
+                    antenna_num = line.split('#')[1].strip().split()[0]
+                    antenna_value = parts[-1]
+                    if antenna_num == '1':
+                        status['antenna_1'] = antenna_value
+                    elif antenna_num == '2':
+                        status['antenna_2'] = antenna_value
+                    elif antenna_num == '3':
+                        status['antenna_3'] = antenna_value
+                    elif antenna_num == '4':
+                        status['antenna_4'] = antenna_value
+                except (IndexError, ValueError):
+                    pass
+
             # Shutdown supercap/supply
             elif 'shutdown' in line_lower and ('supercap' in line_lower or 'supply' in line_lower):
                 parts = line.split()
@@ -341,10 +381,20 @@ class _OregonCommunicatorSession:
             elif 'tags in archive' in line_lower:
                 parts = line.split()
                 status['tags_in_archive'] = parts[-1] if parts else None
-            elif "gnss logged every / minutes" in line_lower or 'GNSS log is off':
+
+            # Bluetooth status
+            elif 'bluetooth' in line_lower:
+                status['bluetooth_status'] = line.strip()
+
+            elif "gnss logged every / minutes" in line_lower or 'gnss log is off' in line_lower:
                 status['gnss_log_interval_minutes'] = True
             else:
                 raise ValueError(f"Unrecognized line format in system status at row {line_num + 1}: '{line}'")
+
+        must_have_fields = ['device_type', 'version', 'serial_number', 'reader_name', 'mode']
+        for field in must_have_fields:
+            if not status[field]:
+                raise ValueError(f"Missing expected field '{field}' in system status. Parsed value: '{status[field]}'")
 
         return status
 
@@ -358,7 +408,16 @@ class _OregonCommunicatorSession:
             Parsed upload history with upload records and metadata.
         """
 
+        mode = self.mode
+        mode_changed = False
+        if mode != 'Standby':
+            self.change_mode('Standby')
+            mode_changed = True
+
         upload_history_lines = self._command_manager.send_command("UH")
+
+        if mode_changed:
+            self.change_mode(mode)
 
         history = {
             'reader_name': None,
@@ -485,6 +544,29 @@ class _OregonCommunicatorSession:
 
         except Exception as e:
             print(f"Error retrieving serial number: {e}")
+            return False
+
+    def _update_device_type(self) -> str:
+        """
+        Retrieve the device type from the device using the SY command.
+
+        Returns
+        -------
+        str
+            The device type, or None if not set or an error occurs.
+        """
+
+        if not self._connection:
+            print("Not connected to device.")
+            return False
+
+        try:
+            parsed_status = self.get_system_status()
+            self._device_type = parsed_status["device_type"]
+            return True
+
+        except Exception as e:
+            print(f"Error retrieving device type: {e}")
             return False
 
     def control_device_datetime(self, tolerance_seconds: int = 15, attempt_sync: bool = True) -> dict:

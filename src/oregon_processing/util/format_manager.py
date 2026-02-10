@@ -3,9 +3,43 @@
 Format Manager for Oregon RFID device record format operations
 """
 
+from oregon_processing.util.display_constants import display
 
 class FormatManager:
     """Manages device detection record format configuration and state."""
+
+    FIELD_NAMES = {
+        'DTY': 'Detection type',
+        'TCH': 'Tag technology',
+        'TTY': 'Tag type',
+        'PFG': 'Phantom flag',
+        'TAG': 'Tag ID number',
+        'ANT': 'Antenna number',
+        'ARR': 'Arrival date and time',
+        'TRF': 'Time reference',
+        'DEP': 'Departure date and time',
+        'NCD': 'Number of consecutive detections',
+        'EMP': 'Number of empty scans preceding detection',
+        'LAT': 'Latitude',
+        'LON': 'Longitude',
+        'ALT': 'Altitude in meters',
+        'SIV': 'Satellites in view',
+        'HDP': 'Location horizontal accuracy',
+        'TSS': 'Tag signal strength',
+        'SPV': 'Power supply voltage',
+        'CPA': 'Power supply amperage during charge pulse',
+        'LSA': 'Power supply amperage with charge pulse off',
+        'EFA': 'Effective amps',
+        'CPT': 'Charge pulse time in milliseconds',
+        'LST': 'Listen time in milliseconds',
+        'ANV': 'Antenna voltage',
+        'ANA': 'Antenna amperage',
+        'NOI': 'Noise',
+        'DUR': 'Duration of tag detection event',
+        'CLS': 'Tag size class',
+        'SCD': 'Site code',
+        'SPC': 'Output one space character',
+        }
 
     def __init__(self, communicator, command_manager):
         """
@@ -51,7 +85,17 @@ class FormatManager:
         if not self._communicator.is_connected:
             raise ConnectionError("Not connected to device.")
 
+        mode = self._communicator.mode
+        mode_changed = False
+
+        if mode.lower() != 'standby':
+            self._communicator.change_mode('Standby')
+            mode_changed = True
+
         response_lines = self._command_manager.send_command("FM")
+
+        if mode_changed:
+            self._communicator.change_mode(mode)
 
         if len(response_lines) != 1:
             raise ValueError(f"Unexpected number of lines in FM response: {len(response_lines)}")
@@ -60,16 +104,22 @@ class FormatManager:
         tokens = columns_raw.split()
         columns = [t for t in tokens if t != 'SPC']
 
-        if "TAG" not in columns:
-            raise ValueError("TAG column not found in detection record format.")
-
         # Create a dictionary mapping column names to their indices
         column_indices = {col: idx for idx, col in enumerate(columns)}
+
+        # Create a subset of FIELD_NAMES for only the columns in the format
+
+        if any(col not in self.FIELD_NAMES for col in columns):
+            unknown_cols = [col for col in columns if col not in self.FIELD_NAMES]
+            print(f"WARNING: Unknown columns in detection record format: {unknown_cols}")
+
+        field_names = {col: self.FIELD_NAMES.get(col, "Unknown") for col in columns}
 
         return {
             'columns_raw': columns_raw,
             'columns': columns,
             'column_indices': column_indices,
+            'field_names': field_names,
         }
 
     def set_detection_record_format(self, format_string: str) -> bool:

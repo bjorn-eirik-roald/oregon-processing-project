@@ -19,7 +19,8 @@ if TYPE_CHECKING:
 class DataExporter:
     """Handles exporting data from the Oregon RFID communicator."""
 
-    DEFAULT_DETECTION_RECORD_FORMAT = 'DTY ARR SPC TRF DUR SPC TTY SPC TAG SCD NCD EFA'
+    DEFAULT_DETECTION_RECORD_FORMAT = {'ORSR':'DTY ARR SPC TRF DUR SPC TTY SPC TAG SCD NCD EFA LON LAT',
+                                       'ORMR':'DTY ARR SPC TRF DUR SPC TTY SPC ANT TAG SCD NCD EFA LON LAT'}
     def __init__(self, communicator: "OregonCommunicator", format_manager: "FormatManager", command_manager: "CommandManager"):
         """
         Initialize DataExporter with communicator and manager instances.
@@ -262,85 +263,89 @@ class DataExporter:
             print("No dates provided for export.")
             return False
 
-        try:
+        old_mode = None
+        if self._communicator.mode != 'Standby':
+            old_mode = self._communicator.mode
+            self._communicator.change_mode('Standby')
 
-            # Header
-            print("\n" + display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
-            print("EXPORTING EVENT RECORDS")
-            print(display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
-            print(f"Dates to export: {len(dates)} date(s)")
-            print(f"Output directory: {output_dir}")
+        # Header
+        print("\n" + display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
+        print("EXPORTING EVENT RECORDS")
+        print(display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
+        print(f"Dates to export: {len(dates)} date(s)")
+        print(f"Output directory: {output_dir}")
 
-            # Prepare ranges and formatting
-            num_dates = len(dates)
-            all_dates = sorted(dates)
-            max_counter_width = len(f"({num_dates}/{num_dates})")
-            max_line_width = len(str(1440))  # assume up to one line per minute per day
+        # Prepare ranges and formatting
+        num_dates = len(dates)
+        all_dates = sorted(dates)
+        max_counter_width = len(f"({num_dates}/{num_dates})")
+        max_line_width = len(str(1440))  # assume up to one line per minute per day
 
-            print("\n" + display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
-            print("Exporting Logs")
-            print(display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
+        print("\n" + display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
+        print("Exporting Logs")
+        print(display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
 
-            all_successful = True
-            export_count = 0
+        all_successful = True
+        export_count = 0
 
-            for date_num, current_date in enumerate(all_dates):
+        for date_num, current_date in enumerate(all_dates):
 
-                output_filepath = f"{output_dir}/{self._communicator.serial_number}_event_records_{current_date.strftime('%Y_%m_%d')}.txt"
+            output_filepath = f"{output_dir}/{self._communicator.serial_number}_event_records_{current_date.strftime('%Y_%m_%d')}.txt"
 
-                counter = f"({date_num + 1}/{num_dates})"
-                spacing = " " * (max_counter_width - len(counter))
-                print(f"  - {spacing}{counter} {current_date}. Exporting...", end="", flush=True)
+            counter = f"({date_num + 1}/{num_dates})"
+            spacing = " " * (max_counter_width - len(counter))
+            print(f"  - {spacing}{counter} {current_date}. Exporting...", end="", flush=True)
 
-                try:
-                    success = True
-                    # Send ER command with date
-                    command = f"ER {current_date.strftime('%Y-%m-%d')}"
-                    response = self._command_manager.send_command(command)
-                except Exception as e:
-                    print(f"ERROR. {e}")
-                    success = False
-                    all_successful = False
-                    response = []
+            try:
+                success = True
+                # Send ER command with date
+                command = f"ER {current_date.strftime('%Y-%m-%d')}"
+                response = self._command_manager.send_command(command)
+            except Exception as e:
+                print(f"ERROR. {e}")
+                success = False
+                all_successful = False
+                response = []
 
-                # Generate output filename with date
-                with open(output_filepath, 'w') as f:
-                    f.write("Oregon RFID Event Records\n")
-                    f.write("Export Date/Time: " + time.strftime("%Y-%m-%d %H:%M:%S") + "\n")
-                    f.write("Date of Records: " + current_date.strftime("%Y-%m-%d") + "\n")
-                    f.write("=========================\n\n")
+            # Generate output filename with date
+            with open(output_filepath, 'w') as f:
+                f.write("Oregon RFID Event Records\n")
+                f.write(f"Device Serial Number: {self._communicator.serial_number}\n")
+                f.write(f"Device Type: {self._communicator.device_type}\n")
+                f.write("Export Date/Time: " + time.strftime("%Y-%m-%d %H:%M:%S") + "\n")
+                f.write("Date of Records: " + current_date.strftime("%Y-%m-%d") + "\n")
+                f.write("=========================\n\n")
 
-                    # Write event records
-                    f.write('\n'.join(response))
+                # Write event records
+                f.write("#RECORDS START HERE\n")
+                f.write('\n'.join(response))
 
-                if success:
-                    print(f"Done. Lines written: {len(response)}.")
-                    export_count += 1
+            if success:
+                print(f"Done. Lines written: {len(response)-3}.")
+                export_count += 1
 
-            failed_exports = num_dates - export_count
+        failed_exports = num_dates - export_count
 
-            print("\n" + display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
-            print("SUMMARY")
-            print(display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
-            print(f"Total dates processed: {num_dates}")
-            print(f"Successful exports:    {export_count}")
-            print(f"Failed exports:        {failed_exports}")
+        print("\n" + display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
+        print("SUMMARY")
+        print(display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
+        print(f"Total dates processed: {num_dates}")
+        print(f"Successful exports:    {export_count}")
+        print(f"Failed exports:        {failed_exports}")
 
-            print("\n" + display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
-            if all_successful:
-                print("EXPORT COMPLETE")
-            else:
-                print("EXPORT COMPLETE WITH ERRORS")
-            print(display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
+        print("\n" + display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
+        if all_successful:
+            print("EXPORT COMPLETE")
+        else:
+            print("EXPORT COMPLETE WITH ERRORS")
+        print(display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
 
-            return True if all_successful else False
+        if old_mode:
+            self._communicator.change_mode(old_mode)
 
-        except Exception as e:
-            print(f"Error during batch export: {e}")
-            print("\n" + display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
-            print("EXPORT FAILED")
-            print(display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
-            return False
+        return True if all_successful else False
+
+
 
     def export_detection_records(self, dates: list, output_dir: Path = Path(""), sep=',') -> bool:
         """
@@ -383,6 +388,11 @@ class DataExporter:
             print("No dates provided for export.")
             return False
 
+        old_mode = None
+        if self._communicator.mode != 'Standby':
+            old_mode = self._communicator.mode
+            self._communicator.change_mode('Standby')
+
         upload_history = self._communicator.get_upload_history()
         total_number_of_records = upload_history["total_records"]
 
@@ -397,7 +407,9 @@ class DataExporter:
         print("PHASE 1: Retrieving Records from Device")
         print(display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
         print("Setting detection record format to default for export...", end="", flush=True)
-        if not self._format_manager.set_detection_record_format(self.DEFAULT_DETECTION_RECORD_FORMAT):
+
+        default_format = self.DEFAULT_DETECTION_RECORD_FORMAT[self._communicator.device_type]
+        if not self._format_manager.set_detection_record_format(default_format):
             print("Failed to set detection record format. Cannot continue.")
             return False
         print("Done.")
@@ -520,12 +532,19 @@ class DataExporter:
 
             with open(output_filepath, 'w') as f:
                 f.write("Oregon RFID Detection Records\n")
+                f.write(f"Device Serial Number: {self._communicator.serial_number}\n")
+                f.write(f"Device Type: {self._communicator.device_type}\n")
                 f.write("Export Date/Time: " + time.strftime("%Y-%m-%d %H:%M:%S") + "\n")
                 f.write("Date of Record: " + current_date.strftime("%Y-%m-%d") + "\n")
                 f.write("Number of Records: " + count_str.strip() + "\n")
                 f.write("Number of unique tags: " + unique_tags_str.strip() + "\n")
                 f.write("=========================\n\n")
-                f.write(f"{format_columns_str.replace(' ', sep)}\n\n")
+                f.write("Field Names:\n")
+                for col, field_name in format_info['field_names'].items():
+                    f.write(f"{col}: {field_name}\n")
+                f.write("=========================\n\n")
+                f.write("#RECORDS START HERE\n")
+                f.write(f"{format_columns_str.replace(' ', sep)}\n")
                 # Write detection records for the date
                 if current_date in detection_records_by_date:
                     f.write('\n'.join(detection_records_by_date[current_date]))
@@ -536,5 +555,9 @@ class DataExporter:
         print("\n" + display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH, flush=True)
         print("EXPORT COMPLETE", flush=True)
         print(display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH, flush=True)
+
+        if old_mode:
+            self._communicator.change_mode(old_mode)
+
         return True
 
