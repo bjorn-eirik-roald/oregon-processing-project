@@ -6,13 +6,14 @@ Provides methods for checking device health status, including supply voltage
 and other system parameters.
 """
 
+import logging
 from oregon_processing.util.display_constants import display
 
 
 class DeviceHealthChecker:
     """Manages system health checks for Oregon RFID device."""
 
-    CRITICAL_VOLTAGE_THRESHOLD = 14.0  # volts
+    CRITICAL_VOLTAGE_THRESHOLD = 13.0  # volts
 
     def __init__(self, communicator):
         """
@@ -24,6 +25,7 @@ class DeviceHealthChecker:
             OregonCommunicator instance for device communication.
         """
         self._communicator = communicator
+        self.logger = logging.getLogger('oregon_processing.device_health_checker')
 
     def __enter__(self):
         """Enter context manager."""
@@ -43,25 +45,16 @@ class DeviceHealthChecker:
             Dictionary with 'healthy' (bool) and 'warnings' (list of str) keys.
         """
 
-        print("\n" + display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH, flush=True)
-        print("SYSTEM STATUS HEALTH CHECK", flush=True)
-        print(display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH, flush=True)
+        logging_extra = {'process_name': 'Health Check'}
 
-        print("\n" + display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
-        print("Retrieving System Status")
-        print(display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
-        print("Requesting system status from device...", end="", flush=True)
+        self.logger.info("Initializing health check of Oregon RFID device.", extra=logging_extra)
+        self.logger.info("Retrieving System Status.", extra=logging_extra)
 
         warnings = []
         parsed_status = self._communicator.get_system_status()
 
-        print("Done.")
 
         # Check supply voltage
-        print("\n" + display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
-        print("Health Analysis")
-        print(display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
-
         if parsed_status['supply_voltage']:
             try:
                 voltage = float(parsed_status['supply_voltage'])
@@ -77,14 +70,14 @@ class DeviceHealthChecker:
 
         # Report health status
         if not health_report['healthy']:
-            print(f"\n⚠ WARNING: {len(health_report['warnings'])} issue(s) detected:")
-            for warning in health_report['warnings']:
-                print(f"  - {warning}")
-        else:
-            print("\n✓ System status check: All parameters within normal range")
+            warning_message = f"{len(health_report['warnings'])} issue(s) detected during health check."
 
-        print("\n" + display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
-        print("CHECK COMPLETE")
-        print(display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
+            for warning in health_report['warnings']:
+                warning_message += f"\n  - {warning}"
+
+            self.logger.warning(warning_message, extra=logging_extra)
+
+        else:
+            self.logger.info("All parameters within normal range", extra=logging_extra)
 
         return health_report

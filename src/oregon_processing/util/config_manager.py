@@ -1,6 +1,7 @@
 import os
 import json
 import getpass
+import logging
 from pathlib import Path
 
 from oregon_processing.util.display_constants import display
@@ -21,6 +22,7 @@ class ConfigManager:
             If True, validate the config file. If False, load it without validation.
             Set to False when reading an existing config for setup/migration purposes.
         """
+        self.logger = logging.getLogger('oregon_processing.config_manager')
         self._username = getpass.getuser()
         self._appdata_dir = self._get_appdata_dir()
         self._config_path = self._appdata_dir / self.CONFIG_FILENAME
@@ -32,19 +34,14 @@ class ConfigManager:
             else:
                 self._load_without_validation()
         else:
-            print(f"Config file not found at {self._config_path}. Creating a new one before continuing.")
+            logging_extra = {'process_name': 'Configuration'}
+            self.logger.info(f"Config file not found at {self._config_path}. Creating a new one before continuing.", extra=logging_extra)
             ConfigManager.create_new_config()
             self._load_and_validate()
 
     def __enter__(self):
         """Enter context manager; print configuration summary."""
-        print("\n" + display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH, flush=True)
-        print("CONFIGURATION", flush=True)
-        print(display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH, flush=True)
         self.summarize()
-        print("\n" + display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH, flush=True)
-        print("END OF CONFIGURATION", flush=True)
-        print(display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH, flush=True)
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -68,9 +65,11 @@ class ConfigManager:
 
     def summarize(self) -> None:
         """Print a concise summary of the loaded configuration."""
-        print("Configuration summary:")
-        print(f"  User: {self.user}")
-        print(f"  Data directory: {self.data_dir}")
+        logging_extra = {'process_name': 'Configuration'}
+        summary = "Configuration summary:\n"
+        summary += f"  User: {self.user}\n"
+        summary += f"  Data directory: {self.data_dir}"
+        self.logger.info(summary, extra=logging_extra)
 
     @staticmethod
     def _strip_quotes(value: str) -> str:
@@ -157,7 +156,9 @@ class ConfigManager:
                 print("Config creation cancelled.")
                 return None
 
-        print("Creating new configuration for oregon_communicator\n")
+        logger = logging.getLogger('oregon_processing.config_manager')
+        logging_extra = {'process_name': 'Configuration'}
+        logger.info("Creating new configuration for oregon_communicator\n", extra=logging_extra)
 
         user = getpass.getuser()
 
@@ -195,6 +196,6 @@ class ConfigManager:
         with open(config_path, "w", encoding="utf-8") as f:
             json.dump(config_data, f, indent=4)
 
-        print(f"\nConfig file created at:\n{config_path}")
+        logger.info(f"\nConfig file created at:\n{config_path}", extra=logging_extra)
 
         return cls()

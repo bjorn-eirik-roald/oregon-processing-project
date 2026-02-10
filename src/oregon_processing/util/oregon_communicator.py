@@ -3,6 +3,7 @@
 Oregon RFID Communicator
 """
 
+import logging
 from inspect import signature
 import time
 import os
@@ -59,6 +60,8 @@ class _OregonCommunicatorSession:
         self._reader_name = None
         self._serial_number = None
         self._detection_record_format = None
+
+        self.logger = logging.getLogger('oregon_processing.oregon_communicator')
 
     @property
     def reader_name(self):
@@ -166,8 +169,10 @@ class _OregonCommunicatorSession:
         bool
             True if mode change successful, False otherwise.
         """
+        logging_extra = {'process_name': 'Connection'}
+
         if not self._mode_manager:
-            print("Mode manager not initialized.")
+            self.logger.error("Mode manager not initialized.", extra=logging_extra)
             return False
         return self._mode_manager.change_mode(mode_name)
 
@@ -181,8 +186,10 @@ class _OregonCommunicatorSession:
         dict
             Dictionary with 'healthy' (bool) and 'warnings' (list of str) keys.
         """
+        logging_extra = {'process_name': 'Connection'}
+
         if not self._health_checker:
-            print("Health checker not initialized.")
+            self.logger.error("Health checker not initialized.", extra=logging_extra)
             return {'healthy': False, 'warnings': ['Health checker not initialized']}
         return self._health_checker.check_device_health()
 
@@ -203,15 +210,17 @@ class _OregonCommunicatorSession:
             True if update completed successfully, False otherwise.
         """
 
+        logging_extra = {'process_name': 'Connection'}
+
         if isinstance(firmware_file_path, str):
             try:
                 firmware_file_path = Path(firmware_file_path)
             except Exception as e:
-                print(f"Error converting firmware path string to Path object: {e}")
+                self.logger.error(f"Error converting firmware path string to Path object: {e}", extra=logging_extra)
                 return False
 
         if not self._connection:
-            print("Not connected to device.")
+            self.logger.error("Not connected to device.", extra=logging_extra)
             return False
 
         updater = FirmwareUpdater(self, self._command_manager)
@@ -224,17 +233,19 @@ class _OregonCommunicatorSession:
         Opens a command-line interface where commands can be entered, validated,
         sent to the device, and responses displayed. Type 'exit' or 'quit' to exit.
         """
+        logging_extra = {'process_name': 'Connection'}
+
         if not self._connection:
-            print("Not connected to device.")
+            self.logger.error("Not connected to device.", extra=logging_extra)
             return
 
         terminal = InteractiveTerminal(self, self._command_manager)
         terminal.run()
 
-        print("\nInteractive terminal session ended.")
-        print("As a safety measure, reconnecting to device to refresh state...", end="", flush=True)
+        self.logger.info("\nInteractive terminal session ended.", extra=logging_extra)
+        self.logger.info("As a safety measure, reconnecting to device to refresh state...", extra=logging_extra)
         self._post_connect_handshake()
-        print(" Done.", flush=True)
+        self.logger.info(" Done.", extra=logging_extra)
 
     def get_system_status(self):
         """
@@ -510,8 +521,10 @@ class _OregonCommunicatorSession:
             The reader name, or None if not set or an error occurs.
         """
 
+        logging_extra = {'process_name': 'Connection'}
+
         if not self._connection:
-            print("Not connected to device.")
+            self.logger.error("Not connected to device.", extra=logging_extra)
             return False
 
         try:
@@ -520,7 +533,7 @@ class _OregonCommunicatorSession:
             return True
 
         except Exception as e:
-            print(f"Error retrieving reader name: {e}")
+            self.logger.error(f"Error retrieving reader name: {e}", extra=logging_extra)
             return False
 
     def _update_serial_number(self) -> str:
@@ -533,8 +546,10 @@ class _OregonCommunicatorSession:
             The serial number, or None if not set or an error occurs.
         """
 
+        logging_extra = {'process_name': 'Connection'}
+
         if not self._connection:
-            print("Not connected to device.")
+            self.logger.error("Not connected to device.", extra=logging_extra)
             return False
 
         try:
@@ -543,7 +558,7 @@ class _OregonCommunicatorSession:
             return True
 
         except Exception as e:
-            print(f"Error retrieving serial number: {e}")
+            self.logger.error(f"Error retrieving serial number: {e}", extra=logging_extra)
             return False
 
     def _update_device_type(self) -> str:
@@ -556,8 +571,10 @@ class _OregonCommunicatorSession:
             The device type, or None if not set or an error occurs.
         """
 
+        logging_extra = {'process_name': 'Connection'}
+
         if not self._connection:
-            print("Not connected to device.")
+            self.logger.error("Not connected to device.", extra=logging_extra)
             return False
 
         try:
@@ -566,7 +583,7 @@ class _OregonCommunicatorSession:
             return True
 
         except Exception as e:
-            print(f"Error retrieving device type: {e}")
+            self.logger.error(f"Error retrieving device type: {e}", extra=logging_extra)
             return False
 
     def control_device_datetime(self, tolerance_seconds: int = 15, attempt_sync: bool = True) -> dict:

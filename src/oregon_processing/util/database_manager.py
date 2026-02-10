@@ -1,3 +1,4 @@
+import logging
 from oregon_processing.util.config_manager import ConfigManager
 from oregon_processing.util.oregon_communicator import OregonCommunicator
 from oregon_processing.util.util_functions import extract_filename_date
@@ -41,6 +42,7 @@ class DatabaseManager:
         """
         self._config_manager = config_manager
         self._communicator = communicator
+        self.logger = logging.getLogger('oregon_processing.database_manager')
 
         # Root directories
         self._data_dir = None
@@ -116,10 +118,9 @@ class DatabaseManager:
 
     def prepare_directories(self) -> None:
         """Prepare and create necessary directories for export."""
+        logging_extra = {'process_name': 'Output Directory Setup'}
 
-        print("\n" + display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH, flush=True)
-        print("PREPARING DIRECTORIES", flush=True)
-        print(display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH, flush=True)
+        self.logger.info("Preparing output directories.", extra=logging_extra)
 
         # Get serial number from communicator
         serial_number = self._communicator.serial_number
@@ -134,11 +135,11 @@ class DatabaseManager:
         self._detection_records_dir = self._export_data_dir / self.DETECTION_RECORDS_DIR_NAME / serial_number
         self._event_records_dir = self._export_data_dir / self.EVENT_RECORDS_DIR_NAME / serial_number
 
-        print("\n" + display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
-        print("Directory Setup")
-        print(display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
-        print(f"Data directory: {self._data_dir}")
-        print(f"Serial number: {serial_number}")
+        self.logger.info(f"Export logs directory: {self._export_logs_dir}", extra=logging_extra)
+        self.logger.info(f"Crash logs directory: {self._crash_logs_dir}", extra=logging_extra)
+        self.logger.info(f"Export data directory: {self._export_data_dir}", extra=logging_extra)
+        self.logger.info(f"Detection records directory: {self._detection_records_dir}", extra=logging_extra)
+        self.logger.info(f"Event records directory: {self._event_records_dir}", extra=logging_extra)
 
         # Create all directories
         directories = [
@@ -151,14 +152,8 @@ class DatabaseManager:
 
         for dir_path, dir_name in directories:
             if not dir_path.exists():
-                print(f"Creating {dir_name}: {dir_path}")
+                self.logger.info(f"Creating {dir_name}: {dir_path}", extra=logging_extra)
                 dir_path.mkdir(parents=True, exist_ok=True)
-            else:
-                print(f"{dir_name} exists: {dir_path}")
-
-        print("\n" + display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
-        print("DIRECTORIES READY")
-        print(display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
 
     def _format_date_intervals(self, dates: list) -> str:
         """
@@ -214,28 +209,21 @@ class DatabaseManager:
         dict
             Dictionary with 'records' and 'system_logs' keys containing lists of missing dates
         """
+        logging_extra = {'process_name': 'Determine Export Date Range'}
+
 
         if self._detection_records_dir is None or self._event_records_dir is None:
             raise RuntimeError("Directories not prepared yet.")
 
-        print("\n" + display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH, flush=True)
-        print("DETERMINING EXPORT DATE RANGE", flush=True)
-        print(display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH, flush=True)
-
-        print("\n" + display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
-        print("Scanning Existing Files")
-        print(display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
-        print("Scanning for existing detection record files...", end="", flush=True)
+        self.logger.info("Scanning for existing detection record files...", extra=logging_extra)
         record_files = list(self._detection_records_dir.glob("*.txt"))
-        print(f" Found {len(record_files)} file(s).")
+        self.logger.info(f"Found {len(record_files)} detection record file(s) from current RFID reader.", extra=logging_extra)
 
-        print("Scanning for existing event record files...", end="", flush=True)
+        self.logger.info("Scanning for existing event record files...", extra=logging_extra)
         event_files = list(self._event_records_dir.glob("*.txt"))
-        print(f" Found {len(event_files)} file(s).")
+        self.logger.info(f"Found {len(event_files)} event record file(s) from current RFID reader.", extra=logging_extra)
 
-        print("\n" + display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
-        print("Extracting Dates from Filenames")
-        print(display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
+        self.logger.info("Extracting dates from filenames...", extra=logging_extra)
 
         record_file_dates = set(d for d in [extract_filename_date(f.name) for f in record_files] if d is not None)
         event_file_dates = set(d for d in [extract_filename_date(f.name) for f in event_files] if d is not None)
@@ -262,16 +250,13 @@ class DatabaseManager:
         if last_event_date and last_event_date not in missing_event_dates:
             missing_event_dates = sorted(missing_event_dates + [last_event_date])
 
-        print("\n" + display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
-        print("Data Gap Analysis")
-        print(display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
-        print(f"Detection records: {len(missing_record_dates)} missing/incomplete date(s) out of {len(expected_dates)}")
-        print(f"Event records: {len(missing_event_dates)} missing/incomplete date(s) out of {len(expected_dates)}")
-
+        self.logger.info(f"Detection records: {len(missing_record_dates)} missing/incomplete date(s) out of {len(expected_dates)}", extra=logging_extra)
         if missing_record_dates:
-            print(f"  Missing detection dates: {self._format_date_intervals(missing_record_dates)}")
+            self.logger.info(f"Missing detection dates: {self._format_date_intervals(missing_record_dates)}", extra=logging_extra)
+
+        self.logger.info(f"Event records: {len(missing_event_dates)} missing/incomplete date(s) out of {len(expected_dates)}", extra=logging_extra)
         if missing_event_dates:
-            print(f"  Missing event dates: {self._format_date_intervals(missing_event_dates)}")
+            self.logger.info(f"Missing event dates: {self._format_date_intervals(missing_event_dates)}", extra=logging_extra)
 
         return {
             'records': missing_record_dates,

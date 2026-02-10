@@ -3,6 +3,7 @@
 Format Manager for Oregon RFID device record format operations
 """
 
+import logging
 from oregon_processing.util.display_constants import display
 
 class FormatManager:
@@ -56,6 +57,7 @@ class FormatManager:
         self._command_manager = command_manager
         self._detection_record_format = None
         self._startup_format = None
+        self.logger = logging.getLogger('oregon_processing.format_manager')
 
         # Store startup format when initialized
         if self._communicator.is_connected:
@@ -82,6 +84,8 @@ class FormatManager:
               'column_indices': dict mapping column names to their indices
             }
         """
+        logging_extra = {'process_name': 'Format Manager'}
+
         if not self._communicator.is_connected:
             raise ConnectionError("Not connected to device.")
 
@@ -111,7 +115,7 @@ class FormatManager:
 
         if any(col not in self.FIELD_NAMES for col in columns):
             unknown_cols = [col for col in columns if col not in self.FIELD_NAMES]
-            print(f"WARNING: Unknown columns in detection record format: {unknown_cols}")
+            self.logger.warning(f"WARNING: Unknown columns in detection record format: {unknown_cols}", extra=logging_extra)
 
         field_names = {col: self.FIELD_NAMES.get(col, "Unknown") for col in columns}
 
@@ -136,8 +140,10 @@ class FormatManager:
         bool
             True if format was set successfully, False otherwise.
         """
+        logging_extra = {'process_name': 'Format Manager'}
+
         if not self._communicator.is_connected:
-            print("Not connected to device.")
+            self.logger.error("Not connected to device.", extra=logging_extra)
             return False
 
         try:
@@ -150,11 +156,11 @@ class FormatManager:
             if self._detection_record_format['columns_raw'] == format_string:
                 return True
             else:
-                print(f"WARNING: Format mismatch. Expected '{format_string}', got '{self._detection_record_format['columns_raw']}'")
+                self.logger.warning(f"WARNING: Format mismatch. Expected '{format_string}', got '{self._detection_record_format['columns_raw']}'", extra=logging_extra)
                 return False
 
         except Exception as e:
-            print(f"Error setting detection record format: {e}")
+            self.logger.error(f"Error setting detection record format: {e}", extra=logging_extra)
             return False
 
     def _restore_startup_format(self) -> bool:
@@ -166,6 +172,8 @@ class FormatManager:
         bool
             True if format was restored or no change was needed, False if restoration failed.
         """
+        logging_extra = {'process_name': 'Format Manager'}
+
         if not self._communicator.is_connected:
             return False
 
@@ -179,13 +187,13 @@ class FormatManager:
         if current_format['columns_raw'] == self._startup_format['columns_raw']:
             return True
 
-        print("\n" + display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
-        print("Restoring original detection record format...", end="", flush=True)
+
         success = self.set_detection_record_format(self._startup_format['columns_raw'])
         if not success:
-            print("WARNING: Failed to restore original detection record format.")
-        print("Done.")
-        print(display.SUBSECTION_SEPARATOR * display.SECTION_LINE_LENGTH)
+            self.logger.warning("WARNING: Failed to restore original detection record format.", extra=logging_extra)
+        else:
+            self.logger.info("Original detection record format restored.", extra=logging_extra)
+
 
         # Format has changed - restore to startup format using set_detection_record_format
         return success

@@ -6,7 +6,7 @@ from datetime import datetime
 from oregon_processing.util.oregon_communicator import OregonCommunicator
 from oregon_processing.util.config_manager import ConfigManager
 from oregon_processing.util.database_manager import DatabaseManager
-from oregon_processing.util.managed_log_stream import ManagedLogStream
+from oregon_processing.util.logging_manager import LoggingManager
 from oregon_processing.util.display_constants import display
 
 class ExportProtocol:
@@ -27,7 +27,8 @@ class _ExportProtocolSession:
         self._config_manager = None
         self._communicator = None
         self._database_manager = None
-        self._log_stream = None
+        self._logging_manager = None
+        self.logger = None
 
     def __enter__(self):
         self._exit_stack = ExitStack()
@@ -35,11 +36,12 @@ class _ExportProtocolSession:
         try:
             self._config_manager = self._exit_stack.enter_context(ConfigManager())
 
-            # Start logging immediately with crash logs directory prepared without communicator
+            # Set up logging with crash logs directory
             crash_logs_dir = DatabaseManager.prepare_crash_logs_dir(self._config_manager)
-            self._log_stream = self._exit_stack.enter_context(
-                ManagedLogStream("export_protocol", crash_logs_dir=crash_logs_dir)
+            self._logging_manager = self._exit_stack.enter_context(
+                LoggingManager("export_protocol", log_dir=crash_logs_dir)
             )
+            self.logger = self._logging_manager.get_logger('export_protocol')
 
             self._communicator = self._exit_stack.enter_context(OregonCommunicator())
 
@@ -47,8 +49,8 @@ class _ExportProtocolSession:
                 self._database_manager = self._exit_stack.enter_context(DatabaseManager(self._config_manager, self._communicator))
                 self._database_manager.prepare_directories()
 
-                # Transition from temporary log to final location now that we have export_logs_dir
-                self._log_stream.temp_to_final(self._database_manager.export_logs_dir)
+                # Update log directory to final location
+                self._logging_manager.set_log_directory(self._database_manager.export_logs_dir)
         except Exception:
             self._exit_stack.close()
             raise
@@ -60,30 +62,28 @@ class _ExportProtocolSession:
         return False
 
     def run_export_protocol(self):
-        print("\n"+display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH, flush=True)
-        print(display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH, flush=True)
-        print("Oregon RFID Export Protocol", flush=True)
-        print(display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH, flush=True)
-        print(display.SECTION_SEPARATOR * display.SECTION_LINE_LENGTH, flush=True)
+
+
+        logging_extra = {'process_name': 'Export Protocol'}
+
+        self.logger.info("Oregon RFID Export Protocol Initiated", extra=logging_extra)
 
         if self._config_manager is None:
-            print("Configuration manager not initialized. Aborting.", flush=True)
+            self.logger.error("Configuration manager not initialized. Aborting.", extra=logging_extra)
             return
 
         if not self._communicator.is_connected:
-            print("Oregon RFID device is not connected. Aborting.", flush=True)
+            self.logger.error("Oregon RFID device is not connected. Aborting.", extra=logging_extra)
             return
-
-        self._communicator.change_mode('Standby')
 
         health_report = self._communicator.check_device_health()
         if not health_report['healthy']:
-            print("\nDevice health check failed. Please address the issues before proceeding.", flush=True)
+            self.logger.error("Device health check failed. Please address the issues before proceeding.", extra=logging_extra)
             return
 
         result = self._communicator.control_device_datetime(tolerance_seconds=10)
         if not result['synced']:
-            print("\nDevice clock is not in sync. Please address the issues before proceeding.", flush=True)
+            self.logger.error("Device clock is not in sync. Please address the issues before proceeding.", extra=logging_extra)
             return
 
         missing_export_dates = self._database_manager.get_export_dates()

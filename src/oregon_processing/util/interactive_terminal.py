@@ -6,6 +6,8 @@ Provides a command-line interface for sending commands to the Oregon device
 and receiving responses.
 """
 
+import logging
+
 # Support for history of readline on Windows via pyreadline3
 try:
     import readline  # Linux / macOS
@@ -28,6 +30,7 @@ class InteractiveTerminal:
         """
         self._communicator = communicator
         self._command_manager = command_manager
+        self.logger = logging.getLogger('oregon_processing.interactive_terminal')
 
     def __enter__(self):
         """Enter context manager."""
@@ -44,7 +47,9 @@ class InteractiveTerminal:
         Allows user to enter commands, validates them, sends them to the device,
         and displays responses. Type 'exit' or 'quit' to exit the terminal.
         """
-        print("\nEntering interactive terminal. Type 'exit' to quit.")
+        logging_extra = {'process_name': 'Interactive Terminal'}
+
+        self.logger.info("\nEntering interactive terminal. Type 'exit' to quit.", extra=logging_extra)
 
         try:
             while True:
@@ -55,21 +60,21 @@ class InteractiveTerminal:
 
                 # Exit on 'exit' or 'quit'
                 if cmd.lower() in ("exit", "quit"):
-                    print("Exiting terminal.")
+                    self.logger.info("Exiting terminal.", extra=logging_extra)
                     break
 
                 # Validate command format
                 if not self._communicator._command_manager.validate_command(cmd):
-                    print("Invalid command. Use a two-letter code followed by a space (e.g., 'SY ').")
-                    print(f"Valid codes: {sorted(self._communicator._command_manager.VALID_MAIN_COMMANDS)}")
+                    self.logger.warning("Invalid command. Use a two-letter code followed by a space (e.g., 'SY ').", extra=logging_extra)
+                    self.logger.info(f"Valid codes: {sorted(self._communicator._command_manager.VALID_MAIN_COMMANDS)}", extra=logging_extra)
                     continue
 
                 # send command and get cleaned response
                 lines = self._command_manager.send_command(cmd)
                 if lines:
-                    print("\n".join(lines))
+                    self.logger.info("\n".join(lines), extra=logging_extra)
                 else:
-                    print("Command received without error")
+                    self.logger.info("Command received without error", extra=logging_extra)
 
         except KeyboardInterrupt:
-            print("\nTerminal interrupted by user.")
+            self.logger.info("\nTerminal interrupted by user.", extra=logging_extra)

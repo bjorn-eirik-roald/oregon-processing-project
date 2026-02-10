@@ -5,6 +5,7 @@ Firmware Updater for Oregon RFID Device
 Handles the firmware update process for Oregon RFID readers.
 """
 
+import logging
 import time
 
 
@@ -24,6 +25,7 @@ class FirmwareUpdater:
         """
         self._communicator = communicator
         self._command_manager = command_manager
+        self.logger = logging.getLogger('oregon_processing.firmware_updater')
 
     def __enter__(self):
         """Enter context manager."""
@@ -59,8 +61,10 @@ class FirmwareUpdater:
             True if update completed successfully, False otherwise.
         """
 
+        logging_extra = {'process_name': 'Firmware Update'}
+
         if not self._communicator.is_connected:
-            print("Not connected to device.")
+            self.logger.error("Not connected to device.", extra=logging_extra)
             return False
 
         # Verify firmware file exists before starting
@@ -68,50 +72,50 @@ class FirmwareUpdater:
             with open(firmware_file_path, 'r') as f:
                 firmware_content = f.read()
         except FileNotFoundError:
-            print(f"\nError: Firmware file not found: {firmware_file_path}")
+            self.logger.error(f"\nError: Firmware file not found: {firmware_file_path}", extra=logging_extra)
             return False
         except Exception as e:
-            print(f"\nError reading firmware file: {e}")
+            self.logger.error(f"\nError reading firmware file: {e}", extra=logging_extra)
             return False
 
-        print("\n" + display.SECTION_SEPARATOR*60)
-        print("FIRMWARE UPDATE PROCESS")
-        print(display.SECTION_SEPARATOR*60)
+        self.logger.info("\n" + "-"*60, extra=logging_extra)
+        self.logger.info("FIRMWARE UPDATE PROCESS", extra=logging_extra)
+        self.logger.info("-"*60, extra=logging_extra)
 
         try:
             # Final confirmation with version info
-            print("\n" + display.SUBSECTION_SEPARATOR*60)
-            print(f"Current firmware version: {new_version}")
-            print(f"New firmware version:     {new_version}")
-            print(display.SUBSECTION_SEPARATOR*60)
+            self.logger.info("\n" + "-"*60, extra=logging_extra)
+            self.logger.info(f"Current firmware version: {new_version}", extra=logging_extra)
+            self.logger.info(f"New firmware version:     {new_version}", extra=logging_extra)
+            self.logger.info("-"*60, extra=logging_extra)
             confirm = input("\nConfirm firmware update (yes/no): ").strip().lower()
             if confirm not in ['yes', 'y']:
-                print("Firmware update cancelled by user.")
+                self.logger.info("Firmware update cancelled by user.", extra=logging_extra)
                 return False
 
-            print("\n" + display.SECTION_SEPARATOR*60)
-            print("Starting firmware update process...")
-            print(display.SECTION_SEPARATOR*60)
+            self.logger.info("\n" + "-"*60, extra=logging_extra)
+            self.logger.info("Starting firmware update process...", extra=logging_extra)
+            self.logger.info("-"*60, extra=logging_extra)
 
             # Step 1: Read firmware file content
-            print(f"\nStep 1: Reading firmware file: {firmware_file_path}...", end="", flush=True)
+            self.logger.info(f"\nStep 1: Reading firmware file: {firmware_file_path}...", extra=logging_extra)
             with open(firmware_file_path, 'r') as f:
                 firmware_content = f.read()
-            print("Done.")
+            self.logger.info("Done.", extra=logging_extra)
 
             # Step 2: Turn off reader
-            print("\nStep 2: Turning off reader...", end="", flush=True)
+            self.logger.info("\nStep 2: Turning off reader...", extra=logging_extra)
             self._command_manager.send_command("OF")
             time.sleep(2)
-            print("Done.")
+            self.logger.info("Done.", extra=logging_extra)
 
             # Step 3: Send FW command
-            print("Step 3: Initiating firmware update mode...", end="", flush=True)
+            self.logger.info("Step 3: Initiating firmware update mode...", extra=logging_extra)
             self._command_manager.send_command("FW")
-            print("Done.")
+            self.logger.info("Done.", extra=logging_extra)
 
             # Step 4: Wait for "Update(Y)?" prompt and send Y
-            print("Step 4: Waiting for 'Update(Y)?' prompt...", end="", flush=True)
+            self.logger.info("Step 4: Waiting for 'Update(Y)?' prompt...", extra=logging_extra)
             prompt_found = False
             timeout = time.time() + 10  # 10 second timeout
 
@@ -120,21 +124,21 @@ class FirmwareUpdater:
                     line = self._connection.readline().decode(errors="ignore").strip()
                     if "update" in line.lower() and "(y)" in line.lower():
                         prompt_found = True
-                        print("Received!")
+                        self.logger.info("Received!", extra=logging_extra)
                         break
                 time.sleep(0.2)
 
             if not prompt_found:
-                print("TIMEOUT!")
-                print("Did not receive 'Update(Y)?' prompt. Update aborted.")
+                self.logger.error("TIMEOUT!", extra=logging_extra)
+                self.logger.error("Did not receive 'Update(Y)?' prompt. Update aborted.", extra=logging_extra)
                 return False
 
-            print("Step 5: Starting update execution...", end="", flush=True)
+            self.logger.info("Step 5: Starting update execution...", extra=logging_extra)
             self._command_manager.send_command("Y")
-            print("Started.")
+            self.logger.info("Started.", extra=logging_extra)
 
             # Step 6: Wait for "Start" prompt
-            print("Step 6: Waiting for 'Start' prompt...", end="", flush=True)
+            self.logger.info("Step 6: Waiting for 'Start' prompt...", extra=logging_extra)
             start_found = False
             timeout = time.time() + 30  # 30 second timeout
 
@@ -143,22 +147,22 @@ class FirmwareUpdater:
                     line = self._communicator._connection.readline().decode(errors="ignore").strip()
                     if "start" in line.lower():
                         start_found = True
-                        print("Received!")
+                        self.logger.info("Received!", extra=logging_extra)
                         break
                 time.sleep(0.5)
 
             if not start_found:
-                print("TIMEOUT!")
-                print("Did not receive 'Start' prompt. Update may have failed.")
+                self.logger.error("TIMEOUT!", extra=logging_extra)
+                self.logger.error("Did not receive 'Start' prompt. Update may have failed.", extra=logging_extra)
                 return False
 
             # Step 7: Send firmware content
-            print("Step 7: Uploading firmware data...", end="", flush=True)
+            self.logger.info("Step 7: Uploading firmware data...", extra=logging_extra)
             self._command_manager.send_command(firmware_content)
-            print("Done.")
+            self.logger.info("Done.", extra=logging_extra)
 
             # Step 8: Capture response from device
-            print("Step 8: Waiting for device response...", end="", flush=True)
+            self.logger.info("Step 8: Waiting for device response...", extra=logging_extra)
             response_lines = []
             response_timeout = time.time() + 60  # 60 second timeout for firmware processing
             last_data_time = time.time()
@@ -176,36 +180,36 @@ class FirmwareUpdater:
 
                 time.sleep(0.2)
 
-            print("Done.")
+            self.logger.info("Done.", extra=logging_extra)
 
             # Display response
             if response_lines:
-                print("\nDevice Response:")
-                print(display.SUBSECTION_SEPARATOR*60)
+                self.logger.info("\nDevice Response:", extra=logging_extra)
+                self.logger.info("-"*60, extra=logging_extra)
                 for line in response_lines:
-                    print(line)
-                print(display.SUBSECTION_SEPARATOR*60)
+                    self.logger.info(line, extra=logging_extra)
+                self.logger.info("-"*60, extra=logging_extra)
             else:
-                print("\nNo response received from device.")
+                self.logger.info("\nNo response received from device.", extra=logging_extra)
 
             # Make user verify update success
-            print("\nPlease verify the firmware update was successful.")
+            self.logger.info("\nPlease verify the firmware update was successful.", extra=logging_extra)
             verify = None
             while verify not in ['yes', 'y', 'no', 'n']:
                 verify = input("Did the update complete successfully? (yes/no): ").strip().lower()
 
             if verify in ['no', 'n']:
-                print("Firmware update reported as unsuccessful by user.")
+                self.logger.info("Firmware update reported as unsuccessful by user.", extra=logging_extra)
                 return False
             else:
-                print("Firmware update reported as successful by user.")
+                self.logger.info("Firmware update reported as successful by user.", extra=logging_extra)
 
-            print("\n" + display.SECTION_SEPARATOR*60)
-            print("FIRMWARE UPDATE COMPLETED")
-            print(display.SECTION_SEPARATOR*60)
+            self.logger.info("\n" + "-"*60, extra=logging_extra)
+            self.logger.info("FIRMWARE UPDATE COMPLETED", extra=logging_extra)
+            self.logger.info("-"*60, extra=logging_extra)
 
             return True
 
         except Exception as e:
-            print(f"\nError during firmware update: {e}")
+            self.logger.error(f"\nError during firmware update: {e}", extra=logging_extra)
             return False
