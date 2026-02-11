@@ -4,7 +4,7 @@ import getpass
 import logging
 from pathlib import Path
 
-from oregon_processing.util.display_constants import display
+
 
 
 class ConfigManager:

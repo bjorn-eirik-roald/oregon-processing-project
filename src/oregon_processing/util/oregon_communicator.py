@@ -25,7 +25,7 @@ from oregon_processing.util.firmware_updater import FirmwareUpdater
 from oregon_processing.util.format_manager import FormatManager
 from oregon_processing.util.data_exporter import DataExporter
 from oregon_processing.util.device_health_checker import DeviceHealthChecker
-from oregon_processing.util.display_constants import display
+
 
 
 class OregonCommunicator:

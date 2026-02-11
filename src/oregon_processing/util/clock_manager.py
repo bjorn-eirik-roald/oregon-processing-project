@@ -6,7 +6,7 @@ Oregon RFID Clock Manager - Handles device date/time operations
 import logging
 from datetime import datetime, timedelta, timezone
 
-from oregon_processing.util.display_constants import display
+
 
 
 class ClockManager:

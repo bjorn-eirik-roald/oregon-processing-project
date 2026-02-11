@@ -1,7 +1,7 @@
 import logging
 import serial
 import serial.tools.list_ports
-from oregon_processing.util.display_constants import display
+
 
 
 class OregonConnector:

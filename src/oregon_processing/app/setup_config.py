@@ -9,7 +9,7 @@ Usage:
 """
 
 from oregon_processing.util.config_manager import ConfigManager
-from oregon_processing.util.display_constants import display
+
 
 def run():
     """Run the configuration setup wizard."""

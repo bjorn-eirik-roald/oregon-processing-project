@@ -9,7 +9,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Union, TYPE_CHECKING
 
-from oregon_processing.util.display_constants import display
+
 
 if TYPE_CHECKING:
     from oregon_processing.util.oregon_communicator import OregonCommunicator

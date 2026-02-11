@@ -4,7 +4,7 @@ Format Manager for Oregon RFID device record format operations
 """
 
 import logging
-from oregon_processing.util.display_constants import display
+
 
 class FormatManager:
     """Manages device detection record format configuration and state."""

@@ -4,7 +4,7 @@ Device Mode Manager for Oregon RFID
 """
 
 import logging
-from oregon_processing.util.display_constants import display
+
 
 from typing import TYPE_CHECKING
 

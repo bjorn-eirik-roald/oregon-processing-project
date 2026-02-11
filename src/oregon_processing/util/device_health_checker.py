@@ -7,7 +7,7 @@ and other system parameters.
 """
 
 import logging
-from oregon_processing.util.display_constants import display
+
 
 
 class DeviceHealthChecker:

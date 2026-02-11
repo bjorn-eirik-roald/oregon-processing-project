@@ -7,7 +7,7 @@ from oregon_processing.util.oregon_communicator import OregonCommunicator
 from oregon_processing.util.config_manager import ConfigManager
 from oregon_processing.util.database_manager import DatabaseManager
 from oregon_processing.util.logging_manager import LoggingManager
-from oregon_processing.util.display_constants import display
+
 
 class ExportProtocol:
     def __enter__(self):
