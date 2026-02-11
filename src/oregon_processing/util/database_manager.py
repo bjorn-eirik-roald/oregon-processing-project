@@ -135,11 +135,12 @@ class DatabaseManager:
         self._detection_records_dir = self._export_data_dir / self.DETECTION_RECORDS_DIR_NAME / serial_number
         self._event_records_dir = self._export_data_dir / self.EVENT_RECORDS_DIR_NAME / serial_number
 
-        self.logger.info(f"Export logs directory: {self._export_logs_dir}", extra=logging_extra)
-        self.logger.info(f"Crash logs directory: {self._crash_logs_dir}", extra=logging_extra)
-        self.logger.info(f"Export data directory: {self._export_data_dir}", extra=logging_extra)
-        self.logger.info(f"Detection records directory: {self._detection_records_dir}", extra=logging_extra)
-        self.logger.info(f"Event records directory: {self._event_records_dir}", extra=logging_extra)
+        self.logger.info(f"Root data directory: {self._data_dir}", extra=logging_extra)
+        self.logger.info(f"Export logs directory: {Path(self._export_logs_dir).relative_to(self._data_dir)}", extra=logging_extra)
+        self.logger.info(f"Crash logs directory: {Path(self._crash_logs_dir).relative_to(self._data_dir)}", extra=logging_extra)
+        self.logger.info(f"Export data directory: {Path(self._export_data_dir).relative_to(self._data_dir)}", extra=logging_extra)
+        self.logger.info(f"Detection records directory: {Path(self._detection_records_dir).relative_to(self._data_dir)}", extra=logging_extra)
+        self.logger.info(f"Event records directory: {Path(self._event_records_dir).relative_to(self._data_dir)}", extra=logging_extra)
 
         # Create all directories
         directories = [
