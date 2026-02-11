@@ -30,10 +30,18 @@ from oregon_processing.util.device_health_checker import DeviceHealthChecker
 
 class OregonCommunicator:
     def __enter__(self):
-        self._exit_stack = ExitStack()
 
-        self._session = self._exit_stack.enter_context(_OregonCommunicatorSession())
-        return self._session
+        logging_extra = {'process_name': 'Oregon Communicator'}
+
+        try:
+            self._exit_stack = ExitStack()
+
+            self._session = self._exit_stack.enter_context(_OregonCommunicatorSession())
+            return self._session
+        except Exception:
+            self._logger.exception("Failed to enter OregonCommunicator context", extra=logging_extra)
+            self._exit_stack.close()
+            raise
 
     def __exit__(self, exc_type, exc_value, traceback):
         self._exit_stack.__exit__(exc_type, exc_value, traceback)
@@ -101,6 +109,9 @@ class _OregonCommunicatorSession:
 
     def __enter__(self):
         """Allow use in 'with' statement."""
+
+        logging_extra = {'process_name': 'Oregon Communicator'}
+
         self._exit_stack = ExitStack()
 
         try:
@@ -117,6 +128,7 @@ class _OregonCommunicatorSession:
 
                 self._post_connect_handshake()
         except Exception:
+            self._logger.exception("Failed to initialize OregonCommunicator", extra=logging_extra)
             self._exit_stack.close()
             raise
 

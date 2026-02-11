@@ -169,9 +169,11 @@ class OregonConnector:
     def _attempt_connection(self, ports, bauds):
         """Helper method to attempt connection on a list of ports with specified baud rates."""
 
+        logging_extra = {'process_name': 'Connection Attempt'}
+
         for port in ports:
             for baud in bauds:
-                self._logger.info(f"Attempting connection to {port} at {baud} baud.", extra={'process_name': 'Connection Attempt'})
+                self._logger.info(f"Attempting connection to {port} at {baud} baud.", extra=logging_extra)
 
                 try:
                     ser = serial.Serial(port, baudrate=baud, timeout=0.2, write_timeout=0.2)
@@ -184,14 +186,13 @@ class OregonConnector:
                     response = ser.readline().decode(errors="ignore").strip()
 
                     if response:
-                        self._logger.info(f"Successfully connected to {port} at {baud} baud.", extra={'process_name': 'Connection Attempt'})
+                        self._logger.info(f"Successfully connected to {port} at {baud} baud.", extra=logging_extra)
                         return {'connection': ser, 'port': port, 'baudrate': baud}
 
                     ser.close()
-                    self._logger.info("No response when attempting connection.", extra={'process_name': 'Connection Attempt'})
-
+                    self._logger.info("No response when attempting connection.", extra=logging_extra)
                 except Exception as e:
-                    self._logger.error(f" Error: {e}", extra={'process_name': 'Connection Attempt'})
+                    self._logger.error(f" Error: {e}", extra=logging_extra)
 
         return None
 
@@ -205,7 +206,9 @@ class OregonConnector:
             Dictionary with 'connection', 'port', and 'baudrate' keys if successful, None otherwise.
         """
 
-        self._logger.info("Initializing connection attempt", extra={'process_name': 'Connection'})
+        logging_extra = {'process_name': 'Connection'}
+
+        self._logger.info("Initializing connection attempt", extra=logging_extra)
 
         while True:
             # Ask user to select baud rate
@@ -225,7 +228,7 @@ class OregonConnector:
                 return result
 
             # Connection failed, ask if user wants to retry
-            self._logger.info("Connection failed on all attempted port/baud combinations.", extra={'process_name': 'Connection'})
+            self._logger.info("Connection failed on all attempted port/baud combinations.", extra=logging_extra)
 
             while True:
                 retry = input("\nWould you like to retry? (y/n): ").strip().lower()
@@ -233,8 +236,7 @@ class OregonConnector:
                     break
 
             if retry not in ['y', 'yes']:
-                self._logger.info("User has chosen not to retry connection. Exiting connection process.", extra={'process_name': 'Connection'})
+                self._logger.info("User has chosen not to retry connection. Exiting connection process.", extra=logging_extra)
                 return None
             else:
-                self._logger.info("User has chosen to retry connection.", extra={'process_name': 'Connection'})
-
+                self._logger.info("User has chosen to retry connection.", extra=logging_extra)

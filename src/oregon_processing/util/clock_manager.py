@@ -56,6 +56,8 @@ class ClockManager:
         timezone
             Timezone object representing the device's timezone offset.
         """
+        logging_extra = {'process_name': 'Clock Manager'}
+
         hours = 0
         minutes = 0
         sign = 1
@@ -80,7 +82,8 @@ class ClockManager:
                 hours = int(offset_part.split('h')[0].strip())
                 minutes = int(offset_part.split('h')[1].strip().split('m')[0].strip())
             except IndexError:
-                raise ValueError(f"Unrecognized timezone format: {tz_line}")
+                self._logger.exception(f"Failed to parse hours and minutes from TZ response: {tz_line}", extra=logging_extra)
+                raise
 
         elif tz_line.startswith("Hours to UT:"):
             # Format 2: "Hours to UT: +0"
@@ -129,6 +132,8 @@ class ClockManager:
             - 'sync_status': Single character sync status ('G', 'N', 'U', or 'E')
         """
 
+        logging_extra = {'process_name': 'Clock Manager'}
+
         parts = dt_line.split()
 
         if len(parts) < 2:
@@ -154,7 +159,8 @@ class ClockManager:
             try:
                 hours, minutes, seconds = map(int, time_part.split(':'))
             except ValueError:
-                raise ValueError(f"Unrecognized DT response format: {dt_line}")
+                self._logger.exception(f"Failed to parse hours, minutes, and seconds from DT response: {dt_line}", extra=logging_extra)
+                raise
 
             # Create timedelta for elapsed time
             elapsed = timedelta(hours=hours, minutes=minutes, seconds=seconds, milliseconds=milliseconds)
@@ -210,11 +216,14 @@ class ClockManager:
             - 'sync_status': Single character sync status ('G', 'N', 'U', or 'E')
         """
 
+        logging_extra = {'process_name': 'Clock Manager'}
+
         # Send DT command and get response
         try:
             lines = self._command_manager.send_command("DT")
         except Exception as e:
-            raise Exception(f"Error sending DT command: {e}")
+            self._logger.exception(f"Failed to send DT command.", extra=logging_extra)
+            raise
 
         if len(lines) != 1:
             raise ValueError(f"Unexpected number of lines in DT response: {len(lines)}")
@@ -226,7 +235,8 @@ class ClockManager:
         try:
             lines = self._command_manager.send_command("TZ")
         except Exception as e:
-            raise Exception(f"Error sending TZ command: {e}")
+            self._logger.exception(f"Failed to send TZ command.", extra=logging_extra)
+            raise
 
         if len(lines) != 2: # TODO is it always two lines or does it vary based on sync status?
             raise ValueError(f"Unexpected number of lines in TZ response: {len(lines)}")

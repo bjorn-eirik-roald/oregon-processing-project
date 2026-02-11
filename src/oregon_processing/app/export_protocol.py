@@ -1,4 +1,5 @@
 import sys
+import logging
 from contextlib import ExitStack
 from pathlib import Path
 from datetime import datetime
@@ -11,10 +12,17 @@ from oregon_processing.util.logging_manager import LoggingManager
 
 class ExportProtocol:
     def __enter__(self):
-        self._exit_stack = ExitStack()
+        try:
+            self._exit_stack = ExitStack()
 
-        self._session = self._exit_stack.enter_context(_ExportProtocolSession())
-        return self._session
+            self._session = self._exit_stack.enter_context(_ExportProtocolSession())
+            return self._session
+        except Exception:
+            # Create a temporary logger to capture initialization errors
+            logger = logging.getLogger('oregon_processing.export_protocol')
+            logger.exception("Failed to enter ExportProtocol context")
+            self._exit_stack.close()
+            raise
 
     def __exit__(self, exc_type, exc_value, traceback):
         self._exit_stack.__exit__(exc_type, exc_value, traceback)
@@ -33,6 +41,7 @@ class _ExportProtocolSession:
     def __enter__(self):
         self._exit_stack = ExitStack()
 
+        logging_extra = {'process_name': 'Export Protocol'}
         try:
             self._config_manager = self._exit_stack.enter_context(ConfigManager())
 
@@ -52,6 +61,7 @@ class _ExportProtocolSession:
                 # Update log directory to final location
                 self._logging_manager.set_log_directory(self._database_manager.export_logs_dir)
         except Exception:
+            self._logger.exception("Failed to initialize export protocol", extra=logging_extra)
             self._exit_stack.close()
             raise
         return self

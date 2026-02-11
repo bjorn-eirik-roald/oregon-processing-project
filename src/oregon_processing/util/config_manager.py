@@ -89,12 +89,15 @@ class ConfigManager:
         return Path(appdata) / self.APP_NAME
 
     def _load_and_validate(self):
+
+        logging_extra = {'process_name': 'Configuration'}
+
         try:
             with open(self._config_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
         except json.JSONDecodeError as e:
-            raise ValueError(f"Invalid JSON in config file: {e}")
-
+            self._logger.exception(f"Invalid JSON in config file.", extra=logging_extra)
+            raise
         # Validate required keys
         if not self.REQUIRED_KEYS.issubset(data.keys()):
             missing = self.REQUIRED_KEYS - data.keys()
@@ -120,12 +123,16 @@ class ConfigManager:
 
     def _load_without_validation(self):
         """Load config without validation. Used when reading existing config for setup purposes."""
+
+        logging_extra = {'process_name': 'Configuration'}
+
         try:
             with open(self._config_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
             self._config = data
         except json.JSONDecodeError as e:
-            raise ValueError(f"Invalid JSON in config file: {e}")
+            self._logger.exception(f"Invalid JSON in config file.", extra=logging_extra)
+            raise
 
     @classmethod
     def config_exists(cls) -> bool:
