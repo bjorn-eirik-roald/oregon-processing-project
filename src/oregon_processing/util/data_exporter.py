@@ -294,7 +294,7 @@ class DataExporter:
 
             counter = f"({date_num + 1}/{num_dates})"
             spacing = " " * (max_counter_width - len(counter))
-            message = f"{spacing}{counter} Exporting event log from {current_date}."
+            message = f"{spacing}Export {counter}. Exporting event log from {current_date}."
 
             try:
                 success = True
@@ -510,7 +510,7 @@ class DataExporter:
                 count_str = str(len(detection_records_by_date[current_date])).rjust(max_count_width)
                 unique_tags_str = str(len(unique_tags_by_date[current_date])).rjust(max_unique_tags_width)
 
-            self._logger.info(f"{spacing}{counter} Exporting data from {current_date}. Number of detection records: {count_str}. Unique tags: {unique_tags_str}.", extra=logging_extra)
+            self._logger.info(f"{spacing}Export {counter}. Exporting data from {current_date}. Number of detection records: {count_str}. Unique tags: {unique_tags_str}.", extra=logging_extra)
 
             with open(output_filepath, 'w') as f:
                 f.write("Oregon RFID Detection Records\n")

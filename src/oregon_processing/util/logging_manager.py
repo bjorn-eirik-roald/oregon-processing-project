@@ -62,11 +62,16 @@ class LoggingManager:
                 record.process_display = process
                 return super().format(record)
 
-        formatter = ProcessFormatter('%(levelname)s[%(process_display)s]: %(message)s')
+        # Console formatter (no timestamp)
+        console_formatter = ProcessFormatter('%(levelname)s[%(process_display)s]: %(message)s')
+
+        # File formatter (includes date and time)
+        file_formatter = ProcessFormatter('%(levelname)s[%(asctime)s][%(process_display)s]: %(message)s')
+        file_formatter.datefmt = '%Y-%m-%d %H:%M:%S'
 
         # Console handler
         self._console_handler = logging.StreamHandler(sys.stdout)
-        self._console_handler.setFormatter(formatter)
+        self._console_handler.setFormatter(console_formatter)
         self._console_handler.setLevel(logging.INFO)
 
         # File handler - only create if file_logging is enabled
@@ -85,7 +90,7 @@ class LoggingManager:
                 self._temp_log_paths.add(self._log_path)
 
             self._file_handler = logging.FileHandler(self._log_path, mode='a', encoding='utf-8')
-            self._file_handler.setFormatter(formatter)
+            self._file_handler.setFormatter(file_formatter)
             self._file_handler.setLevel(logging.DEBUG)
 
         # Configure logger
@@ -169,10 +174,19 @@ class LoggingManager:
         self._logger.removeHandler(self._file_handler)
         self._file_handler.close()
 
-        # Create and add new file handler
-        formatter = self._file_handler.formatter
+        # Create and add new file handler with proper file formatter
+        class ProcessFormatter(logging.Formatter):
+            def format(self, record):
+                # Use process_name from extra if provided, otherwise use logger name
+                process = getattr(record, 'process_name', record.name)
+                record.process_display = process
+                return super().format(record)
+
+        file_formatter = ProcessFormatter('%(asctime)s %(levelname)s[%(process_display)s]: %(message)s')
+        file_formatter.datefmt = '%Y-%m-%d %H:%M:%S'
+
         self._file_handler = logging.FileHandler(new_log_path, mode='a', encoding='utf-8')
-        self._file_handler.setFormatter(formatter)
+        self._file_handler.setFormatter(file_formatter)
         self._file_handler.setLevel(logging.DEBUG)
         self._logger.addHandler(self._file_handler)
 
@@ -204,6 +218,10 @@ class LoggingManager:
 
     def _cleanup_logging(self):
         """Clean up logging handlers and temporary log files."""
+
+        logging_extra = {'process_name': 'Logging Cleanup'}
+        self._logger.info("Cleaning up logging handlers and temporary log files.", extra=logging_extra)
+
         if self._logger:
             if self._console_handler:
                 self._logger.removeHandler(self._console_handler)

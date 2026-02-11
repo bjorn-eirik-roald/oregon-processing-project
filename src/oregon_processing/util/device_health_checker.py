@@ -13,7 +13,7 @@ import logging
 class DeviceHealthChecker:
     """Manages system health checks for Oregon RFID device."""
 
-    CRITICAL_VOLTAGE_THRESHOLD = 13.0  # volts
+    CRITICAL_VOLTAGE_THRESHOLD = 10.0  # volts #TODO Set appropriate threshold
 
     def __init__(self, communicator):
         """

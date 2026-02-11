@@ -17,7 +17,7 @@ class DatabaseManager:
     EXPORT_DATA_DIR_NAME = "02_export_data"
     DETECTION_RECORDS_DIR_NAME = "01_detection_records"
     EVENT_RECORDS_DIR_NAME = "02_event_records"
-    CRASH_LOGS_DIR_NAME = "00_crash_logs"
+    CRASH_LOGS_DIR_NAME = "00_undefined_serial_number_crashes"
 
     DEFAULT_FIRST_DATE = date(2018, 1, 1)
 
@@ -131,7 +131,7 @@ class DatabaseManager:
 
         # Add serial number subdirectory to export logs, detection records, and event records
         self._export_logs_dir = self._export_logs_base_dir / serial_number
-        self._crash_logs_dir = self._export_logs_base_dir / "00_undefined_serial_crashes"
+        self._crash_logs_dir = self._export_logs_base_dir / self.CRASH_LOGS_DIR_NAME
         self._detection_records_dir = self._export_data_dir / self.DETECTION_RECORDS_DIR_NAME / serial_number
         self._event_records_dir = self._export_data_dir / self.EVENT_RECORDS_DIR_NAME / serial_number
 
