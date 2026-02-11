@@ -86,14 +86,12 @@ class DeviceModeManager:
 
         current_mode = self._get_current_mode()
         if current_mode != mode_name:
-            self._logger.info(f"Device is currently in '{current_mode}' mode.", extra=logging_extra)
-            self._logger.info(f"Sending {command} command to device.", extra=logging_extra)
+            self._logger.info(f"Changing device mode from '{current_mode}' to '{mode_name}' (sending {command} command).", extra=logging_extra)
             self._command_manager.send_command(command)
-            self._logger.info("Verifying device mode.", extra=logging_extra)
             if self._get_current_mode() == mode_name:
-                self._logger.info(f"Device is now in '{mode_name}' mode.", extra=logging_extra)
+                self._logger.info(f"Device mode change successful.", extra=logging_extra)
             else:
-                self._logger.error(f"FAILED! Device is still in '{self._get_current_mode()}' mode.", extra=logging_extra)
+                self._logger.error(f"Device mode change failed! Device is still in '{self._get_current_mode()}' mode.", extra=logging_extra)
                 return False
 
         return True

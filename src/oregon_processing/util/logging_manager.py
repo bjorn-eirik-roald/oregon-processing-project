@@ -42,6 +42,10 @@ class LoggingManager:
         self._is_temp = temp  # Track whether current log file is temporary
         self._file_logging = file_logging  # Track whether file logging is enabled
         self._temp_log_paths = set()  # Track all temporary log files for cleanup
+        self._console_formatter = None  # Will be initialized in _setup_logging
+        self._file_formatter = None  # Will be initialized in _setup_logging
+        self._console_formatter = None  # Will be initialized in _setup_logging
+        self._file_formatter = None  # Will be initialized in _setup_logging
 
     def __enter__(self):
         """Enter context manager."""
@@ -63,15 +67,15 @@ class LoggingManager:
                 return super().format(record)
 
         # Console formatter (no timestamp)
-        console_formatter = ProcessFormatter('%(levelname)s[%(process_display)s]: %(message)s')
+        self._console_formatter = ProcessFormatter('%(levelname)s[%(process_display)s]: %(message)s')
 
         # File formatter (includes date and time)
-        file_formatter = ProcessFormatter('%(levelname)s[%(asctime)s][%(process_display)s]: %(message)s')
-        file_formatter.datefmt = '%Y-%m-%d %H:%M:%S'
+        self._file_formatter = ProcessFormatter('%(levelname)s[%(asctime)s][%(process_display)s]: %(message)s')
+        self._file_formatter.datefmt = '%Y-%m-%d %H:%M:%S'
 
         # Console handler
         self._console_handler = logging.StreamHandler(sys.stdout)
-        self._console_handler.setFormatter(console_formatter)
+        self._console_handler.setFormatter(self._console_formatter)
         self._console_handler.setLevel(logging.INFO)
 
         # File handler - only create if file_logging is enabled
@@ -90,7 +94,7 @@ class LoggingManager:
                 self._temp_log_paths.add(self._log_path)
 
             self._file_handler = logging.FileHandler(self._log_path, mode='a', encoding='utf-8')
-            self._file_handler.setFormatter(file_formatter)
+            self._file_handler.setFormatter(self._file_formatter)
             self._file_handler.setLevel(logging.DEBUG)
 
         # Configure logger
@@ -174,23 +178,11 @@ class LoggingManager:
         self._logger.removeHandler(self._file_handler)
         self._file_handler.close()
 
-        # Create and add new file handler with proper file formatter
-        class ProcessFormatter(logging.Formatter):
-            def format(self, record):
-                # Use process_name from extra if provided, otherwise use logger name
-                process = getattr(record, 'process_name', record.name)
-                record.process_display = process
-                return super().format(record)
-
-        file_formatter = ProcessFormatter('%(asctime)s %(levelname)s[%(process_display)s]: %(message)s')
-        file_formatter.datefmt = '%Y-%m-%d %H:%M:%S'
-
+        # Create and add new file handler with stored formatter
         self._file_handler = logging.FileHandler(new_log_path, mode='a', encoding='utf-8')
-        self._file_handler.setFormatter(file_formatter)
+        self._file_handler.setFormatter(self._file_formatter)
         self._file_handler.setLevel(logging.DEBUG)
         self._logger.addHandler(self._file_handler)
-
-        self._log_dir = log_dir
 
         # Track new temp file if applicable
         if temp:
@@ -218,10 +210,6 @@ class LoggingManager:
 
     def _cleanup_logging(self):
         """Clean up logging handlers and temporary log files."""
-
-        logging_extra = {'process_name': 'Logging Cleanup'}
-        self._logger.info("Cleaning up logging handlers and temporary log files.", extra=logging_extra)
-
         if self._logger:
             if self._console_handler:
                 self._logger.removeHandler(self._console_handler)
@@ -230,7 +218,8 @@ class LoggingManager:
                 self._logger.removeHandler(self._file_handler)
                 self._file_handler.close()
 
-        # Clean up all temporary files that were ever created
+        # Clean up temporary files that were replaced/transitioned
+        # Keep the current log file as a crash log if it was never moved to final location
         for temp_path in self._temp_log_paths:
-            if temp_path.exists():
+            if temp_path.exists() and temp_path != self._log_path:
                 temp_path.unlink()

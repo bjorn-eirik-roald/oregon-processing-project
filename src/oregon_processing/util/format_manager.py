@@ -4,6 +4,7 @@ Format Manager for Oregon RFID device record format operations
 """
 
 import logging
+from statistics import mode
 
 
 class FormatManager:
@@ -89,17 +90,16 @@ class FormatManager:
         if not self._communicator.is_connected:
             raise ConnectionError("Not connected to device.")
 
-        mode = self._communicator.mode
-        mode_changed = False
+        old_mode = None
 
-        if mode.lower() != 'standby':
+        if self._communicator.mode.lower() != 'standby':
+            old_mode = self._communicator.mode
             self._communicator.change_mode('Standby')
-            mode_changed = True
 
         response_lines = self._command_manager.send_command("FM")
 
-        if mode_changed:
-            self._communicator.change_mode(mode)
+        if old_mode:
+            self._communicator.change_mode(old_mode)
 
         if len(response_lines) != 1:
             raise ValueError(f"Unexpected number of lines in FM response: {len(response_lines)}")

@@ -11,6 +11,11 @@ from oregon_processing.util.logging_manager import LoggingManager
 
 
 class ExportProtocol:
+
+    def __init__(self):
+        self._exit_stack = None
+        self._session = None
+
     def __enter__(self):
         try:
             self._exit_stack = ExitStack()
@@ -21,7 +26,8 @@ class ExportProtocol:
             # Create a temporary logger to capture initialization errors
             logger = logging.getLogger('oregon_processing.export_protocol')
             logger.exception("Failed to enter ExportProtocol context")
-            self._exit_stack.close()
+            if self._exit_stack:
+                self._exit_stack.close()
             raise
 
     def __exit__(self, exc_type, exc_value, traceback):

@@ -29,10 +29,14 @@ from oregon_processing.util.device_health_checker import DeviceHealthChecker
 
 
 class OregonCommunicator:
+    def __init__(self):
+        self._logger = None
+        self._session = None
+
     def __enter__(self):
 
         logging_extra = {'process_name': 'Oregon Communicator'}
-
+        self._logger = logging.getLogger('oregon_processing.oregon_communicator')
         try:
             self._exit_stack = ExitStack()
 
@@ -109,7 +113,6 @@ class _OregonCommunicatorSession:
 
     def __enter__(self):
         """Allow use in 'with' statement."""
-
         logging_extra = {'process_name': 'Oregon Communicator'}
 
         self._exit_stack = ExitStack()
@@ -437,16 +440,15 @@ class _OregonCommunicatorSession:
             Parsed upload history with upload records and metadata.
         """
 
-        mode = self.mode
-        mode_changed = False
-        if mode != 'Standby':
+        old_mode = None
+        if self.mode.lower() != 'standby':
+            old_mode = self.mode
             self.change_mode('Standby')
-            mode_changed = True
 
         upload_history_lines = self._command_manager.send_command("UH")
 
-        if mode_changed:
-            self.change_mode(mode)
+        if old_mode:
+            self.change_mode(old_mode)
 
         history = {
             'reader_name': None,
