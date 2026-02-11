@@ -131,7 +131,7 @@ class DatabaseManager:
 
         # Add serial number subdirectory to export logs, detection records, and event records
         self._export_logs_dir = self._export_logs_base_dir / serial_number
-        self._crash_logs_dir = self._export_logs_base_dir / "undefined"
+        self._crash_logs_dir = self._export_logs_base_dir / "00_undefined_serial_crashes"
         self._detection_records_dir = self._export_data_dir / self.DETECTION_RECORDS_DIR_NAME / serial_number
         self._event_records_dir = self._export_data_dir / self.EVENT_RECORDS_DIR_NAME / serial_number
 
