@@ -61,12 +61,12 @@ class _OregonCommunicatorSession:
 
         self._exit_stack = None
 
-        self._command_manager = None
-        self._mode_manager = None
-        self._clock_manager = None
-        self._format_manager = None
-        self._data_exporter = None
-        self._health_manager = None
+        self._command_manager: CommandManager = None
+        self._mode_manager: DeviceModeManager = None
+        self._clock_manager: ClockManager = None
+        self._format_manager: FormatManager = None
+        self._data_exporter: DataExporter = None
+        self._health_manager: DeviceHealthChecker = None
 
         self._last_upload_date = None
         self._reader_name = None
@@ -108,8 +108,13 @@ class _OregonCommunicatorSession:
         """Get the current operating mode from the system status."""
         if self._mode_manager:
             return self._mode_manager._get_current_mode()
-        status = self.get_system_status()
-        return status['mode']
+        return None
+
+    @property
+    def prompt_signature(self):
+        if self._command_manager:
+            return self._command_manager.prompt_signature
+        return None
 
     def __enter__(self):
         """Allow use in 'with' statement."""

@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from oregon_processing.util.oregon_communicator import OregonCommunicator
     from oregon_processing.util.format_manager import FormatManager
     from oregon_processing.util.command_manager import CommandManager
+    from oregon_processing.util.database_manager import DatabaseManager
 
 
 class DataExporter:
@@ -277,7 +278,7 @@ class DataExporter:
         # Header
         self._logger.info("Initializing Event Record Export", extra=logging_extra)
         self._logger.info(f"Dates to export: {len(dates)} date(s)", extra=logging_extra)
-        self._logger.info(f"Output directory: {output_dir}", extra=logging_extra)
+        self._logger.debug(f"Output directory: {output_dir}", extra=logging_extra)
 
         # Prepare ranges and formatting
         num_dates = len(dates)
@@ -396,7 +397,7 @@ class DataExporter:
         self._logger.info("Initializing Detection Records Export", extra=logging_extra)
         self._logger.info(f"Dates to export: {len(dates)} date(s)", extra=logging_extra)
         self._logger.info(f"Total records on device: {total_number_of_records}", extra=logging_extra)
-        self._logger.info(f"Output directory: {output_dir}", extra=logging_extra)
+        self._logger.debug(f"Output directory: {output_dir}", extra=logging_extra)
         self._logger.info("Setting detection record format to default for export.", extra=logging_extra)
 
         default_format = self.DEFAULT_DETECTION_RECORD_FORMAT[self._communicator.device_type]

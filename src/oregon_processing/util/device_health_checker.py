@@ -8,14 +8,20 @@ and other system parameters.
 
 import logging
 
+#import Oregon Communicator in type checking block to avoid circular import issues
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from oregon_processing.util.oregon_communicator import OregonCommunicator
+
 
 
 class DeviceHealthChecker:
     """Manages system health checks for Oregon RFID device."""
 
-    CRITICAL_VOLTAGE_THRESHOLD = 10.0  # volts #TODO Set appropriate threshold
+    RECOMMENDED_VOLTAGE = 14.0
+    CRITICAL_VOLTAGE_THRESHOLD = 12.5
 
-    def __init__(self, communicator):
+    def __init__(self, communicator: "OregonCommunicator"):
         """
         Initialize DeviceHealthChecker.
 
@@ -50,30 +56,56 @@ class DeviceHealthChecker:
         self._logger.info("Initializing health check of Oregon RFID device.", extra=logging_extra)
         self._logger.info("Retrieving System Status.", extra=logging_extra)
 
-        warnings = []
+        critical_warnings = []
+        non_critical_warnings = []
         parsed_status = self._communicator.get_system_status()
+        prompt_signature = self._communicator.prompt_signature
 
+        if prompt_signature[2] != 'G':
+            non_critical_warnings.append(
+                f"Device time is not synchronized to GNSS signals (current state: '{prompt_signature[2]}')"
+            )
 
         # Check supply voltage
         if parsed_status['supply_voltage']:
             try:
                 voltage = float(parsed_status['supply_voltage'])
+                if voltage < self.RECOMMENDED_VOLTAGE:
+                    non_critical_warnings.append(
+                        f"Low supply voltage: {voltage}V (recommended to be >= {self.RECOMMENDED_VOLTAGE}V)"
+                    )
+
                 if voltage < self.CRITICAL_VOLTAGE_THRESHOLD:
-                    warnings.append(f"Low supply voltage: {voltage}V (should be >= {self.CRITICAL_VOLTAGE_THRESHOLD}V)")
+                    critical_warnings.append(
+                        f"Critical low supply voltage: {voltage}V (must be >= {self.CRITICAL_VOLTAGE_THRESHOLD}V)"
+                    )
+
             except (ValueError, TypeError):
-                warnings.append(f"Could not parse supply voltage: {parsed_status['supply_voltage']}")
+                non_critical_warnings.append(
+                    f"Could not parse supply voltage: {parsed_status['supply_voltage']}"
+                )
+
 
         health_report = {
-            'healthy': len(warnings) == 0,
-            'warnings': warnings
+            'healthy': len(critical_warnings) == 0 and len(non_critical_warnings) == 0,
+            'critical_warnings': critical_warnings,
+            'warnings': non_critical_warnings
         }
 
         # Report health status
         if not health_report['healthy']:
-            warning_message = f"{len(health_report['warnings'])} issue(s) detected during health check."
+            total_issues = len(critical_warnings) + len(non_critical_warnings)
+            warning_message = f"{total_issues} issue(s) detected during health check."
 
-            for warning in health_report['warnings']:
-                warning_message += f"\n  - {warning}"
+            if critical_warnings:
+                warning_message += "\n  Critical:"
+                for warning in critical_warnings:
+                    warning_message += f"\n    - {warning}"
+
+            if non_critical_warnings:
+                warning_message += "\n  Non-critical:"
+                for warning in non_critical_warnings:
+                    warning_message += f"\n    - {warning}"
 
             self._logger.warning(warning_message, extra=logging_extra)
 

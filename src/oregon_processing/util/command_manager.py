@@ -178,6 +178,7 @@ class CommandManager:
             'G' : Synchronized to GNSS signals
             'N' : Synchronized to network signal
             'U' : Unsynchronized
+            'E' : Elapsed time (no absolute timestamp)
 
         Character 4 = Beeper state:
             'B' : Beeper enabled
@@ -222,7 +223,7 @@ class CommandManager:
         valid_sets = (
             {'0', 'H', 'N'},  # operating mode
             {'R', 'S', 'Z'},  # run state
-            {'G', 'N', 'U', 'E'},  # time sync (E = elapsed)
+            {'G', 'N', 'U', 'E'}, # time sync state
             {'B', '*'}       # beeper
         )
 

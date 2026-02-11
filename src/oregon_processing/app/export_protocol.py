@@ -93,8 +93,8 @@ class _ExportProtocolSession:
             return
 
         health_report = self._communicator.check_device_health()
-        if not health_report['healthy']:
-            message = "Device health check failed. Please address the following issues before proceeding: \n  -" + "\n  -".join(health_report.get('warnings', []))
+        if len(health_report['critical_warnings']) > 0:
+            message = "Device health check failed. Please address the following critical issues before proceeding: \n  -" + "\n  -".join(health_report.get('critical_warnings', []))
             self._logger.error(message, extra=logging_extra)
             return
 

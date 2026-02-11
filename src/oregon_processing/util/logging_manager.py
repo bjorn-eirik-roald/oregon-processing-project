@@ -5,6 +5,7 @@ Logging Manager for Oregon RFID processing
 
 import sys
 import logging
+import logging.handlers
 from pathlib import Path
 from datetime import datetime
 
@@ -38,12 +39,11 @@ class LoggingManager:
         self._log_path = None
         self._file_handler = None
         self._console_handler = None
+        self._memory_handler = None
         self._logger = None
         self._is_temp = temp  # Track whether current log file is temporary
         self._file_logging = file_logging  # Track whether file logging is enabled
         self._temp_log_paths = set()  # Track all temporary log files for cleanup
-        self._console_formatter = None  # Will be initialized in _setup_logging
-        self._file_formatter = None  # Will be initialized in _setup_logging
         self._console_formatter = None  # Will be initialized in _setup_logging
         self._file_formatter = None  # Will be initialized in _setup_logging
 
@@ -73,6 +73,10 @@ class LoggingManager:
         self._file_formatter = ProcessFormatter('%(levelname)s[%(asctime)s][%(process_display)s]: %(message)s')
         self._file_formatter.datefmt = '%Y-%m-%d %H:%M:%S'
 
+        # Memory handler (stores WARNING and higher level logs)
+        self._memory_handler = logging.handlers.MemoryHandler(capacity=1000, target=None, flushLevel=logging.CRITICAL + 1)
+        self._memory_handler.setLevel(logging.WARNING)
+
         # Console handler
         self._console_handler = logging.StreamHandler(sys.stdout)
         self._console_handler.setFormatter(self._console_formatter)
@@ -101,6 +105,7 @@ class LoggingManager:
         self._logger = logging.getLogger('oregon_processing')
         self._logger.setLevel(logging.DEBUG)
         self._logger.addHandler(self._console_handler)
+        self._logger.addHandler(self._memory_handler)
         if self._file_logging and self._file_handler:
             self._logger.addHandler(self._file_handler)
 
@@ -210,10 +215,48 @@ class LoggingManager:
 
     def _cleanup_logging(self):
         """Clean up logging handlers and temporary log files."""
+        # Display recap of warnings and errors before closing
+        if self._memory_handler:
+            if self._memory_handler.buffer:
+                recap_lines = []
+                recap_lines.append("LOG RECAP - Warnings and Errors")
+
+                # Sort records by level (WARNING < ERROR < CRITICAL)
+                sorted_records = sorted(self._memory_handler.buffer, key=lambda r: r.levelno)
+
+                for record in sorted_records:
+                    level_name = record.levelname
+                    process_name = getattr(record, 'process_name', record.name)
+                    timestamp = datetime.fromtimestamp(record.created).strftime('%Y-%m-%d %H:%M:%S')
+                    message = record.getMessage()
+
+                    # Format the message with level info and indent all lines
+                    formatted_message = f"{level_name}[{timestamp}][{process_name}]: {message}"
+                    lines = formatted_message.split("\n")
+                    indented_message = f"  • {lines[0]}"
+                    if len(lines) > 1:
+                        indented_message += "\n" + "\n".join(f"    {line}" for line in lines[1:])
+                    recap_lines.append(indented_message)
+
+                recap_text = "\n".join(recap_lines)
+
+                # Log to both file and console via logger
+                if self._logger:
+                    self._logger.info(recap_text, extra={'process_name': 'Logging Manager'})
+            else:
+                # No warnings or errors
+                recap_message = "LOG RECAP - No warnings or errors detected."
+
+                # Log to both file and console via logger
+                if self._logger:
+                    self._logger.info(recap_message, extra={'process_name': 'Logging Manager'})
+
         if self._logger:
             if self._console_handler:
                 self._logger.removeHandler(self._console_handler)
                 self._console_handler.close()
+            if self._memory_handler:
+                self._logger.removeHandler(self._memory_handler)
             if self._file_handler:
                 self._logger.removeHandler(self._file_handler)
                 self._file_handler.close()
