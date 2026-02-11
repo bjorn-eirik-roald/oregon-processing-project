@@ -39,7 +39,7 @@ class _ExportProtocolSession:
             # Set up logging with crash logs directory
             crash_logs_dir = DatabaseManager.prepare_crash_logs_dir(self._config_manager)
             self._logging_manager = self._exit_stack.enter_context(
-                LoggingManager("export_protocol", log_dir=crash_logs_dir)
+                LoggingManager(log_name="export_protocol", log_dir=crash_logs_dir)
             )
             self.logger = self._logging_manager.get_logger('export_protocol')
 

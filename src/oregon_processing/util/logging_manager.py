@@ -12,7 +12,7 @@ from datetime import datetime
 class LoggingManager:
     """Manages logging configuration with console and file output."""
 
-    def __init__(self, log_name: str, log_dir: Path = None):
+    def __init__(self, log_name: str, log_dir: Path = None, temp: bool = False):
         """
         Initialize the LoggingManager.
 
@@ -22,14 +22,20 @@ class LoggingManager:
             Name for the log file (without extension)
         log_dir : Path, optional
             Directory where log files will be written. If None, uses a temporary location
-            until set_log_directory is called.
+            in the current working directory until set_log_directory is called.
+        temp : bool, optional
+            If True, marks the current log location as temporary and schedules it for
+            cleanup on exit. Default is False. Note: if log_dir is None, the log is
+            always treated as temporary regardless of this parameter.
         """
         self._log_name = log_name
         self._log_dir = log_dir
+        self._log_path = None
         self._file_handler = None
         self._console_handler = None
         self._logger = None
-        self._temp_log_path = None
+        self._is_temp = temp  # Track whether current log file is temporary
+        self._temp_log_paths = set()  # Track all temporary log files for cleanup
 
     def __enter__(self):
         """Enter context manager."""
@@ -57,15 +63,20 @@ class LoggingManager:
         self._console_handler.setFormatter(formatter)
         self._console_handler.setLevel(logging.INFO)
 
-        # File handler
+        # File handler - if log_dir is provided, use it; otherwise, use a temp file
         if self._log_dir:
-            log_path = self._get_log_path(self._log_dir)
+            self._log_path = self._get_log_path(self._log_dir)
         else:
-            # Use temporary location
-            self._temp_log_path = Path.cwd() / f"{self._log_name}_temp.log"
-            log_path = self._temp_log_path
+            # Use temporary location in current working directory
+            self._log_path = self._get_log_path(Path.cwd())
+            # Override: if no log_dir provided, file is always temporary
+            self._is_temp = True
 
-        self._file_handler = logging.FileHandler(log_path, mode='a', encoding='utf-8')
+        # Track temporary files for cleanup
+        if self._is_temp:
+            self._temp_log_paths.add(self._log_path)
+
+        self._file_handler = logging.FileHandler(self._log_path, mode='a', encoding='utf-8')
         self._file_handler.setFormatter(formatter)
         self._file_handler.setLevel(logging.DEBUG)
 
@@ -99,33 +110,48 @@ class LoggingManager:
         log_filename = f"{self._log_name}_{timestamp}.log"
         return log_dir / log_filename
 
-    def set_log_directory(self, log_dir: Path):
+    def set_log_directory(self, log_dir: Path, temp: bool = False):
         """
-        Set or update the log directory, moving from temp location if needed.
+        Set or update the log directory, moving the current log file if needed.
+
+        Transitions the log file from its current location to a new directory,
+        preserving all logged content. Supports moving from temporary locations
+        to permanent ones or between any two locations.
 
         Parameters
         ----------
         log_dir : Path
-            New directory for log files
+            New directory for log files. Can be a string or Path object.
+        temp : bool, optional
+            If True, marks the new log file as temporary for cleanup on exit.
+            Default is False.
         """
         if not self._file_handler:
             return
 
-        # Create new file handler with final location
-        new_log_path = self._get_log_path(log_dir)
+        if isinstance(log_dir, str):
+            log_dir = Path(log_dir)
+        log_dir.mkdir(parents=True, exist_ok=True)
 
-        # If we were using a temp file, copy its contents
-        if self._temp_log_path and self._temp_log_path.exists():
-            with open(self._temp_log_path, 'r', encoding='utf-8') as temp_file:
-                temp_contents = temp_file.read()
+        # Create new log path - reuse old filename if exists, otherwise generate new
+        if self._log_path and self._log_path.exists():
+            new_log_path = log_dir / self._log_path.name
+        else:
+            new_log_path = self._get_log_path(log_dir)
 
-            # Write temp contents to new file
+        # Copy contents from old file if it exists
+        if self._log_path and self._log_path.exists():
+            with open(self._log_path, 'r', encoding='utf-8') as old_file:
+                old_contents = old_file.read()
+
             with open(new_log_path, 'a', encoding='utf-8') as new_file:
-                new_file.write(temp_contents)
+                new_file.write(old_contents)
 
-            # Remove old temp file
-            self._temp_log_path.unlink()
-            self._temp_log_path = None
+            # If old file was marked as temporary, schedule it for cleanup
+            if self._is_temp:
+                self._temp_log_paths.add(self._log_path)
+
+        self._log_path = new_log_path
 
         # Remove old file handler
         self._logger.removeHandler(self._file_handler)
@@ -139,6 +165,12 @@ class LoggingManager:
         self._logger.addHandler(self._file_handler)
 
         self._log_dir = log_dir
+
+        # Track new temp file if applicable
+        if temp:
+            self._temp_log_paths.add(new_log_path)
+
+        self._is_temp = temp  # Update temp status based on new location
 
     def get_logger(self, name: str = None) -> logging.Logger:
         """
@@ -159,7 +191,7 @@ class LoggingManager:
         return self._logger
 
     def _cleanup_logging(self):
-        """Clean up logging handlers."""
+        """Clean up logging handlers and temporary log files."""
         if self._logger:
             if self._console_handler:
                 self._logger.removeHandler(self._console_handler)
@@ -168,6 +200,7 @@ class LoggingManager:
                 self._logger.removeHandler(self._file_handler)
                 self._file_handler.close()
 
-        # Clean up temp file if it still exists
-        if self._temp_log_path and self._temp_log_path.exists():
-            self._temp_log_path.unlink()
+        # Clean up all temporary files that were ever created
+        for temp_path in self._temp_log_paths:
+            if temp_path.exists():
+                temp_path.unlink()
