@@ -25,7 +25,7 @@ class DeviceHealthChecker:
             OregonCommunicator instance for device communication.
         """
         self._communicator = communicator
-        self.logger = logging.getLogger('oregon_processing.device_health_checker')
+        self._logger = logging.getLogger('oregon_processing.device_health_checker')
 
     def __enter__(self):
         """Enter context manager."""
@@ -47,8 +47,8 @@ class DeviceHealthChecker:
 
         logging_extra = {'process_name': 'Health Check'}
 
-        self.logger.info("Initializing health check of Oregon RFID device.", extra=logging_extra)
-        self.logger.info("Retrieving System Status.", extra=logging_extra)
+        self._logger.info("Initializing health check of Oregon RFID device.", extra=logging_extra)
+        self._logger.info("Retrieving System Status.", extra=logging_extra)
 
         warnings = []
         parsed_status = self._communicator.get_system_status()
@@ -75,9 +75,9 @@ class DeviceHealthChecker:
             for warning in health_report['warnings']:
                 warning_message += f"\n  - {warning}"
 
-            self.logger.warning(warning_message, extra=logging_extra)
+            self._logger.warning(warning_message, extra=logging_extra)
 
         else:
-            self.logger.info("All parameters within normal range", extra=logging_extra)
+            self._logger.info("All parameters within normal range", extra=logging_extra)
 
         return health_report

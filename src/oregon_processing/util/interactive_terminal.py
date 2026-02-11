@@ -30,7 +30,7 @@ class InteractiveTerminal:
         """
         self._communicator = communicator
         self._command_manager = command_manager
-        self.logger = logging.getLogger('oregon_processing.interactive_terminal')
+        self._logger = logging.getLogger('oregon_processing.interactive_terminal')
 
     def __enter__(self):
         """Enter context manager."""
@@ -49,7 +49,7 @@ class InteractiveTerminal:
         """
         logging_extra = {'process_name': 'Interactive Terminal'}
 
-        self.logger.info("\nEntering interactive terminal. Type 'exit' to quit.", extra=logging_extra)
+        self._logger.info("Entering interactive terminal. Type 'exit' to quit.", extra=logging_extra)
 
         try:
             while True:
@@ -60,21 +60,21 @@ class InteractiveTerminal:
 
                 # Exit on 'exit' or 'quit'
                 if cmd.lower() in ("exit", "quit"):
-                    self.logger.info("Exiting terminal.", extra=logging_extra)
+                    self._logger.info("Exiting terminal.", extra=logging_extra)
                     break
 
                 # Validate command format
                 if not self._communicator._command_manager.validate_command(cmd):
-                    self.logger.warning("Invalid command. Use a two-letter code followed by a space (e.g., 'SY ').", extra=logging_extra)
-                    self.logger.info(f"Valid codes: {sorted(self._communicator._command_manager.VALID_MAIN_COMMANDS)}", extra=logging_extra)
+                    self._logger.warning("Invalid command. Use a two-letter code followed by a space (e.g., 'SY ').", extra=logging_extra)
+                    self._logger.info(f"Valid codes: {sorted(self._communicator._command_manager.VALID_MAIN_COMMANDS)}", extra=logging_extra)
                     continue
 
                 # send command and get cleaned response
                 lines = self._command_manager.send_command(cmd)
                 if lines:
-                    self.logger.info("\n".join(lines), extra=logging_extra)
+                    self._logger.info("\n".join(lines), extra=logging_extra)
                 else:
-                    self.logger.info("Command received without error", extra=logging_extra)
+                    self._logger.info("Command received without error", extra=logging_extra)
 
         except KeyboardInterrupt:
-            self.logger.info("\nTerminal interrupted by user.", extra=logging_extra)
+            self._logger.info("Terminal interrupted by user.", extra=logging_extra)

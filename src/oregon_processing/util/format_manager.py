@@ -57,7 +57,7 @@ class FormatManager:
         self._command_manager = command_manager
         self._detection_record_format = None
         self._startup_format = None
-        self.logger = logging.getLogger('oregon_processing.format_manager')
+        self._logger = logging.getLogger('oregon_processing.format_manager')
 
         # Store startup format when initialized
         if self._communicator.is_connected:
@@ -115,7 +115,7 @@ class FormatManager:
 
         if any(col not in self.FIELD_NAMES for col in columns):
             unknown_cols = [col for col in columns if col not in self.FIELD_NAMES]
-            self.logger.warning(f"WARNING: Unknown columns in detection record format: {unknown_cols}", extra=logging_extra)
+            self._logger.warning(f"WARNING: Unknown columns in detection record format: {unknown_cols}", extra=logging_extra)
 
         field_names = {col: self.FIELD_NAMES.get(col, "Unknown") for col in columns}
 
@@ -143,7 +143,7 @@ class FormatManager:
         logging_extra = {'process_name': 'Format Manager'}
 
         if not self._communicator.is_connected:
-            self.logger.error("Not connected to device.", extra=logging_extra)
+            self._logger.error("Not connected to device.", extra=logging_extra)
             return False
 
         try:
@@ -156,11 +156,11 @@ class FormatManager:
             if self._detection_record_format['columns_raw'] == format_string:
                 return True
             else:
-                self.logger.warning(f"WARNING: Format mismatch. Expected '{format_string}', got '{self._detection_record_format['columns_raw']}'", extra=logging_extra)
+                self._logger.warning(f"WARNING: Format mismatch. Expected '{format_string}', got '{self._detection_record_format['columns_raw']}'", extra=logging_extra)
                 return False
 
         except Exception as e:
-            self.logger.error(f"Error setting detection record format: {e}", extra=logging_extra)
+            self._logger.error(f"Error setting detection record format: {e}", extra=logging_extra)
             return False
 
     def _restore_startup_format(self) -> bool:
@@ -190,9 +190,9 @@ class FormatManager:
 
         success = self.set_detection_record_format(self._startup_format['columns_raw'])
         if not success:
-            self.logger.warning("WARNING: Failed to restore original detection record format.", extra=logging_extra)
+            self._logger.warning("WARNING: Failed to restore original detection record format.", extra=logging_extra)
         else:
-            self.logger.info("Original detection record format restored.", extra=logging_extra)
+            self._logger.info("Original detection record format restored.", extra=logging_extra)
 
 
         # Format has changed - restore to startup format using set_detection_record_format

@@ -30,7 +30,7 @@ class DeviceModeManager:
         self._communicator = communicator
         self._command_manager = command_manager
         self._startup_mode = None
-        self.logger = logging.getLogger('oregon_processing.device_mode_manager')
+        self._logger = logging.getLogger('oregon_processing.device_mode_manager')
 
     def __enter__(self):
         """Enter context manager."""
@@ -75,25 +75,25 @@ class DeviceModeManager:
         }
 
         if mode_name not in mode_commands:
-            self.logger.error(f"Invalid mode: {mode_name}. Valid modes are: Standby, Run, Sleep", extra=logging_extra)
+            self._logger.error(f"Invalid mode: {mode_name}. Valid modes are: Standby, Run, Sleep", extra=logging_extra)
             return False
 
         if not self._communicator._connection:
-            self.logger.error("Not connected to device.", extra=logging_extra)
+            self._logger.error("Not connected to device.", extra=logging_extra)
             return False
 
         command = mode_commands[mode_name]
 
         current_mode = self._get_current_mode()
         if current_mode != mode_name:
-            self.logger.info(f"\nDevice is currently in '{current_mode}' mode.", extra=logging_extra)
-            self.logger.info(f"\nSending {command} command to device.", extra=logging_extra)
+            self._logger.info(f"Device is currently in '{current_mode}' mode.", extra=logging_extra)
+            self._logger.info(f"Sending {command} command to device.", extra=logging_extra)
             self._command_manager.send_command(command)
-            self.logger.info("Verifying device mode.", extra=logging_extra)
+            self._logger.info("Verifying device mode.", extra=logging_extra)
             if self._get_current_mode() == mode_name:
-                self.logger.info(f" SUCCESS! Device is now in '{mode_name}' mode.", extra=logging_extra)
+                self._logger.info(f"Device is now in '{mode_name}' mode.", extra=logging_extra)
             else:
-                self.logger.error(f" FAILED! Device is still in '{self._get_current_mode()}' mode.", extra=logging_extra)
+                self._logger.error(f"FAILED! Device is still in '{self._get_current_mode()}' mode.", extra=logging_extra)
                 return False
 
         return True
@@ -119,7 +119,7 @@ class DeviceModeManager:
         target_mode = mode_map.get(startup_mode_lower)
 
         if target_mode is None:
-            self.logger.warning("WARNING: Unknown start-up mode. Reader has been set to Sleep mode to be safe.", extra=logging_extra)
+            self._logger.warning("WARNING: Unknown start-up mode. Reader has been set to Sleep mode to be safe.", extra=logging_extra)
             target_mode = 'Sleep'
 
         self.change_mode(target_mode)

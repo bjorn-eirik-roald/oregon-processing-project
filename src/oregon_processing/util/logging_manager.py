@@ -12,7 +12,7 @@ from datetime import datetime
 class LoggingManager:
     """Manages logging configuration with console and file output."""
 
-    def __init__(self, log_name: str, log_dir: Path = None, temp: bool = False):
+    def __init__(self, log_name: str, log_dir: Path = None, temp: bool = False, file_logging: bool = True):
         """
         Initialize the LoggingManager.
 
@@ -21,12 +21,17 @@ class LoggingManager:
         log_name : str
             Name for the log file (without extension)
         log_dir : Path, optional
-            Directory where log files will be written. If None, uses a temporary location
-            in the current working directory until set_log_directory is called.
+            Directory where log files will be written. If None and file_logging is True,
+            uses a temporary location in the current working directory until set_log_directory
+            is called. Ignored if file_logging is False.
         temp : bool, optional
             If True, marks the current log location as temporary and schedules it for
             cleanup on exit. Default is False. Note: if log_dir is None, the log is
-            always treated as temporary regardless of this parameter.
+            always treated as temporary regardless of this parameter. Ignored if file_logging
+            is False.
+        file_logging : bool, optional
+            If True, enables file logging in addition to console logging. If False,
+            only console logging is enabled. Default is True.
         """
         self._log_name = log_name
         self._log_dir = log_dir
@@ -35,6 +40,7 @@ class LoggingManager:
         self._console_handler = None
         self._logger = None
         self._is_temp = temp  # Track whether current log file is temporary
+        self._file_logging = file_logging  # Track whether file logging is enabled
         self._temp_log_paths = set()  # Track all temporary log files for cleanup
 
     def __enter__(self):
@@ -63,28 +69,31 @@ class LoggingManager:
         self._console_handler.setFormatter(formatter)
         self._console_handler.setLevel(logging.INFO)
 
-        # File handler - if log_dir is provided, use it; otherwise, use a temp file
-        if self._log_dir:
-            self._log_path = self._get_log_path(self._log_dir)
-        else:
-            # Use temporary location in current working directory
-            self._log_path = self._get_log_path(Path.cwd())
-            # Override: if no log_dir provided, file is always temporary
-            self._is_temp = True
+        # File handler - only create if file_logging is enabled
+        if self._file_logging:
+            # File handler - if log_dir is provided, use it; otherwise, use a temp file
+            if self._log_dir:
+                self._log_path = self._get_log_path(self._log_dir)
+            else:
+                # Use temporary location in current working directory
+                self._log_path = self._get_log_path(Path.cwd())
+                # Override: if no log_dir provided, file is always temporary
+                self._is_temp = True
 
-        # Track temporary files for cleanup
-        if self._is_temp:
-            self._temp_log_paths.add(self._log_path)
+            # Track temporary files for cleanup
+            if self._is_temp:
+                self._temp_log_paths.add(self._log_path)
 
-        self._file_handler = logging.FileHandler(self._log_path, mode='a', encoding='utf-8')
-        self._file_handler.setFormatter(formatter)
-        self._file_handler.setLevel(logging.DEBUG)
+            self._file_handler = logging.FileHandler(self._log_path, mode='a', encoding='utf-8')
+            self._file_handler.setFormatter(formatter)
+            self._file_handler.setLevel(logging.DEBUG)
 
         # Configure logger
         self._logger = logging.getLogger('oregon_processing')
         self._logger.setLevel(logging.DEBUG)
         self._logger.addHandler(self._console_handler)
-        self._logger.addHandler(self._file_handler)
+        if self._file_logging and self._file_handler:
+            self._logger.addHandler(self._file_handler)
 
         # Prevent propagation to root logger to avoid duplicate output
         self._logger.propagate = False
@@ -118,6 +127,9 @@ class LoggingManager:
         preserving all logged content. Supports moving from temporary locations
         to permanent ones or between any two locations.
 
+        Only valid when file_logging is enabled. Does nothing if file_logging
+        is False.
+
         Parameters
         ----------
         log_dir : Path
@@ -126,7 +138,7 @@ class LoggingManager:
             If True, marks the new log file as temporary for cleanup on exit.
             Default is False.
         """
-        if not self._file_handler:
+        if not self._file_logging or not self._file_handler:
             return
 
         if isinstance(log_dir, str):

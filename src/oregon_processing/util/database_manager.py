@@ -42,7 +42,7 @@ class DatabaseManager:
         """
         self._config_manager = config_manager
         self._communicator = communicator
-        self.logger = logging.getLogger('oregon_processing.database_manager')
+        self._logger = logging.getLogger('oregon_processing.database_manager')
 
         # Root directories
         self._data_dir = None
@@ -120,7 +120,7 @@ class DatabaseManager:
         """Prepare and create necessary directories for export."""
         logging_extra = {'process_name': 'Output Directory Setup'}
 
-        self.logger.info("Preparing output directories.", extra=logging_extra)
+        self._logger.info("Preparing output directories.", extra=logging_extra)
 
         # Get serial number from communicator
         serial_number = self._communicator.serial_number
@@ -135,12 +135,12 @@ class DatabaseManager:
         self._detection_records_dir = self._export_data_dir / self.DETECTION_RECORDS_DIR_NAME / serial_number
         self._event_records_dir = self._export_data_dir / self.EVENT_RECORDS_DIR_NAME / serial_number
 
-        self.logger.info(f"Root data directory: {self._data_dir}", extra=logging_extra)
-        self.logger.info(f"Export logs directory: {Path(self._export_logs_dir).relative_to(self._data_dir)}", extra=logging_extra)
-        self.logger.info(f"Crash logs directory: {Path(self._crash_logs_dir).relative_to(self._data_dir)}", extra=logging_extra)
-        self.logger.info(f"Export data directory: {Path(self._export_data_dir).relative_to(self._data_dir)}", extra=logging_extra)
-        self.logger.info(f"Detection records directory: {Path(self._detection_records_dir).relative_to(self._data_dir)}", extra=logging_extra)
-        self.logger.info(f"Event records directory: {Path(self._event_records_dir).relative_to(self._data_dir)}", extra=logging_extra)
+        self._logger.info(f"Root data directory: {self._data_dir}", extra=logging_extra)
+        self._logger.info(f"Export logs directory: {Path(self._export_logs_dir).relative_to(self._data_dir)}", extra=logging_extra)
+        self._logger.info(f"Crash logs directory: {Path(self._crash_logs_dir).relative_to(self._data_dir)}", extra=logging_extra)
+        self._logger.info(f"Export data directory: {Path(self._export_data_dir).relative_to(self._data_dir)}", extra=logging_extra)
+        self._logger.info(f"Detection records directory: {Path(self._detection_records_dir).relative_to(self._data_dir)}", extra=logging_extra)
+        self._logger.info(f"Event records directory: {Path(self._event_records_dir).relative_to(self._data_dir)}", extra=logging_extra)
 
         # Create all directories
         directories = [
@@ -153,7 +153,7 @@ class DatabaseManager:
 
         for dir_path, dir_name in directories:
             if not dir_path.exists():
-                self.logger.info(f"Creating {dir_name}: {dir_path}", extra=logging_extra)
+                self._logger.info(f"Creating {dir_name}: {dir_path}", extra=logging_extra)
                 dir_path.mkdir(parents=True, exist_ok=True)
 
     def _format_date_intervals(self, dates: list) -> str:
@@ -216,15 +216,15 @@ class DatabaseManager:
         if self._detection_records_dir is None or self._event_records_dir is None:
             raise RuntimeError("Directories not prepared yet.")
 
-        self.logger.info("Scanning for existing detection record files...", extra=logging_extra)
+        self._logger.info("Scanning for existing detection record files...", extra=logging_extra)
         record_files = list(self._detection_records_dir.glob("*.txt"))
-        self.logger.info(f"Found {len(record_files)} detection record file(s) from current RFID reader.", extra=logging_extra)
+        self._logger.info(f"Found {len(record_files)} detection record file(s) from current RFID reader.", extra=logging_extra)
 
-        self.logger.info("Scanning for existing event record files...", extra=logging_extra)
+        self._logger.info("Scanning for existing event record files...", extra=logging_extra)
         event_files = list(self._event_records_dir.glob("*.txt"))
-        self.logger.info(f"Found {len(event_files)} event record file(s) from current RFID reader.", extra=logging_extra)
+        self._logger.info(f"Found {len(event_files)} event record file(s) from current RFID reader.", extra=logging_extra)
 
-        self.logger.info("Extracting dates from filenames...", extra=logging_extra)
+        self._logger.info("Extracting dates from filenames...", extra=logging_extra)
 
         record_file_dates = set(d for d in [extract_filename_date(f.name) for f in record_files] if d is not None)
         event_file_dates = set(d for d in [extract_filename_date(f.name) for f in event_files] if d is not None)
@@ -251,13 +251,13 @@ class DatabaseManager:
         if last_event_date and last_event_date not in missing_event_dates:
             missing_event_dates = sorted(missing_event_dates + [last_event_date])
 
-        self.logger.info(f"Detection records: {len(missing_record_dates)} missing/incomplete date(s) out of {len(expected_dates)}", extra=logging_extra)
+        self._logger.info(f"Detection records: {len(missing_record_dates)} missing/incomplete date(s) out of {len(expected_dates)}", extra=logging_extra)
         if missing_record_dates:
-            self.logger.info(f"Missing detection dates: {self._format_date_intervals(missing_record_dates)}", extra=logging_extra)
+            self._logger.info(f"Missing detection dates: {self._format_date_intervals(missing_record_dates)}", extra=logging_extra)
 
-        self.logger.info(f"Event records: {len(missing_event_dates)} missing/incomplete date(s) out of {len(expected_dates)}", extra=logging_extra)
+        self._logger.info(f"Event records: {len(missing_event_dates)} missing/incomplete date(s) out of {len(expected_dates)}", extra=logging_extra)
         if missing_event_dates:
-            self.logger.info(f"Missing event dates: {self._format_date_intervals(missing_event_dates)}", extra=logging_extra)
+            self._logger.info(f"Missing event dates: {self._format_date_intervals(missing_event_dates)}", extra=logging_extra)
 
         return {
             'records': missing_record_dates,

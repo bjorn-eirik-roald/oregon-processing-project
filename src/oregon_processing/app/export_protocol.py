@@ -28,7 +28,7 @@ class _ExportProtocolSession:
         self._communicator = None
         self._database_manager = None
         self._logging_manager = None
-        self.logger = None
+        self._logger = None
 
     def __enter__(self):
         self._exit_stack = ExitStack()
@@ -41,7 +41,7 @@ class _ExportProtocolSession:
             self._logging_manager = self._exit_stack.enter_context(
                 LoggingManager(log_name="export_protocol", log_dir=crash_logs_dir)
             )
-            self.logger = self._logging_manager.get_logger('export_protocol')
+            self._logger = self._logging_manager.get_logger('export_protocol')
 
             self._communicator = self._exit_stack.enter_context(OregonCommunicator())
 
@@ -66,24 +66,25 @@ class _ExportProtocolSession:
 
         logging_extra = {'process_name': 'Export Protocol'}
 
-        self.logger.info("Oregon RFID Export Protocol Initiated", extra=logging_extra)
+        self._logger.info("Oregon RFID Export Protocol Initiated", extra=logging_extra)
 
         if self._config_manager is None:
-            self.logger.error("Configuration manager not initialized. Aborting.", extra=logging_extra)
+            self._logger.error("Configuration manager not initialized. Aborting.", extra=logging_extra)
             return
 
         if not self._communicator.is_connected:
-            self.logger.error("Oregon RFID device is not connected. Aborting.", extra=logging_extra)
+            self._logger.error("Oregon RFID device is not connected. Aborting.", extra=logging_extra)
             return
 
         health_report = self._communicator.check_device_health()
         if not health_report['healthy']:
-            self.logger.error("Device health check failed. Please address the issues before proceeding.", extra=logging_extra)
+            message = "Device health check failed. Please address the following issues before proceeding: \n  -" + "\n  -".join(health_report.get('warnings', []))
+            self._logger.error(message, extra=logging_extra)
             return
 
         result = self._communicator.control_device_datetime(tolerance_seconds=10)
         if not result['synced']:
-            self.logger.error("Device clock is not in sync. Please address the issues before proceeding.", extra=logging_extra)
+            self._logger.error("Device clock is not in sync. Please address the issues before proceeding.", extra=logging_extra)
             return
 
         missing_export_dates = self._database_manager.get_export_dates()

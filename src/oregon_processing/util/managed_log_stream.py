@@ -41,7 +41,7 @@ class ManagedLogStream:
         self._temp_log_path = None
         self._final_log_path = None
         self._input_logger = None
-        self.logger = logging.getLogger('oregon_processing.managed_log_stream')
+        self._logger = logging.getLogger('oregon_processing.managed_log_stream')
 
         # Set crash log directory
         if crash_logs_dir is None:
@@ -81,7 +81,7 @@ class ManagedLogStream:
             crash_log_filename = f"{self._base_filename}_crash_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
             crash_log_path = self._crash_logs_dir / crash_log_filename
             shutil.move(str(self._temp_log_path), str(crash_log_path))
-            self.logger.info(f"Log saved to crash log: {crash_log_path}", extra=logging_extra)
+            self._logger.info(f"Log saved to crash log: {crash_log_path}", extra=logging_extra)
 
         return False
 
