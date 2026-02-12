@@ -27,7 +27,6 @@ def extract_filename_date(filename: str):
         try:
             return date(year, month, day)
         except ValueError:
-            # Invalid date (e.g., Feb 30)
-            return None
-
-    return None
+            raise ValueError(f"Date components extracted from filename are not valid: {year}-{month}-{day}")
+    else:
+        raise ValueError(f"Filename does not contain a valid date in the expected format: {filename}")

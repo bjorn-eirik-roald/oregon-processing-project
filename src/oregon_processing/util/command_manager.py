@@ -129,6 +129,7 @@ class CommandManager:
             True if the command is valid, False otherwise.
         """
         if not command or not command.strip():
+            self._logger.warning("Empty command is not valid.", extra={'process_name': 'Command Validation'})
             return False
 
         # Split at space to get the main command code
@@ -145,6 +146,7 @@ class CommandManager:
             if suffix and all(c.isdigit() for c in suffix):
                 return True
 
+        self._logger.warning(f"Command '{command}' is not valid.", extra={'process_name': 'Command Validation'})
         return False
 
     def _is_ready_prompt(self, line: str) -> bool:
@@ -209,13 +211,17 @@ class CommandManager:
             False otherwise.
         """
 
+        logger_extra = {'process_name': 'Prompt Validation'}
+
         if not isinstance(line, str) or len(line) < 4:
             return False
 
         signature = line[:4]
 
         if not isinstance(signature, str):
-            raise TypeError("Signature must be a string.")
+            error_msg = f"Expected signature to be a string, got {type(signature)} instead."
+            self._logger.error(error_msg, extra=logger_extra)
+            raise TypeError(error_msg)
 
         if len(signature) != 4:
             return False

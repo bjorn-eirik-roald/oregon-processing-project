@@ -78,17 +78,17 @@ class _OregonCommunicatorSession:
     @property
     def reader_name(self):
         """Get the reader name if known."""
-
         if not self._reader_name:
             self._update_reader_name()
+
         return self._reader_name
 
     @property
     def serial_number(self):
         """Get the serial number if known."""
-
         if not self._serial_number:
             self._update_serial_number()
+
         return self._serial_number
 
     @property
@@ -96,6 +96,7 @@ class _OregonCommunicatorSession:
         """Get the device type from system status."""
         if not self._device_type:
             self._update_device_type()
+
         return self._device_type
 
     @property
@@ -108,12 +109,18 @@ class _OregonCommunicatorSession:
         """Get the current operating mode from the system status."""
         if self._mode_manager:
             return self._mode_manager._get_current_mode()
+
+        self._logger.warning("Mode manager not initialized; cannot retrieve current mode.", extra={'process_name': 'Oregon Communicator'})
+
         return None
 
     @property
     def prompt_signature(self):
         if self._command_manager:
             return self._command_manager.prompt_signature
+
+        self._logger.warning("Command manager not initialized; cannot retrieve prompt signature.", extra={'process_name': 'Oregon Communicator'})
+
         return None
 
     def __enter__(self):
