@@ -1,11 +1,8 @@
 @echo off
 setlocal
-cd /d "%~dp0"
 
-REM --- Read environment name from config.env ---
-for /f "delims=" %%A in (config.env) do set %%A
-
-echo Using conda environment: %OREGON_ENV%
+set ENV_NAME=oregon_env
+echo Using conda environment: %ENV_NAME%
 echo.
 
 REM --- Check if conda exists ---
@@ -18,24 +15,24 @@ if errorlevel 1 (
 )
 
 REM --- Check if the environment exists ---
-conda env list | findstr /i "%OREGON_ENV%" >nul
+conda env list | findstr /i "%ENV_NAME%" >nul
 if errorlevel 1 (
-    echo ERROR: Conda environment "%OREGON_ENV%" not found.
+    echo ERROR: Conda environment "%ENV_NAME%" not found.
     echo Make sure the environment is created with the proper name and packages installed. Then try again.
     pause
     exit /b 1
 )
 
 REM --- Activate the environment ---
-call conda activate %OREGON_ENV%
+call conda activate %ENV_NAME%
 if errorlevel 1 (
-    echo ERROR: Failed to activate environment "%OREGON_ENV%".
+    echo ERROR: Failed to activate environment "%ENV_NAME%".
     pause
     exit /b 1
 )
 
 REM --- Run the Python script ---
-run-export
+open-terminal
 
 set ERR=%ERRORLEVEL%
 

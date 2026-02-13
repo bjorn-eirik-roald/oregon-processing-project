@@ -4,20 +4,16 @@
 # ------------------------------
 __pycache__/
 *.pyc
+*.pyo
 
 # ------------------------------
 # Packaging / build artifacts
 # ------------------------------
-*.egg-info/*
+build/
+dist/
+*.egg-info/
 
 # ------------------------------
-# test folder
+# Test data
 # ------------------------------
 test/*
-!test/test.py
-!test/terminal.py
-
-# ------------------------------
-# .vscode folder
-# ------------------------------
-.vscode/

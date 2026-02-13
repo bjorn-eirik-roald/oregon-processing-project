@@ -38,11 +38,10 @@ Repository = "https://github.com/yourusername/oregon-processing-project.git"
 "Bug Tracker" = "https://github.com/yourusername/oregon-processing-project/issues"
 
 [tool.setuptools]
-packages = ["oregon_processing", "test"]
+package-dir = {"" = "src"}
 
-[tool.setuptools.package-dir]
-oregon_processing = "src/oregon_processing"
-test = "test"
+[tool.setuptools.packages.find]
+where = ["src"]
 
 [tool.black]
 line-length = 100
