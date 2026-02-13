@@ -119,21 +119,21 @@ echo       Environment created successfully.
 REM ================================
 REM Upgrade pip
 REM ================================
-echo [5/5] Installing oregon-processing package...
+echo [5/5] Installing oregon-processing package in editable mode...
 call :RUN_CONDA run -n %ENV_NAME% python -m pip install --upgrade pip >nul
 IF %ERRORLEVEL% NEQ 0 (
     echo.
     echo ERROR: Failed to upgrade pip.
     exit /b 1
 )
-call :RUN_CONDA run -n %ENV_NAME% python -m pip install --upgrade --force-reinstall .
+call :RUN_CONDA run -n %ENV_NAME% python -m pip install -e .
 IF %ERRORLEVEL% NEQ 0 (
     echo.
     echo ERROR: Package installation failed.
     exit /b 1
 )
 echo.
-echo       Package installed successfully.
+echo       Package installed successfully in editable mode.
 exit /b 0
 
 :RUN_CONDA
