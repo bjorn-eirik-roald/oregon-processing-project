@@ -49,8 +49,8 @@ class FormatManager:
 
         Parameters
         ----------
-        communicator : OregonCommunicator
-            OregonCommunicator instance for device communication.
+        communicator : Communicator
+            Communicator instance for device communication.
         command_manager : CommandManager
             CommandManager instance for sending commands to device.
         """

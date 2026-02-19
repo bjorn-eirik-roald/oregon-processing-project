@@ -4,13 +4,13 @@ Oregon RFID Terminal
 """
 
 from oregon_processing.util.logging_manager import LoggingManager
-from oregon_processing.util.oregon_communicator import OregonCommunicator
+from oregon_processing.util.oregon_communicator import Communicator
 import logging
 
 def run():
     with LoggingManager('terminal', file_logging=False):
         logger = logging.getLogger('oregon_processing')
-        with OregonCommunicator() as communicator:
+        with Communicator() as communicator:
             if communicator.is_connected:
                 communicator.start_interactive_terminal()
             else:

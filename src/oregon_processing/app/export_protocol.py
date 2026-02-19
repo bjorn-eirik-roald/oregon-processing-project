@@ -4,7 +4,7 @@ from contextlib import ExitStack
 from pathlib import Path
 from datetime import datetime
 
-from oregon_processing.util.oregon_communicator import OregonCommunicator
+from oregon_processing.util.oregon_communicator import Communicator
 from oregon_processing.util.config_manager import ConfigManager
 from oregon_processing.util.database_manager import DatabaseManager
 from oregon_processing.util.logging_manager import LoggingManager
@@ -58,7 +58,7 @@ class _ExportProtocolSession:
             )
             self._logger = self._logging_manager.get_logger('export_protocol')
 
-            self._communicator = self._exit_stack.enter_context(OregonCommunicator())
+            self._communicator = self._exit_stack.enter_context(Communicator())
 
             if self._communicator.is_connected:
                 self._database_manager = self._exit_stack.enter_context(DatabaseManager(self._config_manager, self._communicator))

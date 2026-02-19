@@ -12,7 +12,7 @@ from typing import Union, TYPE_CHECKING
 
 
 if TYPE_CHECKING:
-    from oregon_processing.util.oregon_communicator import OregonCommunicator
+    from oregon_processing.util.oregon_communicator import Communicator
     from oregon_processing.util.format_manager import FormatManager
     from oregon_processing.util.command_manager import CommandManager
     from oregon_processing.util.database_manager import DatabaseManager
@@ -23,14 +23,14 @@ class DataExporter:
 
     DEFAULT_DETECTION_RECORD_FORMAT = {'ORSR':'DTY ARR SPC TRF DUR SPC TTY SPC TAG SCD NCD EFA LON LAT',
                                        'ORMR':'DTY ARR SPC TRF DUR SPC TTY SPC ANT TAG SCD NCD EFA LON LAT'}
-    def __init__(self, communicator: "OregonCommunicator", format_manager: "FormatManager", command_manager: "CommandManager"):
+    def __init__(self, communicator: "Communicator", format_manager: "FormatManager", command_manager: "CommandManager"):
         """
         Initialize DataExporter with communicator and manager instances.
 
         Parameters
         ----------
-        communicator : OregonCommunicator
-            Connected OregonCommunicator instance to use for data retrieval.
+        communicator : Communicator
+            Connected Communicator instance to use for data retrieval.
         format_manager : FormatManager
             Format manager instance for handling detection record format operations.
         command_manager : CommandManager

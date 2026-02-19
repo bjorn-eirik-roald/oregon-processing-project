@@ -11,7 +11,7 @@ import logging
 #import Oregon Communicator in type checking block to avoid circular import issues
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from oregon_processing.util.oregon_communicator import OregonCommunicator
+    from oregon_processing.util.oregon_communicator import Communicator
 
 
 
@@ -21,14 +21,14 @@ class DeviceHealthChecker:
     RECOMMENDED_VOLTAGE = 14.0
     CRITICAL_VOLTAGE_THRESHOLD = 12.5
 
-    def __init__(self, communicator: "OregonCommunicator"):
+    def __init__(self, communicator: "Communicator"):
         """
         Initialize DeviceHealthChecker.
 
         Parameters
         ----------
-        communicator : OregonCommunicator
-            OregonCommunicator instance for device communication.
+        communicator : Communicator
+            Communicator instance for device communication.
         """
         self._communicator = communicator
         self._logger = logging.getLogger('oregon_processing.device_health_checker')
