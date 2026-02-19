@@ -16,9 +16,9 @@ echo.
 REM ================================
 REM Verify cleanup.py exists
 REM ================================
-IF NOT EXIST dev\cleanup.py (
-    echo ERROR: cleanup.py not found in dev folder.
-    echo Make sure the dev folder exists with cleanup.py.
+IF NOT EXIST tools\cleanup.py (
+    echo ERROR: cleanup.py not found in tools folder.
+    echo Make sure the tools folder exists with cleanup.py.
     echo.
     pause
     exit /b 1
@@ -32,13 +32,13 @@ IF EXIST venv\Scripts\python.exe (
     echo.
     echo Running cleanup script...
     echo.
-    venv\Scripts\python.exe dev\cleanup.py
+    venv\Scripts\python.exe tools\cleanup.py
 ) ELSE (
     echo Virtual environment not found, using system Python.
     echo.
     echo Running cleanup script...
     echo.
-    python dev\cleanup.py
+    python tools\cleanup.py
 )
 
 set ERR=%ERRORLEVEL%

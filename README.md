@@ -35,11 +35,11 @@ Quick Setup (Recommended for End Users)
 
 ### 4) Test the Scripts
 
-* Scripts are located in the `scripts` folder.
+* User-facing shortcuts are located in the `bin` folder.
 
 * Run any script, e.g.:
 
-`scripts\open_terminal.bat`
+`bin\open_terminal.bat`
 
 * Most scripts require an Oregon RFID reader to function, but simply running them will indicate that the setup worked.
 
@@ -126,7 +126,9 @@ Project Layout
 
 * `src/oregon_processing/` – package source (import as `oregon_processing`)
 
-* `scripts/` – user-facing batch files (config setup, terminal, export, etc.)
+* `bin/` – user-facing shortcuts (double-click to run)
+
+* `tools/` – internal batch files and utilities
 
 * `venv/` – virtual environment (created by `setup.bat`)
 
