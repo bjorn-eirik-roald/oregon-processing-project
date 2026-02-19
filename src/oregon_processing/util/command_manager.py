@@ -6,6 +6,7 @@ Handles sending commands to the Oregon device, receiving responses,
 and validating prompt signatures.
 """
 
+import logging
 import time
 
 
@@ -91,6 +92,7 @@ class CommandManager:
         communicator : OregonCommunicator
             OregonCommunicator instance for device communication.
         """
+        self._logger = logging.getLogger('oregon_processing.command_manager')
         self._communicator = communicator
         self._last_prompt_signature = None
 
