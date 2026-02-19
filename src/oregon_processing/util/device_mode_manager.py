@@ -9,21 +9,21 @@ import logging
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from oregon_processing.util.oregon_communicator import OregonCommunicator
+    from oregon_processing.util.communicator import Communicator
     from oregon_processing.util.command_manager import CommandManager
 
 
 class DeviceModeManager:
     """Manages device operating modes (Standby, Run, Sleep)."""
 
-    def __init__(self, communicator: "OregonCommunicator", command_manager: "CommandManager"):
+    def __init__(self, communicator: "Communicator", command_manager: "CommandManager"):
         """
         Initialize DeviceModeManager with communicator and command manager.
 
         Parameters
         ----------
-        communicator : OregonCommunicator
-            Connected OregonCommunicator instance to use for device operations.
+        communicator : Communicator
+            Connected Communicator instance to use for device operations.
         command_manager : CommandManager
             Command manager instance for sending commands to device.
         """

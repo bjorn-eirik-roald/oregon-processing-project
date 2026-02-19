@@ -89,8 +89,8 @@ class CommandManager:
 
         Parameters
         ----------
-        communicator : OregonCommunicator
-            OregonCommunicator instance for device communication.
+        communicator : Communicator
+            Communicator instance for device communication.
         """
         self._logger = logging.getLogger('oregon_processing.command_manager')
         self._communicator = communicator

@@ -4,13 +4,13 @@ import serial.tools.list_ports
 
 
 
-class OregonConnector:
+class Connector:
     """Class to handle connection establishment with Oregon RFID devices."""
 
     BAUD_RATES = [115200, 57600, 9600]
 
     def __init__(self):
-        self._logger = logging.getLogger('oregon_processing.oregon_connector')
+        self._logger = logging.getLogger('oregon_processing.connector')
 
     def __enter__(self):
         """Enter context manager."""

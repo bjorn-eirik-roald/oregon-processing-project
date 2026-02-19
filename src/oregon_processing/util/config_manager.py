@@ -8,7 +8,7 @@ from pathlib import Path
 
 
 class ConfigManager:
-    APP_NAME = "oregon_communicator"
+    APP_NAME = "communicator"
     CONFIG_FILENAME = "config.json"
     REQUIRED_KEYS = {"user", "data_dir_path"}
 
@@ -166,7 +166,7 @@ class ConfigManager:
 
         logger = logging.getLogger('oregon_processing.config_manager')
         logging_extra = {'process_name': 'Configuration'}
-        logger.info("Creating new configuration for oregon_communicator\n", extra=logging_extra)
+        logger.info("Creating new configuration for communicator\n", extra=logging_extra)
 
         user = getpass.getuser()
 

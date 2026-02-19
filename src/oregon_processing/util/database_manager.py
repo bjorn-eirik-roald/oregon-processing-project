@@ -1,6 +1,6 @@
 import logging
 from oregon_processing.util.config_manager import ConfigManager
-from oregon_processing.util.oregon_communicator import OregonCommunicator
+from oregon_processing.util.communicator import Communicator
 from oregon_processing.util.util_functions import extract_filename_date
 
 from datetime import date, datetime, timedelta
@@ -29,7 +29,7 @@ class DatabaseManager:
         crash_logs_dir.mkdir(parents=True, exist_ok=True)
         return crash_logs_dir
 
-    def __init__(self, config_manager: ConfigManager, communicator: "OregonCommunicator"):
+    def __init__(self, config_manager: ConfigManager, communicator: "Communicator"):
         """
         Initialize DatabaseManager.
 
@@ -37,8 +37,8 @@ class DatabaseManager:
         ----------
         config_manager : ConfigManager
             Configuration manager instance for data directory
-        communicator : OregonCommunicator
-            OregonCommunicator instance for device information
+        communicator : Communicator
+            Communicator instance for device information
         """
         self._config_manager = config_manager
         self._communicator = communicator

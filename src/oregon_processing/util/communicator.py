@@ -16,7 +16,7 @@ from typing import Union
 
 
 
-from oregon_processing.util.oregon_connector import OregonConnector
+from oregon_processing.util.connector import Connector
 from oregon_processing.util.command_manager import CommandManager
 from oregon_processing.util.clock_manager import ClockManager
 from oregon_processing.util.device_mode_manager import DeviceModeManager
@@ -28,7 +28,7 @@ from oregon_processing.util.device_health_checker import DeviceHealthChecker
 
 
 
-class OregonCommunicator:
+class Communicator:
     def __init__(self):
         self._logger = None
         self._session = None
@@ -36,25 +36,25 @@ class OregonCommunicator:
     def __enter__(self):
 
         logging_extra = {'process_name': 'Oregon Communicator'}
-        self._logger = logging.getLogger('oregon_processing.oregon_communicator')
+        self._logger = logging.getLogger('oregon_processing.communicator')
         try:
             self._exit_stack = ExitStack()
 
-            self._session = self._exit_stack.enter_context(_OregonCommunicatorSession())
+            self._session = self._exit_stack.enter_context(_CommunicatorSession())
             return self._session
         except Exception:
-            self._logger.exception("Failed to enter OregonCommunicator context", extra=logging_extra)
+            self._logger.exception("Failed to enter Communicator context", extra=logging_extra)
             self._exit_stack.close()
             raise
 
     def __exit__(self, exc_type, exc_value, traceback):
         self._exit_stack.__exit__(exc_type, exc_value, traceback)
 
-class _OregonCommunicatorSession:
+class _CommunicatorSession:
     """Class to communicate with Oregon device via serial port."""
 
     def __init__(self):
-        self._connector = OregonConnector()
+        self._connector = Connector()
         self._connection = None
         self._port = None
         self._baudrate = None
@@ -73,7 +73,7 @@ class _OregonCommunicatorSession:
         self._serial_number = None
         self._detection_record_format = None
 
-        self._logger = logging.getLogger('oregon_processing.oregon_communicator')
+        self._logger = logging.getLogger('oregon_processing.communicator')
 
     @property
     def reader_name(self):
@@ -143,7 +143,7 @@ class _OregonCommunicatorSession:
 
                 self._post_connect_handshake()
         except Exception:
-            self._logger.exception("Failed to initialize OregonCommunicator", extra=logging_extra)
+            self._logger.exception("Failed to initialize Communicator", extra=logging_extra)
             self._exit_stack.close()
             raise
 
@@ -156,8 +156,8 @@ class _OregonCommunicatorSession:
         return False
 
     def _connect(self):
-        """Attempt to connect to Oregon RFID sensor using the OregonConnector."""
-        with OregonConnector() as connector:
+        """Attempt to connect to Oregon RFID sensor using the Connector."""
+        with Connector() as connector:
             result = connector.connect()
 
         if result:

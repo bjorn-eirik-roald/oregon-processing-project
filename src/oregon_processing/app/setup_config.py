@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Configuration Setup Script
-Standalone script to create or update the oregon_communicator configuration file.
+Standalone script to create or update the communicator configuration file.
 
 Usage:
     python -m oregon_processing.app.setup_config
