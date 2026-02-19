@@ -16,7 +16,7 @@ echo.
 REM ==============================
 REM Step 1: Locate Python launcher
 REM ==============================
-echo [1/3] Checking for official Python launcher...
+echo [1/4] Checking for official Python launcher...
 
 set "PYTHON_CMD="
 
@@ -45,10 +45,30 @@ exit /b 1
 :FOUND_PYTHON
 
 REM ==============================
-REM Step 2: Remove existing virtual environment
+REM Step 2: Verify Python 3.13 is installed
+REM ==============================
+echo [2/3] Verifying Python 3.13 is installed...
+
+"%PYTHON_CMD%" -%PYTHON_VERSION% --version >nul 2>&1
+if %ERRORLEVEL% neq 0 (
+    echo [ERROR] Python 3.13 is not installed on this system.
+    echo.
+    echo The Python launcher was found, but Python 3.13 specifically is required.
+    echo Please install Python 3.13 using the official installer provided with this release.
+    echo.
+    echo You can verify the installation by running: py -3.13 --version
+    pause
+    exit /b 1
+)
+
+echo       Python 3.13 verified.
+echo.
+
+REM ==============================
+REM Step 3: Remove existing virtual environment
 REM ==============================
 if exist "%VENV_DIR%" (
-    echo [2/3] Existing virtual environment detected, removing...
+    echo [3/3] Existing virtual environment detected, removing...
     rmdir /s /q "%VENV_DIR%"
     if %ERRORLEVEL% neq 0 (
         echo [ERROR] Failed to remove existing virtual environment.
@@ -57,14 +77,14 @@ if exist "%VENV_DIR%" (
     )
     echo       Done.
 ) else (
-    echo [2/3] No existing virtual environment found.
+    echo [3/3] No existing virtual environment found.
 )
 echo.
 
 REM ==============================
-REM Step 3: Create virtual environment & install package
+REM Step 4: Create virtual environment & install package
 REM ==============================
-echo [3/3] Creating virtual environment in "%VENV_DIR%"...
+echo [4/4] Creating virtual environment in "%VENV_DIR%"...
 "%PYTHON_CMD%" -%PYTHON_VERSION% -m venv "%VENV_DIR%"
 if %ERRORLEVEL% neq 0 (
     echo [ERROR] Failed to create virtual environment.
