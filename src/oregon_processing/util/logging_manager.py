@@ -218,38 +218,47 @@ class LoggingManager:
         # Display recap of warnings and errors before closing
         if self._memory_handler:
             if self._memory_handler.buffer:
-                recap_lines = []
-                recap_lines.append("LOG RECAP - Warnings and Errors")
-
                 # Sort records by level (WARNING < ERROR < CRITICAL)
                 sorted_records = sorted(self._memory_handler.buffer, key=lambda r: r.levelno)
 
+                # Format recap for console using console formatter
+                console_recap_lines = ["LOG RECAP - Warnings and Errors"]
                 for record in sorted_records:
-                    level_name = record.levelname
-                    process_name = getattr(record, 'process_name', record.name)
-                    timestamp = datetime.fromtimestamp(record.created).strftime('%Y-%m-%d %H:%M:%S')
-                    message = record.getMessage()
+                    formatted_line = self._console_formatter.format(record)
+                    indented_message = f"  • {formatted_line}"
+                    console_recap_lines.append(indented_message)
 
-                    # Format the message with level info and indent all lines
-                    formatted_message = f"{level_name}[{timestamp}][{process_name}]: {message}"
-                    lines = formatted_message.split("\n")
-                    indented_message = f"  • {lines[0]}"
-                    if len(lines) > 1:
-                        indented_message += "\n" + "\n".join(f"    {line}" for line in lines[1:])
-                    recap_lines.append(indented_message)
+                console_recap_text = "\n".join(console_recap_lines)
 
-                recap_text = "\n".join(recap_lines)
+                # Format recap for file using file formatter
+                file_recap_lines = ["LOG RECAP - Warnings and Errors"]
+                for record in sorted_records:
+                    formatted_line = self._file_formatter.format(record)
+                    indented_message = f"  • {formatted_line}"
+                    file_recap_lines.append(indented_message)
 
-                # Log to both file and console via logger
-                if self._logger:
-                    self._logger.info(recap_text, extra={'process_name': 'Logging Manager'})
+                file_recap_text = "\n".join(file_recap_lines)
+
+                # Write recap to console handler
+                if self._console_handler:
+                    self._console_handler.stream.write(f"{console_recap_text}\n")
+                    self._console_handler.stream.flush()
+
+                # Write recap to file handler
+                if self._file_handler:
+                    self._file_handler.stream.write(f"{file_recap_text}\n")
+                    self._file_handler.stream.flush()
             else:
                 # No warnings or errors
                 recap_message = "LOG RECAP - No warnings or errors detected."
 
-                # Log to both file and console via logger
-                if self._logger:
-                    self._logger.info(recap_message, extra={'process_name': 'Logging Manager'})
+                # Write to both console and file
+                if self._console_handler:
+                    self._console_handler.stream.write(f"{recap_message}\n")
+                    self._console_handler.stream.flush()
+                if self._file_handler:
+                    self._file_handler.stream.write(f"{recap_message}\n")
+                    self._file_handler.stream.flush()
 
         if self._logger:
             if self._console_handler:

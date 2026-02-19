@@ -192,7 +192,9 @@ class OregonConnector:
                     ser.close()
                     self._logger.info("No response when attempting connection.", extra=logging_extra)
                 except Exception as e:
-                    self._logger.error(f" Error: {e}", extra=logging_extra)
+                    # Convert exception to single-line string
+                    error_msg = str(e).replace('\n', ' ')
+                    self._logger.error(f"Error: {error_msg}", extra=logging_extra)
 
         return None
 
