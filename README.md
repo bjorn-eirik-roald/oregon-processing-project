@@ -1,87 +1,146 @@
-# Oregon Processing Project
-
-A Python package for communicating with Oregon RFID devices over a serial connection. It provides a high-level interface for connecting to the reader, sending commands, inspecting device status, and running an interactive terminal.
-
-- Package name: `oregon-processing` (import as `oregon_processing`)
-- Minimum Python: 3.8+
-
-
-## Install
-
-Requirements: Windows + Anaconda/Miniconda.
-
-### 1) Install Anaconda
-You can use either the full Anaconda distribution or the lighter Miniconda. Choose the method for your operating system.
-
-- Windows
-  1. Download the latest “Anaconda” (or “Miniconda”) installer from your company software center or from the official site: https://www.anaconda.com/download.
-  2. Run the installer and follow the defaults.
-  3. Open an “Anaconda Prompt” terminal.
-
-If the Software Center option isn’t available, download Anaconda/Miniconda from the official site and follow their Linux install instructions.
-
-
-### 2) Set up Oregon-Processing
-
-Once you have Anaconda/Miniconda installed, you can set up the actual package in a proper Conda environment.
-
-### Option A: Use the installer batch files (recommended)
-
-1. Double-click `scripts\install.bat` (recommended for end users)
-  - This creates/updates the conda environment and installs the package.
-2. (Optional) For development, use `scripts\install_dev.bat` instead
-  - This installs the package in editable mode.
-
-Cleanup (Optional): Cleanup the folders afterwards by double-clicking `scripts\cleanup.bat`.
-
-### Option B: Manual install (advanced)
-
-In Anaconda Prompt, navigate to the main project directory and run the following commands:
-```Anaconda prompt
-conda create -n oregon_env python=3.11 -y
-conda activate oregon_env
-python -m pip install --upgrade pip
-python -m pip install .
-```
-
-### Editable vs Direct Install
-- Editable install (`scripts\install_dev.bat`):
-  - Uses `pip install -e .`
-  - Your environment points to the local source in `src/`.
-  - Any code changes you make are immediately reflected when you `import oregon_processing` without reinstalling.
-  - Ideal for development and contributing.
-
-- Direct install (`scripts\install.bat`):
-  - Uses `pip install .`
-  - Builds and installs a copy of the package into site-packages.
-  - Changes to the local source do not affect the installed package until you reinstall.
-  - Ideal for regular users who just want to use the package.
-
-
-### 3) Use the tools
-
-Once the package is installed properly, the following tools can be used:
-
-- `scripts\open_terminal.bat` (interactive terminal)
-- `scripts\start_export.bat` (export data)
-
-These two .bat files can be run from any directory, as long as the package is installed in the conda environment. You can copy them to your Desktop or create shortcuts and run them from there.
-
----
+Quick Setup (Recommended for End Users)
+---------------------------------------
 
 
 
+### 1) Download the Project
 
-## Project Layout
-- `src/oregon_processing/` – package source (import as `oregon_processing`)
-- `scripts/` – user-facing batch files (install, terminal, export)
-- `dev/` – developer utilities (cleanup, legacy install)
+* Download the ZIP release from GitHub (or optionally clone the repository). Make sure to also get the attached installer for Python 3.13 if you have not already installed Python 3.13.
+
+* **Place the folder in a logical location**, e.g., `C:\Users\<YourUser>\Documents\OregonProcessing`.
+
+  > The location will be used for the virtual environment and scripts, so choose a place that you can keep permanently.
+
+### 2) Install Python 3.13
+
+* Use the official Python 3.13 installer provided in the release.
+
+* **Instructions for installing Python 3.13** are detailed in the Python 3.13 Installer Instructions section below.
+
+### 3) Run the Setup Script
+
+1. Navigate to the project folder using FileExplorer and double click on setup.bat to run it.
+
+2. Run the setup batch file:
+
+`setup.bat`
+
+* This will:
+
+  1. Detect Python 3.13 via the official Python launcher (`py.exe`)
+
+  2. Create a virtual environment in the project folder (`venv`)
+
+  3. Install the Oregon Processing package and dependencies into the virtual environment
+
+### 4) Test the Scripts
+
+* Scripts are located in the `scripts` folder.
+
+* Run any script, e.g.:
+
+`scripts\open_terminal.bat`
+
+* Most scripts require an Oregon RFID reader to function, but simply running them will indicate that the setup worked.
+
+* * *
+
+Python 3.13 Installer Instructions
+----------------------------------
+
+The Python installer is included in the release. Follow these steps to install it **without requiring admin privileges**:
+
+### Page 1: Choose Installation mode
+* Use admin privileges while installing py.exe: ❌ Unchecked
+* Add python.exe to PATH:  ❌ Unchecked
+
+**Click on Customize installation**
+
+![Python Installer - Page 1: Choose Installation Mode](images/python_install_stage_01.png)
 
 
-## Troubleshooting
-- Conda not found:
-  - Ensure Anaconda/Miniconda is installed and you’re in an “Anaconda Prompt” (Windows) or a terminal with Conda initialized.
+### Page 2: Optional Features
+
+* Documentation: ❌ Unchecked
+
+* PIP: ✅ Checked
+
+* Tcl/Tk and IDLE: ❌ Unchecked
+
+* Python test suite: ❌ Unchecked
+
+* PyLauncher: ✅ Checked (install just for this user)
+
+**Click on Next**
+
+![Python Installer - Page 2: Optional Features](images/python_install_stage_02.png)
+
+* * *
+
+### Page 2: Advanced Options
+
+* Install Python 3.13 for all users: ❌ Unchecked
+
+* Associate files with Python: ❌ Unchecked
+
+* Create shortcuts for installed applications: ❌ Unchecked
+
+* Add Python to environment variables: ✅ Checked
+
+* Precompile standard library: ✅ Checked
+
+* Download debugging symbols: ❌ Unchecked
+
+* Download debug binaries: ❌ Unchecked
+
+* Download free-threaded binaries: ❌ Unchecked
+
+* Install location: `%LOCALAPPDATA%\Programs\Python\Python 3.13` (default is fine)
+
+**Click on Install**.
+
+![Python Installer - Page 3: Advanced Options](images/python_install_stage_03.png)
+
+* * *
+
+### Page 3: Complete the Install
 
 
-## License
+
+* Wait for the installation to finish. Then close the installer.
+
+* (Optional) Verify installation by opening a Command Prompt and running:
+
+`py --version`
+
+* You should see `Python 3.13.x` displayed.
+
+![Python Installer - Page 4: Ready to Install](images/python_install_stage_04.png)
+
+![Command Prompt Verification](images/python_install_stage_05.png)
+
+* * *
+
+Project Layout
+--------------
+
+* `src/oregon_processing/` – package source (import as `oregon_processing`)
+
+* `scripts/` – user-facing batch files (config setup, terminal, export, etc.)
+
+* `venv/` – virtual environment (created by `setup.bat`)
+
+* * *
+
+Troubleshooting
+---------------
+
+* **Python launcher not found**: Ensure you installed Python 3.13 using the official installer provided in the release.
+
+
+* * *
+
+License
+-------
+
 MIT
