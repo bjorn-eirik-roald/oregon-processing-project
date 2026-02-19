@@ -1,32 +1,26 @@
 @echo off
 setlocal
 
-set ENV_NAME=oregon_env
-echo Using conda environment: %ENV_NAME%
+cd /d "%~dp0.."
+
+set VENV_DIR=venv
+set VENV_PYTHON=%VENV_DIR%\Scripts\python.exe
+
+echo Using virtual environment: %VENV_DIR%
 echo.
 
-REM --- Check if conda exists ---
-where conda >nul 2>nul
-if errorlevel 1 (
-    echo ERROR: Conda not found.
-    echo Please install Anaconda or Miniconda and try again.
+REM --- Check if virtual environment exists ---
+if not exist "%VENV_PYTHON%" (
+    echo ERROR: Virtual environment not found at %VENV_DIR%.
+    echo Please run install.bat first to create the virtual environment.
     pause
     exit /b 1
 )
 
-REM --- Check if the environment exists ---
-conda env list | findstr /i "%ENV_NAME%" >nul
+REM --- Activate the virtual environment ---
+call "%VENV_DIR%\Scripts\activate.bat"
 if errorlevel 1 (
-    echo ERROR: Conda environment "%ENV_NAME%" not found.
-    echo Make sure the environment is created with the proper name and packages installed. Then try again.
-    pause
-    exit /b 1
-)
-
-REM --- Activate the environment ---
-call conda activate %ENV_NAME%
-if errorlevel 1 (
-    echo ERROR: Failed to activate environment "%ENV_NAME%".
+    echo ERROR: Failed to activate virtual environment.
     pause
     exit /b 1
 )
