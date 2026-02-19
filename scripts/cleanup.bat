@@ -25,21 +25,20 @@ IF NOT EXIST dev\cleanup.py (
 )
 
 REM ================================
-REM Check if embedded Python exists
+REM Check if virtual environment exists
 REM ================================
-IF NOT EXIST python\python.exe (
-    echo ERROR: Embedded Python not found in python folder.
-    echo Using system Python instead.
+IF EXIST venv\Scripts\python.exe (
+    echo Using Python from virtual environment.
+    echo.
+    echo Running cleanup script...
+    echo.
+    venv\Scripts\python.exe dev\cleanup.py
+) ELSE (
+    echo Virtual environment not found, using system Python.
     echo.
     echo Running cleanup script...
     echo.
     python dev\cleanup.py
-) ELSE (
-    echo Using embedded Python from python folder.
-    echo.
-    echo Running cleanup script...
-    echo.
-    python\python.exe dev\cleanup.py
 )
 
 set ERR=%ERRORLEVEL%

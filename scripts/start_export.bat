@@ -12,7 +12,7 @@ echo.
 REM --- Check if virtual environment exists ---
 if not exist "%VENV_PYTHON%" (
     echo ERROR: Virtual environment not found at %VENV_DIR%.
-    echo Please run install.bat first to create the virtual environment.
+    echo Please run setup.bat first to create the virtual environment.
     pause
     exit /b 1
 )
