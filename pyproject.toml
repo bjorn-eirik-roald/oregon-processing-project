@@ -7,7 +7,7 @@ name = "oregon-processing"
 version = "1.0.0"
 description = "A Python package for communicating with Oregon RFID devices via serial connection"
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.8,<4.0"
 license = {text = "MIT"}
 authors = [
     {name = "Author Name", email = "author@example.com"},
@@ -64,7 +64,7 @@ line_length = 100
 skip_gitignore = true
 
 [tool.mypy]
-python_version = "3.14"
+python_version = "3.13"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = false
