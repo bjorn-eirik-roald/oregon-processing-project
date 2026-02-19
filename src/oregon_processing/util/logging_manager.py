@@ -217,12 +217,16 @@ class LoggingManager:
         """Clean up logging handlers and temporary log files."""
         # Display recap of warnings and errors before closing
         if self._memory_handler:
+
+
             if self._memory_handler.buffer:
+                recap_header = "\nLOG RECAP - Warnings and Errors"
+
                 # Sort records by level (WARNING < ERROR < CRITICAL)
                 sorted_records = sorted(self._memory_handler.buffer, key=lambda r: r.levelno)
 
                 # Format recap for console using console formatter
-                console_recap_lines = ["LOG RECAP - Warnings and Errors"]
+                console_recap_lines = [recap_header]
                 for record in sorted_records:
                     formatted_line = self._console_formatter.format(record)
                     indented_message = f"  • {formatted_line}"
@@ -231,7 +235,7 @@ class LoggingManager:
                 console_recap_text = "\n".join(console_recap_lines)
 
                 # Format recap for file using file formatter
-                file_recap_lines = ["LOG RECAP - Warnings and Errors"]
+                file_recap_lines = [recap_header]
                 for record in sorted_records:
                     formatted_line = self._file_formatter.format(record)
                     indented_message = f"  • {formatted_line}"
@@ -250,7 +254,7 @@ class LoggingManager:
                     self._file_handler.stream.flush()
             else:
                 # No warnings or errors
-                recap_message = "LOG RECAP - No warnings or errors detected."
+                recap_message = "\nLOG RECAP - No warnings or errors detected."
 
                 # Write to both console and file
                 if self._console_handler:

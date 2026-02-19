@@ -67,8 +67,8 @@ class ConfigManager:
         """Print a concise summary of the loaded configuration."""
         logging_extra = {'process_name': 'Configuration'}
         summary = "Configuration summary:\n"
-        summary += f"  User: {self.user}\n"
-        summary += f"  Data directory: {self.data_dir}"
+        summary += f"  - User: {self.user}\n"
+        summary += f"  - Data directory: {self.data_dir}"
         self._logger.info(summary, extra=logging_extra)
 
     @staticmethod
@@ -155,6 +155,7 @@ class ConfigManager:
             existing_config = instance._config
             while True:
                 response = input(f"\nA config file for this user ({instance.user}) already exists: {config_path}\nDo you want to overwrite it? (y/n): ").strip().lower()
+                print()  # Add spacing after user input
                 if response in ('y', 'n', 'yes', 'no'):
                     break
                 print("Please enter 'y' or 'n'.")
@@ -177,6 +178,7 @@ class ConfigManager:
                 prompt += f" [{default_data_dir}]"
             prompt += ": "
             data_dir = input(prompt).strip()
+            print()  # Add spacing after user input
 
             # Use existing value if user just presses enter
             if not data_dir and default_data_dir:
@@ -203,6 +205,6 @@ class ConfigManager:
         with open(config_path, "w", encoding="utf-8") as f:
             json.dump(config_data, f, indent=4)
 
-        logger.info(f"\nConfig file created at:\n{config_path}", extra=logging_extra)
+        logger.info(f"Config file created at: {config_path}", extra=logging_extra)
 
         return cls()
