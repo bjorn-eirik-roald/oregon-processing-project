@@ -3,7 +3,7 @@ setlocal
 
 cd /d "%~dp0.."
 
-set VENV_DIR=venv
+set VENV_DIR=.venv
 set VENV_PYTHON=%VENV_DIR%\Scripts\python.exe
 
 echo Using virtual environment: %VENV_DIR%

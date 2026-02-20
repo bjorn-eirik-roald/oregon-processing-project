@@ -29,9 +29,11 @@ Quick Setup (Recommended for End Users)
 
   1. Detect Python 3.13 via the official Python launcher (`py.exe`)
 
-  2. Create a virtual environment in the project folder (`venv`)
+  2. Create a virtual environment in the project folder (`.venv`)
 
   3. Install the Oregon Processing package and dependencies into the virtual environment
+
+* Note: On Windows, folders beginning with a dot (like `.venv`) may be hidden in File Explorer depending on your settings.
 
 ### 4) Test the Scripts
 
@@ -65,7 +67,7 @@ The Python installer is included in the release. Follow these steps to install i
 
 * PIP: ✅ Checked
 
-* Tcl/Tk and IDLE: ❌ Unchecked
+* Tcl/Tk and IDLE: ✅ Checked
 
 * Python test suite: ❌ Unchecked
 
@@ -130,7 +132,7 @@ Project Layout
 
 * `tools/` – internal batch files and utilities
 
-* `venv/` – virtual environment (created by `setup.bat`)
+* `.venv/` – virtual environment (created by `setup.bat`)
 
 * * *
 

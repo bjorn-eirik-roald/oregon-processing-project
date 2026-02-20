@@ -5,7 +5,7 @@ REM =====================================================
 REM Oregon Processing - Setup (Python 3.13 only)
 REM =====================================================
 
-set "VENV_DIR=venv"
+set "VENV_DIR=.venv"
 set "PYTHON_VERSION=3.13"
 
 echo =====================================================
@@ -117,7 +117,7 @@ echo =====================================================
 echo Setup completed successfully!
 echo Virtual environment: "%VENV_DIR%"
 echo Python interpreter used: "!PYTHON_CMD!"
-echo You can now run scripts in the "scripts" folder, which will use this virtual environment.
+echo You can now run scripts in the "bin" folder, which will use this virtual environment.
 echo =====================================================
 pause
 exit /b 0

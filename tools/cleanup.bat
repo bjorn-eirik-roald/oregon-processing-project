@@ -27,12 +27,12 @@ IF NOT EXIST tools\cleanup.py (
 REM ================================
 REM Check if virtual environment exists
 REM ================================
-IF EXIST venv\Scripts\python.exe (
+IF EXIST .venv\Scripts\python.exe (
     echo Using Python from virtual environment.
     echo.
     echo Running cleanup script...
     echo.
-    venv\Scripts\python.exe tools\cleanup.py
+    .venv\Scripts\python.exe tools\cleanup.py
 ) ELSE (
     echo Virtual environment not found, using system Python.
     echo.
