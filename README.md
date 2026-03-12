@@ -7,7 +7,7 @@ Quick Setup (Recommended for End Users)
 
 * Download the ZIP release from GitHub (or optionally clone the repository).
 
-* **Place the folder in a logical location**, e.g., `C:\Users\<YourUser>\Documents\bjorn-project`.
+* **Place the folder in a logical location**, e.g., `C:\Users\<YourUser>\Documents\oregon-processing-project`.
 
   > The location will be used for the virtual environment and scripts, so choose a place that you can keep permanently.
 
