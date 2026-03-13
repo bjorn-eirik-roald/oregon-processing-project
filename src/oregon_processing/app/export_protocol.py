@@ -5,7 +5,7 @@ from pathlib import Path
 from datetime import datetime
 
 from oregon_processing.util.communicator import Communicator
-from oregon_processing.util.config_manager import ConfigManager
+from oregon_processing.util.oregon_config import OregonConfig, check_config_file_exists
 from oregon_processing.util.database_manager import DatabaseManager
 from oregon_processing.util.logging_manager import LoggingManager
 
@@ -38,7 +38,7 @@ class _ExportProtocolSession:
 
     def __init__(self):
         self._exit_stack = None
-        self._config_manager = None
+        self._config = None
         self._communicator = None
         self._database_manager = None
         self._logging_manager = None
@@ -49,10 +49,10 @@ class _ExportProtocolSession:
 
         logging_extra = {'process_name': 'Export Protocol'}
         try:
-            self._config_manager = self._exit_stack.enter_context(ConfigManager())
+            self._config = OregonConfig()
 
             # Set up logging with crash logs directory
-            crash_logs_dir = DatabaseManager.prepare_crash_logs_dir(self._config_manager)
+            crash_logs_dir = DatabaseManager.prepare_crash_logs_dir(self._config)
             self._logging_manager = self._exit_stack.enter_context(
                 LoggingManager(log_name="export_protocol", log_dir=crash_logs_dir, temp=True, file_logging=True)
             )
@@ -61,14 +61,18 @@ class _ExportProtocolSession:
             self._communicator = self._exit_stack.enter_context(Communicator())
 
             if self._communicator.is_connected:
-                self._database_manager = self._exit_stack.enter_context(DatabaseManager(self._config_manager, self._communicator))
+                self._database_manager = self._exit_stack.enter_context(DatabaseManager(self._config, self._communicator))
                 self._database_manager.prepare_directories()
 
                 # Update log directory to final location
                 self._logging_manager.set_log_directory(self._database_manager.export_logs_dir)
         except Exception:
-            self._logger.exception("Failed to initialize export protocol", extra=logging_extra)
-            self._exit_stack.close()
+            if self._logger:
+                self._logger.exception("Failed to initialize export protocol", extra=logging_extra)
+            else:
+                print("Failed to initialize export protocol")
+            if self._exit_stack:
+                self._exit_stack.close()
             raise
         return self
 
@@ -84,7 +88,7 @@ class _ExportProtocolSession:
 
         self._logger.info("Oregon RFID Export Protocol Initiated", extra=logging_extra)
 
-        if self._config_manager is None:
+        if self._config is None:
             self._logger.error("Configuration manager not initialized. Aborting.", extra=logging_extra)
             return
 
@@ -115,10 +119,14 @@ class _ExportProtocolSession:
         )
 
 
-def run():
+def main():
+
+    config_exists = check_config_file_exists(OregonConfig)
+    if not config_exists:
+        return
 
     with ExportProtocol() as export_protocol:
         export_protocol.run_export_protocol()
 
 if __name__ == "__main__":
-    run()
+    main()

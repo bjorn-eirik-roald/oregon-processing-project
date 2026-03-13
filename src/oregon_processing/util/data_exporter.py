@@ -291,7 +291,7 @@ class DataExporter:
 
         for date_num, current_date in enumerate(all_dates):
 
-            output_filepath = f"{output_dir}/{self._communicator.serial_number}_event_records_{current_date.strftime('%Y_%m_%d')}.txt"
+            output_filepath = output_dir / f"{self._communicator.serial_number}_event_records_{current_date.strftime('%Y_%m_%d')}.txt"
 
             counter = f"({date_num + 1}/{num_dates})"
             spacing = " " * (max_counter_width - len(counter))

@@ -1,5 +1,5 @@
 import logging
-from oregon_processing.util.config_manager import ConfigManager
+from oregon_processing.util.oregon_config import OregonConfig
 from oregon_processing.util.communicator import Communicator
 from oregon_processing.util.util_functions import extract_filename_date
 
@@ -21,26 +21,20 @@ class DatabaseManager:
 
     DEFAULT_FIRST_DATE = date(2018, 1, 1)
 
-    @classmethod
-    def prepare_crash_logs_dir(cls, config_manager: ConfigManager) -> Path:
-        """Create and return the crash logs directory path."""
-        data_dir = config_manager.data_dir
-        crash_logs_dir = data_dir / cls.EXPORT_LOGS_DIR_NAME / cls.CRASH_LOGS_DIR_NAME
-        crash_logs_dir.mkdir(parents=True, exist_ok=True)
-        return crash_logs_dir
 
-    def __init__(self, config_manager: ConfigManager, communicator: "Communicator"):
+
+    def __init__(self, config: OregonConfig, communicator: "Communicator"):
         """
         Initialize DatabaseManager.
 
         Parameters
         ----------
-        config_manager : ConfigManager
+        config : OregonConfig
             Configuration manager instance for data directory
         communicator : Communicator
             Communicator instance for device information
         """
-        self._config_manager = config_manager
+        self._config = config
         self._communicator = communicator
         self._logger = logging.getLogger('oregon_processing.database_manager')
 
@@ -125,28 +119,29 @@ class DatabaseManager:
         # Get serial number from communicator
         serial_number = self._communicator.serial_number
 
-        self._data_dir = self._config_manager.data_dir
-        self._export_logs_base_dir = self._data_dir / self.EXPORT_LOGS_DIR_NAME
-        self._export_data_dir = self._data_dir / self.EXPORT_DATA_DIR_NAME
+        self._root_output_dir = self._config.root_output_dir
+        self._root_export_logs_dir = self._config.root_export_logs_dir
+        self._root_export_data_dir = self._config.root_export_data_dir
 
         # Add serial number subdirectory to export logs, detection records, and event records
-        self._export_logs_dir = self._export_logs_base_dir / serial_number
-        self._crash_logs_dir = self._export_logs_base_dir / self.CRASH_LOGS_DIR_NAME
-        self._detection_records_dir = self._export_data_dir / self.DETECTION_RECORDS_DIR_NAME / serial_number
-        self._event_records_dir = self._export_data_dir / self.EVENT_RECORDS_DIR_NAME / serial_number
+        self._crash_logs_dir = self._config.crash_logs_dir
+        self._export_logs_dir = self._config.root_export_logs_dir / serial_number
+        self._detection_records_dir = self._config.root_detection_records_dir / serial_number
+        self._event_records_dir = self._config.root_event_records_dir / serial_number
 
-        self._logger.info(f"Root data directory: {self._data_dir}", extra=logging_extra)
-        self._logger.info(f"Export logs directory: {Path(self._export_logs_dir).relative_to(self._data_dir)}", extra=logging_extra)
-        self._logger.info(f"Crash logs directory: {Path(self._crash_logs_dir).relative_to(self._data_dir)}", extra=logging_extra)
-        self._logger.info(f"Export data directory: {Path(self._export_data_dir).relative_to(self._data_dir)}", extra=logging_extra)
-        self._logger.info(f"Detection records directory: {Path(self._detection_records_dir).relative_to(self._data_dir)}", extra=logging_extra)
-        self._logger.info(f"Event records directory: {Path(self._event_records_dir).relative_to(self._data_dir)}", extra=logging_extra)
+        self._logger.info(f"Root output directory: {self._root_output_dir}", extra=logging_extra)
+        self._logger.info(f"Root Export data directory: {Path(self._root_export_data_dir).relative_to(self._root_output_dir)}", extra=logging_extra)
+        self._logger.info(f"Detection records directory: {Path(self._detection_records_dir).relative_to(self._root_output_dir)}", extra=logging_extra)
+        self._logger.info(f"Event records directory: {Path(self._event_records_dir).relative_to(self._root_output_dir)}", extra=logging_extra)
+        self._logger.info(f"Export logs directory: {Path(self._export_logs_dir).relative_to(self._root_output_dir)}", extra=logging_extra)
+        self._logger.info(f"Crash logs directory: {Path(self._crash_logs_dir).relative_to(self._root_output_dir)}", extra=logging_extra)
+
 
         # Create all directories
         directories = [
             (self._export_logs_dir, "Export logs directory"),
             (self._crash_logs_dir, "Crash logs directory"),
-            (self._export_data_dir, "Export data directory"),
+            (self._root_export_data_dir, "Root export data directory"),
             (self._detection_records_dir, "Detection records directory"),
             (self._event_records_dir, "Event records directory"),
         ]
@@ -155,6 +150,13 @@ class DatabaseManager:
             if not dir_path.exists():
                 self._logger.info(f"Creating {dir_name}: {dir_path}", extra=logging_extra)
                 dir_path.mkdir(parents=True, exist_ok=True)
+
+    @classmethod
+    def prepare_crash_logs_dir(cls, config: OregonConfig) -> Path:
+        """Create and return the crash logs directory path."""
+        crash_logs_dir = config.crash_logs_dir
+        crash_logs_dir.mkdir(parents=True, exist_ok=True)
+        return crash_logs_dir
 
     def _format_date_intervals(self, dates: list) -> str:
         """
