@@ -25,7 +25,7 @@ Navigate to the project folder using File Explorer and double-click on `setup.ba
 The setup script will:
   1. Detect if Python 3.13 is installed via the Python launcher (`py.exe`). If not present, it will install Python 3.13 automatically.
   2. Create a virtual environment in the project folder (`.venv`).
-  3. Install the BJØRN package and dependencies into the virtual environment.
+  3. Install the OREGON-PROCESSING package and dependencies into the virtual environment.
 
 
 ### 4) Verify the Setup
