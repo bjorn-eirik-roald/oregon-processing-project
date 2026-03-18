@@ -117,16 +117,3 @@ class _ExportProtocolSession:
             dates=missing_export_dates['records'],
             output_dir=self._database_manager.records_dir
         )
-
-
-def main():
-
-    config_exists = check_config_file_exists(OregonConfig)
-    if not config_exists:
-        return
-
-    with ExportProtocol() as export_protocol:
-        export_protocol.run_export_protocol()
-
-if __name__ == "__main__":
-    main()

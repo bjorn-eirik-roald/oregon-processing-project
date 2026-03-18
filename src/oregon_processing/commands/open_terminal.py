@@ -7,7 +7,7 @@ from oregon_processing.util.logging_manager import LoggingManager
 from oregon_processing.util.communicator import Communicator
 import logging
 
-def main():
+def open_terminal():
     with LoggingManager('terminal', file_logging=False):
         logger = logging.getLogger('oregon_processing')
         with Communicator() as communicator:
@@ -15,6 +15,3 @@ def main():
                 communicator.start_interactive_terminal()
             else:
                 logger.info("Connection not established. Aborting terminal session.", extra={"process_name": "Open Terminal"})
-
-if __name__ == '__main__':
-    main()

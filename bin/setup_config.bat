@@ -5,9 +5,11 @@ cd /d "%~dp0.."
 
 set VENV_DIR=.venv
 set VENV_PYTHON=%VENV_DIR%\Scripts\python.exe
+set SCRIPT_PATH=src\oregon_processing\execute.py
+set ARG1=setup_config
 
 echo Using virtual environment: %VENV_DIR%
-echo.
+
 
 REM --- Check if virtual environment exists ---
 if not exist "%VENV_PYTHON%" (
@@ -25,8 +27,11 @@ if errorlevel 1 (
     exit /b 1
 )
 
+echo Environment ready. Running the script.
+echo.
+
 REM --- Run the Python script ---
-setup-config
+"%VENV_PYTHON%" "%SCRIPT_PATH%" %ARG1%
 
 set ERR=%ERRORLEVEL%
 

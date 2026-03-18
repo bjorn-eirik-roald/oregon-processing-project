@@ -26,11 +26,6 @@ test = [
     "pytest-cov>=4.0",
 ]
 
-[project.scripts]
-open-terminal = "oregon_processing.app.terminal:main"
-run-export = "oregon_processing.app.export_protocol:main"
-setup-config = "oregon_processing.app.setup_config:main"
-
 [project.urls]
 Homepage = "https://github.com/yourusername/oregon-processing-project"
 Documentation = "https://github.com/yourusername/oregon-processing-project#readme"
