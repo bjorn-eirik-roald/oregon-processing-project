@@ -85,7 +85,7 @@ class FormatManager:
               'column_indices': dict mapping column names to their indices
             }
         """
-        logging_extra = {'process_name': 'Format Manager'}
+
 
         if not self._communicator.is_connected:
             raise ConnectionError("Not connected to device.")
@@ -115,7 +115,7 @@ class FormatManager:
 
         if any(col not in self.FIELD_NAMES for col in columns):
             unknown_cols = [col for col in columns if col not in self.FIELD_NAMES]
-            self._logger.warning(f"WARNING: Unknown columns in detection record format: {unknown_cols}", extra=logging_extra)
+            self._logger.warning(f"WARNING: Unknown columns in detection record format: {unknown_cols}")
 
         field_names = {col: self.FIELD_NAMES.get(col, "Unknown") for col in columns}
 
@@ -140,10 +140,10 @@ class FormatManager:
         bool
             True if format was set successfully, False otherwise.
         """
-        logging_extra = {'process_name': 'Format Manager'}
+
 
         if not self._communicator.is_connected:
-            self._logger.error("Not connected to device.", extra=logging_extra)
+            self._logger.error("Not connected to device.")
             return False
 
         try:
@@ -156,11 +156,11 @@ class FormatManager:
             if self._detection_record_format['columns_raw'] == format_string:
                 return True
             else:
-                self._logger.warning(f"WARNING: Format mismatch. Expected '{format_string}', got '{self._detection_record_format['columns_raw']}'", extra=logging_extra)
+                self._logger.warning(f"WARNING: Format mismatch. Expected '{format_string}', got '{self._detection_record_format['columns_raw']}'")
                 return False
 
         except Exception as e:
-            self._logger.error(f"Error setting detection record format: {e}", extra=logging_extra)
+            self._logger.error(f"Error setting detection record format: {e}")
             return False
 
     def _restore_startup_format(self) -> bool:
@@ -172,7 +172,7 @@ class FormatManager:
         bool
             True if format was restored or no change was needed, False if restoration failed.
         """
-        logging_extra = {'process_name': 'Format Manager'}
+
 
         if not self._communicator.is_connected:
             return False
@@ -190,9 +190,9 @@ class FormatManager:
 
         success = self.set_detection_record_format(self._startup_format['columns_raw'])
         if not success:
-            self._logger.warning("WARNING: Failed to restore original detection record format.", extra=logging_extra)
+            self._logger.warning("WARNING: Failed to restore original detection record format.")
         else:
-            self._logger.info("Original detection record format restored.", extra=logging_extra)
+            self._logger.info("Original detection record format restored.")
 
 
         # Format has changed - restore to startup format using set_detection_record_format

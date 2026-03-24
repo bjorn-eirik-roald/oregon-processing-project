@@ -3,11 +3,10 @@
 Device Mode Manager for Oregon RFID
 """
 
-import logging
-
 
 from typing import TYPE_CHECKING
 
+from oregon_processing.util.logging_manager import get_logger
 if TYPE_CHECKING:
     from oregon_processing.util.communicator import Communicator
     from oregon_processing.util.command_manager import CommandManager
@@ -30,7 +29,7 @@ class DeviceModeManager:
         self._communicator = communicator
         self._command_manager = command_manager
         self._startup_mode = None
-        self._logger = logging.getLogger('oregon_processing.device_mode_manager')
+        self._logger = get_logger(__name__)
 
     def __enter__(self):
         """Enter context manager."""
@@ -65,7 +64,7 @@ class DeviceModeManager:
             True if mode change successful, False otherwise.
         """
 
-        logging_extra = {'process_name': 'Device Mode Change'}
+
 
         # Map mode names to commands
         mode_commands = {
@@ -75,23 +74,23 @@ class DeviceModeManager:
         }
 
         if mode_name not in mode_commands:
-            self._logger.error(f"Invalid mode: {mode_name}. Valid modes are: Standby, Run, Sleep", extra=logging_extra)
+            self._logger.error(f"Invalid mode: {mode_name}. Valid modes are: Standby, Run, Sleep")
             return False
 
         if not self._communicator._connection:
-            self._logger.error("Not connected to device.", extra=logging_extra)
+            self._logger.error("Not connected to device.")
             return False
 
         command = mode_commands[mode_name]
 
         current_mode = self._get_current_mode()
         if current_mode != mode_name:
-            self._logger.info(f"Changing device mode from '{current_mode}' to '{mode_name}' (sending {command} command).", extra=logging_extra)
+            self._logger.info(f"Changing device mode from '{current_mode}' to '{mode_name}' (sending {command} command).")
             self._command_manager.send_command(command)
             if self._get_current_mode() == mode_name:
-                self._logger.info(f"Device mode change successful.", extra=logging_extra)
+                self._logger.info(f"Device mode change successful.")
             else:
-                self._logger.error(f"Device mode change failed! Device is still in '{self._get_current_mode()}' mode.", extra=logging_extra)
+                self._logger.error(f"Device mode change failed! Device is still in '{self._get_current_mode()}' mode.")
                 return False
 
         return True
@@ -111,13 +110,13 @@ class DeviceModeManager:
             'sleep': 'Sleep'
         }
 
-        logging_extra = {'process_name': 'Device Mode Change'}
+
 
         startup_mode_lower = self._startup_mode.lower()
         target_mode = mode_map.get(startup_mode_lower)
 
         if target_mode is None:
-            self._logger.warning("WARNING: Unknown start-up mode. Reader has been set to Sleep mode to be safe.", extra=logging_extra)
+            self._logger.warning("WARNING: Unknown start-up mode. Reader has been set to Sleep mode to be safe.")
             target_mode = 'Sleep'
 
         self.change_mode(target_mode)

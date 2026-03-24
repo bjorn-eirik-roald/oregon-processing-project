@@ -26,8 +26,8 @@ class DatabaseManager:
             Communicator instance for device information
         """
         self._config = config
-        self._communicator = communicator
         self._logger = get_logger(__name__)
+        self._communicator = communicator
 
         # Root directories
         self._data_dir = None
@@ -100,19 +100,11 @@ class DatabaseManager:
         """Get the system logs directory path (alias for event_records_dir for backward compatibility)."""
         return self.event_records_dir
 
-    def prepare_crash_log_file(self) -> Path:
-        """Prepare and return the crash logs directory path."""
-        crash_logs_dir = self._config.crash_logs_dir
-        crash_logs_dir.mkdir(parents=True, exist_ok=True)
-
-        crash_log_file = crash_logs_dir / f"crash_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
-        return crash_log_file
-
     def prepare_directories(self) -> None:
         """Prepare and create necessary directories for export."""
-        logging_extra = {'process_name': 'Output Directory Setup'}
 
-        self._logger.info("Preparing output directories.", extra=logging_extra)
+
+        self._logger.info("Preparing output directories.")
 
         # Get serial number from communicator
         serial_number = self._communicator.serial_number
@@ -120,18 +112,19 @@ class DatabaseManager:
         self._root_output_dir = self._config.root_output_dir
         self._root_log_dir = self._config.root_log_dir
         self._root_export_data_dir = self._config.root_export_data_dir
+        self._crash_log_dir = self._config.crash_logs_dir
 
         # Add serial number subdirectory to export logs, detection records, and event records
         self._log_dir = self._config.root_log_dir / serial_number
         self._detection_records_dir = self._config.root_detection_records_dir / serial_number
         self._event_records_dir = self._config.root_event_records_dir / serial_number
 
-        self._logger.info(f"Root output directory: {self._root_output_dir}", extra=logging_extra)
-        self._logger.info(f"Root Export data directory: {Path(self._root_export_data_dir).relative_to(self._root_output_dir)}", extra=logging_extra)
-        self._logger.info(f"Detection records directory: {Path(self._detection_records_dir).relative_to(self._root_output_dir)}", extra=logging_extra)
-        self._logger.info(f"Event records directory: {Path(self._event_records_dir).relative_to(self._root_output_dir)}", extra=logging_extra)
-        self._logger.info(f"Export logs directory: {Path(self._log_dir).relative_to(self._root_output_dir)}", extra=logging_extra)
-        self._logger.info(f"Crash logs directory: {Path(self._crash_log_dir).relative_to(self._root_output_dir)}", extra=logging_extra)
+        self._logger.info(f"Root output directory: {self._root_output_dir}")
+        self._logger.info(f"Root Export data directory: {Path(self._root_export_data_dir).relative_to(self._root_output_dir)}")
+        self._logger.info(f"Detection records directory: {Path(self._detection_records_dir).relative_to(self._root_output_dir)}")
+        self._logger.info(f"Event records directory: {Path(self._event_records_dir).relative_to(self._root_output_dir)}")
+        self._logger.info(f"Export logs directory: {Path(self._log_dir).relative_to(self._root_output_dir)}")
+        self._logger.info(f"Crash logs directory: {Path(self._crash_log_dir).relative_to(self._root_output_dir)}")
 
 
         # Create all directories
@@ -145,7 +138,7 @@ class DatabaseManager:
 
         for dir_path, dir_name in directories:
             if not dir_path.exists():
-                self._logger.info(f"Creating {dir_name}: {dir_path}", extra=logging_extra)
+                self._logger.info(f"Creating {dir_name}: {dir_path}")
                 dir_path.mkdir(parents=True, exist_ok=True)
 
     def get_export_dates(self) -> dict:
@@ -160,21 +153,21 @@ class DatabaseManager:
         dict
             Dictionary with 'records' and 'system_logs' keys containing lists of missing dates
         """
-        logging_extra = {'process_name': 'Determine Export Date Range'}
+
 
 
         if self._detection_records_dir is None or self._event_records_dir is None:
             raise RuntimeError("Directories not prepared yet.")
 
-        self._logger.info("Scanning for existing detection record files...", extra=logging_extra)
+        self._logger.info("Scanning for existing detection record files...")
         record_files = list(self._detection_records_dir.glob("*.txt"))
-        self._logger.info(f"Found {len(record_files)} detection record file(s) from current RFID reader.", extra=logging_extra)
+        self._logger.info(f"Found {len(record_files)} detection record file(s) from current RFID reader.")
 
-        self._logger.info("Scanning for existing event record files...", extra=logging_extra)
+        self._logger.info("Scanning for existing event record files...")
         event_files = list(self._event_records_dir.glob("*.txt"))
-        self._logger.info(f"Found {len(event_files)} event record file(s) from current RFID reader.", extra=logging_extra)
+        self._logger.info(f"Found {len(event_files)} event record file(s) from current RFID reader.")
 
-        self._logger.info("Extracting dates from filenames...", extra=logging_extra)
+        self._logger.info("Extracting dates from filenames...")
 
         record_file_dates = set(d for d in [extract_filename_date(f.name) for f in record_files] if d is not None)
         event_file_dates = set(d for d in [extract_filename_date(f.name) for f in event_files] if d is not None)
@@ -201,13 +194,13 @@ class DatabaseManager:
         if last_event_date and last_event_date not in missing_event_dates:
             missing_event_dates = sorted(missing_event_dates + [last_event_date])
 
-        self._logger.info(f"Detection records: {len(missing_record_dates)} missing/incomplete date(s) out of {len(expected_dates)}", extra=logging_extra)
+        self._logger.info(f"Detection records: {len(missing_record_dates)} missing/incomplete date(s) out of {len(expected_dates)}")
         if missing_record_dates:
-            self._logger.info(f"Missing detection dates: {self._format_date_intervals(missing_record_dates)}", extra=logging_extra)
+            self._logger.info(f"Missing detection dates: {self._format_date_intervals(missing_record_dates)}")
 
-        self._logger.info(f"Event records: {len(missing_event_dates)} missing/incomplete date(s) out of {len(expected_dates)}", extra=logging_extra)
+        self._logger.info(f"Event records: {len(missing_event_dates)} missing/incomplete date(s) out of {len(expected_dates)}")
         if missing_event_dates:
-            self._logger.info(f"Missing event dates: {self._format_date_intervals(missing_event_dates)}", extra=logging_extra)
+            self._logger.info(f"Missing event dates: {self._format_date_intervals(missing_event_dates)}")
 
         return {
             'records': missing_record_dates,
@@ -215,11 +208,13 @@ class DatabaseManager:
         }
 
     @classmethod
-    def prepare_crash_log_dir(cls, config: OregonConfig) -> Path:
-        """Create and return the crash logs directory path."""
+    def prepare_crash_log_file(cls, config) -> Path:
+        """Prepare and return the crash logs directory path."""
         crash_logs_dir = config.crash_logs_dir
         crash_logs_dir.mkdir(parents=True, exist_ok=True)
-        return crash_logs_dir
+
+        crash_log_file = crash_logs_dir / f"crash_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+        return crash_log_file
 
     def _format_date_intervals(self, dates: list) -> str:
         """

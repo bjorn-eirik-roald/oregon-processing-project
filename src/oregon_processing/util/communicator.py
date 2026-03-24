@@ -22,28 +22,6 @@ from oregon_processing.util.logging_manager import get_logger
 
 
 class Communicator:
-    def __init__(self):
-        self._logger = None
-        self._session = None
-
-    def __enter__(self):
-
-        logging_extra = {'process_name': 'Oregon Communicator'}
-        self._logger = get_logger(__name__)
-        try:
-            self._exit_stack = ExitStack()
-
-            self._session = self._exit_stack.enter_context(_CommunicatorSession())
-            return self._session
-        except Exception:
-            self._logger.exception("Failed to enter Communicator context", extra=logging_extra)
-            self._exit_stack.close()
-            raise
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        self._exit_stack.__exit__(exc_type, exc_value, traceback)
-
-class _CommunicatorSession:
     """Class to communicate with Oregon device via serial port."""
 
     def __init__(self):
@@ -67,6 +45,38 @@ class _CommunicatorSession:
         self._detection_record_format = None
 
         self._logger = get_logger(__name__)
+
+    def __enter__(self):
+        """Allow use in 'with' statement."""
+
+
+        self._exit_stack = ExitStack()
+
+        try:
+            success = self._connect()
+            if success:
+                # Enter all managers via ExitStack (they are context managers)
+                # Register in reverse order so they exit in LIFO order
+                self._command_manager = self._exit_stack.enter_context(CommandManager(self))
+                self._mode_manager = self._exit_stack.enter_context(DeviceModeManager(self, self._command_manager))
+                self._format_manager = self._exit_stack.enter_context(FormatManager(self, self._command_manager))
+                self._data_exporter = self._exit_stack.enter_context(DataExporter(self, self._format_manager, self._command_manager))
+                self._clock_manager = self._exit_stack.enter_context(ClockManager(self, self._command_manager))
+                self._health_checker = self._exit_stack.enter_context(DeviceHealthChecker(self))
+
+                self._post_connect_handshake()
+        except Exception:
+            self._logger.exception("Failed to initialize Communicator")
+            self._exit_stack.close()
+            raise
+
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        """Ensure all managers and connection are properly cleaned up."""
+        if self._exit_stack:
+            return self._exit_stack.__exit__(exc_type, exc_value, traceback)
+        return False
 
     @property
     def reader_name(self):
@@ -103,7 +113,7 @@ class _CommunicatorSession:
         if self._mode_manager:
             return self._mode_manager._get_current_mode()
 
-        self._logger.warning("Mode manager not initialized; cannot retrieve current mode.", extra={'process_name': 'Oregon Communicator'})
+        self._logger.warning("Mode manager not initialized; cannot retrieve current mode.")
 
         return None
 
@@ -112,41 +122,10 @@ class _CommunicatorSession:
         if self._command_manager:
             return self._command_manager.prompt_signature
 
-        self._logger.warning("Command manager not initialized; cannot retrieve prompt signature.", extra={'process_name': 'Oregon Communicator'})
+        self._logger.warning("Command manager not initialized; cannot retrieve prompt signature.")
 
         return None
 
-    def __enter__(self):
-        """Allow use in 'with' statement."""
-        logging_extra = {'process_name': 'Oregon Communicator'}
-
-        self._exit_stack = ExitStack()
-
-        try:
-            success = self._connect()
-            if success:
-                # Enter all managers via ExitStack (they are context managers)
-                # Register in reverse order so they exit in LIFO order
-                self._command_manager = self._exit_stack.enter_context(CommandManager(self))
-                self._mode_manager = self._exit_stack.enter_context(DeviceModeManager(self, self._command_manager))
-                self._format_manager = self._exit_stack.enter_context(FormatManager(self, self._command_manager))
-                self._data_exporter = self._exit_stack.enter_context(DataExporter(self, self._format_manager, self._command_manager))
-                self._clock_manager = self._exit_stack.enter_context(ClockManager(self, self._command_manager))
-                self._health_checker = self._exit_stack.enter_context(DeviceHealthChecker(self))
-
-                self._post_connect_handshake()
-        except Exception:
-            self._logger.exception("Failed to initialize Communicator", extra=logging_extra)
-            self._exit_stack.close()
-            raise
-
-        return self
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        """Ensure all managers and connection are properly cleaned up."""
-        if self._exit_stack:
-            return self._exit_stack.__exit__(exc_type, exc_value, traceback)
-        return False
 
     def _connect(self):
         """Attempt to connect to Oregon RFID sensor using the Connector."""
@@ -167,14 +146,14 @@ class _CommunicatorSession:
         if not self._connection:
             return
 
-        logging_extra = {'process_name': 'Post-Connection Handshake'}
 
-        self._logger.info("Starting post-connection handshake.", extra=logging_extra)
+
+        self._logger.info("Starting post-connection handshake.")
 
         self._update_reader_name()
         self._update_device_type()
 
-        self._logger.info(f"Connected to device '{self.reader_name}' of type '{self.device_type}' with serial number '{self.serial_number}'.", extra=logging_extra)
+        self._logger.info(f"Connected to device '{self.reader_name}' of type '{self.device_type}' with serial number '{self.serial_number}'.")
 
         startup_mode = self.mode
         if self._mode_manager:
@@ -196,10 +175,10 @@ class _CommunicatorSession:
         bool
             True if mode change successful, False otherwise.
         """
-        logging_extra = {'process_name': 'Connection'}
+
 
         if not self._mode_manager:
-            self._logger.error("Mode manager not initialized.", extra=logging_extra)
+            self._logger.error("Mode manager not initialized.")
             return False
         return self._mode_manager.change_mode(mode_name)
 
@@ -213,10 +192,10 @@ class _CommunicatorSession:
         dict
             Dictionary with 'healthy' (bool) and 'warnings' (list of str) keys.
         """
-        logging_extra = {'process_name': 'Connection'}
+
 
         if not self._health_checker:
-            self._logger.error("Health checker not initialized.", extra=logging_extra)
+            self._logger.error("Health checker not initialized.")
             return {'healthy': False, 'warnings': ['Health checker not initialized']}
         return self._health_checker.check_device_health()
 
@@ -237,17 +216,17 @@ class _CommunicatorSession:
             True if update completed successfully, False otherwise.
         """
 
-        logging_extra = {'process_name': 'Connection'}
+
 
         if isinstance(firmware_file_path, str):
             try:
                 firmware_file_path = Path(firmware_file_path)
             except Exception as e:
-                self._logger.error(f"Error converting firmware path string to Path object: {e}", extra=logging_extra)
+                self._logger.error(f"Error converting firmware path string to Path object: {e}")
                 return False
 
         if not self._connection:
-            self._logger.error("Not connected to device.", extra=logging_extra)
+            self._logger.error("Not connected to device.")
             return False
 
         updater = FirmwareUpdater(self, self._command_manager)
@@ -260,17 +239,17 @@ class _CommunicatorSession:
         Opens a command-line interface where commands can be entered, validated,
         sent to the device, and responses displayed. Type 'exit' or 'quit' to exit.
         """
-        logging_extra = {'process_name': 'Connection'}
+
 
         if not self._connection:
-            self._logger.error("Not connected to device.", extra=logging_extra)
+            self._logger.error("Not connected to device.")
             return
 
         terminal = InteractiveTerminal(self, self._command_manager)
         terminal.run()
 
-        self._logger.info("Interactive terminal session ended.", extra=logging_extra)
-        self._logger.info("As a safety measure, reconnecting to device to refresh state.", extra=logging_extra)
+        self._logger.info("Interactive terminal session ended.")
+        self._logger.info("As a safety measure, reconnecting to device to refresh state.")
         self._post_connect_handshake()
 
     def get_system_status(self):
@@ -546,10 +525,10 @@ class _CommunicatorSession:
             The reader name, or None if not set or an error occurs.
         """
 
-        logging_extra = {'process_name': 'Connection'}
+
 
         if not self._connection:
-            self._logger.error("Not connected to device.", extra=logging_extra)
+            self._logger.error("Not connected to device.")
             return False
 
         try:
@@ -558,7 +537,7 @@ class _CommunicatorSession:
             return True
 
         except Exception as e:
-            self._logger.error(f"Error retrieving reader name: {e}", extra=logging_extra)
+            self._logger.error(f"Error retrieving reader name: {e}")
             return False
 
     def _update_serial_number(self) -> str:
@@ -571,10 +550,10 @@ class _CommunicatorSession:
             The serial number, or None if not set or an error occurs.
         """
 
-        logging_extra = {'process_name': 'Connection'}
+
 
         if not self._connection:
-            self._logger.error("Not connected to device.", extra=logging_extra)
+            self._logger.error("Not connected to device.")
             return False
 
         try:
@@ -583,7 +562,7 @@ class _CommunicatorSession:
             return True
 
         except Exception as e:
-            self._logger.error(f"Error retrieving serial number: {e}", extra=logging_extra)
+            self._logger.error(f"Error retrieving serial number: {e}")
             return False
 
     def _update_device_type(self) -> str:
@@ -596,10 +575,10 @@ class _CommunicatorSession:
             The device type, or None if not set or an error occurs.
         """
 
-        logging_extra = {'process_name': 'Connection'}
+
 
         if not self._connection:
-            self._logger.error("Not connected to device.", extra=logging_extra)
+            self._logger.error("Not connected to device.")
             return False
 
         try:
@@ -608,7 +587,7 @@ class _CommunicatorSession:
             return True
 
         except Exception as e:
-            self._logger.error(f"Error retrieving device type: {e}", extra=logging_extra)
+            self._logger.error(f"Error retrieving device type: {e}")
             return False
 
     def control_device_datetime(self, tolerance_seconds: int = 15, attempt_sync: bool = True) -> dict:

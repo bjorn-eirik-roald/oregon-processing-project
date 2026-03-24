@@ -56,7 +56,7 @@ class ClockManager:
         timezone
             Timezone object representing the device's timezone offset.
         """
-        logging_extra = {'process_name': 'Clock Manager'}
+
 
         hours = 0
         minutes = 0
@@ -82,7 +82,7 @@ class ClockManager:
                 hours = int(offset_part.split('h')[0].strip())
                 minutes = int(offset_part.split('h')[1].strip().split('m')[0].strip())
             except IndexError:
-                self._logger.exception(f"Failed to parse hours and minutes from TZ response: {tz_line}", extra=logging_extra)
+                self._logger.exception(f"Failed to parse hours and minutes from TZ response: {tz_line}")
                 raise
 
         elif tz_line.startswith("Hours to UT:"):
@@ -132,7 +132,7 @@ class ClockManager:
             - 'sync_status': Single character sync status ('G', 'N', 'U', or 'E')
         """
 
-        logging_extra = {'process_name': 'Clock Manager'}
+
 
         parts = dt_line.split()
 
@@ -159,7 +159,7 @@ class ClockManager:
             try:
                 hours, minutes, seconds = map(int, time_part.split(':'))
             except ValueError:
-                self._logger.exception(f"Failed to parse hours, minutes, and seconds from DT response: {dt_line}", extra=logging_extra)
+                self._logger.exception(f"Failed to parse hours, minutes, and seconds from DT response: {dt_line}")
                 raise
 
             # Create timedelta for elapsed time
@@ -216,13 +216,13 @@ class ClockManager:
             - 'sync_status': Single character sync status ('G', 'N', 'U', or 'E')
         """
 
-        logging_extra = {'process_name': 'Clock Manager'}
+
 
         # Send DT command and get response
         try:
             lines = self._command_manager.send_command("DT")
         except Exception as e:
-            self._logger.exception(f"Failed to send DT command.", extra=logging_extra)
+            self._logger.exception(f"Failed to send DT command.")
             raise
 
         if len(lines) != 1:
@@ -235,7 +235,7 @@ class ClockManager:
         try:
             lines = self._command_manager.send_command("TZ")
         except Exception as e:
-            self._logger.exception(f"Failed to send TZ command.", extra=logging_extra)
+            self._logger.exception(f"Failed to send TZ command.")
             raise
 
         if len(lines) != 2: # TODO is it always two lines or does it vary based on sync status?
@@ -275,12 +275,10 @@ class ClockManager:
         report : dict
             Report dictionary to update with sync results.
         """
-        logging_extra_sync = {'process_name': 'Clock Sync'}
-
-        self._logger.info("Setting device timezone to UTC.", extra=logging_extra_sync)
+        self._logger.info("Setting device timezone to UTC.")
         self._command_manager.send_command("TZ 0")
 
-        self._logger.info(f"Setting device time to {computer_datetime_utc.strftime('%Y-%m-%d %H:%M:%S')} UTC.", extra=logging_extra_sync)
+        self._logger.info(f"Setting device time to {computer_datetime_utc.strftime('%Y-%m-%d %H:%M:%S')} UTC.")
         dt_command = computer_datetime_utc.strftime("DT %Y-%m-%d %H:%M:%S")
         response_lines = self._command_manager.send_command(dt_command)
 
@@ -337,7 +335,7 @@ class ClockManager:
         sync_status_name : str
             Human-readable sync status name.
         """
-        logging_extra = {'process_name': 'Clock Manager'}
+
 
 
         device_tz_str = f"(UT{device_tz.utcoffset(None).total_seconds() / 3600:+.1f})" if device_tz else "(unknown)"
@@ -345,22 +343,22 @@ class ClockManager:
         computer_tz_str = f"(UT{computer_offset_hours:+.1f})"
 
         status_message = f"Device Clock Status: {'✓ IN SYNC' if is_synced else '⚠ OUT OF SYNC'} | Device Clock Source: {sync_status_name}"
-        self._logger.info(status_message, extra=logging_extra)
+        self._logger.info(status_message)
 
         if device_dt:
-            self._logger.info(f"Device Time: {device_dt.strftime('%Y-%m-%d %H:%M:%S')} {device_tz_str}", extra=logging_extra)
+            self._logger.info(f"Device Time: {device_dt.strftime('%Y-%m-%d %H:%M:%S')} {device_tz_str}")
         else:
             # Format timedelta as HH:MM:SS.mmm
             total_seconds = int(elapsed.total_seconds())
             hours, remainder = divmod(total_seconds, 3600)
             minutes, seconds = divmod(remainder, 60)
             milliseconds = elapsed.microseconds // 1000
-            self._logger.info(f"Device Time: elapsed-only (no absolute time): {hours:02d}:{minutes:02d}:{seconds:02d}.{milliseconds:03d}", extra=logging_extra)
+            self._logger.info(f"Device Time: elapsed-only (no absolute time): {hours:02d}:{minutes:02d}:{seconds:02d}.{milliseconds:03d}")
 
-        self._logger.info(f"Computer Time: {computer_dt.strftime('%Y-%m-%d %H:%M:%S')} {computer_tz_str}", extra=logging_extra)
+        self._logger.info(f"Computer Time: {computer_dt.strftime('%Y-%m-%d %H:%M:%S')} {computer_tz_str}")
 
         if time_diff is not None and not is_synced:
-            self._logger.info(f"Computer/Device Time Difference: {time_diff:+.1f}s ({abs(time_diff):.1f}s {'ahead' if time_diff > 0 else 'behind'})", extra=logging_extra)
+            self._logger.info(f"Computer/Device Time Difference: {time_diff:+.1f}s ({abs(time_diff):.1f}s {'ahead' if time_diff > 0 else 'behind'})")
 
     def control_device_datetime(self, tolerance_seconds: int = 15, attempt_sync: bool = True) -> dict:
         """
@@ -383,9 +381,9 @@ class ClockManager:
             difference_seconds, was_updated, update_command_sent, update_response, error
         """
 
-        logging_extra = {'process_name': 'Clock Manager'}
 
-        self._logger.info("Checking device date/time.", extra=logging_extra)
+
+        self._logger.info("Checking device date/time.")
 
         device_result = self.get_device_datetime()
         computer_datetime = datetime.now()
@@ -436,18 +434,18 @@ class ClockManager:
                 print() # Add spacing after input for cleaner output
 
             if confirm not in ['y', 'yes']:
-                self._logger.info("User selected not to sync device time.", extra=logging_extra)
+                self._logger.info("User selected not to sync device time.")
 
                 return report
             else:
-                self._logger.info("User selected to synch computer/device times.", extra=logging_extra)
+                self._logger.info("User selected to synch computer/device times.")
 
             try:
                 self._sync_device_time(computer_datetime_utc, report)
                 self._refresh_after_update(computer_datetime_utc, tolerance_seconds, report)
             except Exception as e:
                 report['error'] = f'Failed to update device datetime: {e}'
-                self._logger.error(f"Failed to update device datetime: {e}", extra=logging_extra)
+                self._logger.error(f"Failed to update device datetime: {e}")
 
             # Final report of clock status after attempted update
             self._print_clock_status(

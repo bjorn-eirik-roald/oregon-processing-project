@@ -47,9 +47,9 @@ class InteractiveTerminal:
         Allows user to enter commands, validates them, sends them to the device,
         and displays responses. Type 'exit' or 'quit' to exit the terminal.
         """
-        logging_extra = {'process_name': 'Interactive Terminal'}
 
-        self._logger.info("Entering interactive terminal. Type 'exit' to quit.", extra=logging_extra)
+
+        self._logger.info("Entering interactive terminal. Type 'exit' to quit.")
 
         try:
             while True:
@@ -60,21 +60,21 @@ class InteractiveTerminal:
 
                 # Exit on 'exit' or 'quit'
                 if cmd.lower() in ("exit", "quit"):
-                    self._logger.info("Exiting terminal.", extra=logging_extra)
+                    self._logger.info("Exiting terminal.")
                     break
 
                 # Validate command format
                 if not self._communicator._command_manager.validate_command(cmd):
-                    self._logger.warning("Invalid command. Use a two-letter code followed by a space (e.g., 'SY ').", extra=logging_extra)
-                    self._logger.info(f"Valid codes: {sorted(self._communicator._command_manager.VALID_MAIN_COMMANDS)}", extra=logging_extra)
+                    self._logger.warning("Invalid command. Use a two-letter code followed by a space (e.g., 'SY ').")
+                    self._logger.info(f"Valid codes: {sorted(self._communicator._command_manager.VALID_MAIN_COMMANDS)}")
                     continue
 
                 # send command and get cleaned response
                 lines = self._command_manager.send_command(cmd)
                 if lines:
-                    self._logger.info("\n".join(lines), extra=logging_extra)
+                    self._logger.info("Response:\n"+"\n".join(lines))
                 else:
-                    self._logger.info("Command received without error", extra=logging_extra)
+                    self._logger.info("Command received without error")
 
         except KeyboardInterrupt:
-            self._logger.info("Terminal interrupted by user.", extra=logging_extra)
+            self._logger.info("Terminal interrupted by user.")

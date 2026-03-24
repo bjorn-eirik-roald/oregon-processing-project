@@ -392,7 +392,7 @@ class LoggingManager:
                     self._logger.log(
                         event.levelno,
                         summary_message,
-                        extra={"_from_summary": True, "source_process": event.process_name},
+                        extra={"_from_summary": True},
                     )
 
             # add two empty lines after the summary for better separation in the logs
