@@ -3,18 +3,10 @@
 Oregon RFID Communicator
 """
 
-import logging
-from inspect import signature
-import time
-import os
-import sys
 from contextlib import ExitStack
 
-from datetime import date, datetime
+from datetime import datetime
 from pathlib import Path
-from typing import Union
-
-
 
 from oregon_processing.util.connector import Connector
 from oregon_processing.util.command_manager import CommandManager
@@ -25,6 +17,7 @@ from oregon_processing.util.firmware_updater import FirmwareUpdater
 from oregon_processing.util.format_manager import FormatManager
 from oregon_processing.util.data_exporter import DataExporter
 from oregon_processing.util.device_health_checker import DeviceHealthChecker
+from oregon_processing.util.logging_manager import get_logger
 
 
 
@@ -36,7 +29,7 @@ class Communicator:
     def __enter__(self):
 
         logging_extra = {'process_name': 'Oregon Communicator'}
-        self._logger = logging.getLogger('oregon_processing.communicator')
+        self._logger = get_logger(__name__)
         try:
             self._exit_stack = ExitStack()
 
@@ -73,7 +66,7 @@ class _CommunicatorSession:
         self._serial_number = None
         self._detection_record_format = None
 
-        self._logger = logging.getLogger('oregon_processing.communicator')
+        self._logger = get_logger(__name__)
 
     @property
     def reader_name(self):

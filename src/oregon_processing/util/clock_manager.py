@@ -3,7 +3,7 @@
 Oregon RFID Clock Manager - Handles device date/time operations
 """
 
-import logging
+from oregon_processing.util.logging_manager import get_logger
 from datetime import datetime, timedelta, timezone
 
 
@@ -32,7 +32,7 @@ class ClockManager:
         """
         self._communicator = communicator
         self._command_manager = command_manager
-        self._logger = logging.getLogger('oregon_processing.clock_manager')
+        self._logger = get_logger(__name__)
 
     def __enter__(self):
         """Enter context manager."""

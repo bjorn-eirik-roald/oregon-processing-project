@@ -6,7 +6,7 @@ Provides methods for checking device health status, including supply voltage
 and other system parameters.
 """
 
-import logging
+from oregon_processing.util.logging_manager import get_logger
 
 #import Oregon Communicator in type checking block to avoid circular import issues
 from typing import TYPE_CHECKING

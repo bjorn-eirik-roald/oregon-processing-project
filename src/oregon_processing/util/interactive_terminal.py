@@ -6,7 +6,7 @@ Provides a command-line interface for sending commands to the Oregon device
 and receiving responses.
 """
 
-import logging
+from oregon_processing.util.logging_manager import get_logger
 
 # Support for history of readline on Windows via pyreadline3
 try:
@@ -30,7 +30,7 @@ class InteractiveTerminal:
         """
         self._communicator = communicator
         self._command_manager = command_manager
-        self._logger = logging.getLogger('oregon_processing.interactive_terminal')
+        self._logger = get_logger(__name__)
 
     def __enter__(self):
         """Enter context manager."""

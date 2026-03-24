@@ -3,13 +3,12 @@
 Data Exporter for Oregon RFID device data
 """
 
-import logging
 import time
-from datetime import date, datetime, timedelta
+from datetime import datetime
 from pathlib import Path
-from typing import Union, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
-
+from oregon_processing.util.logging_manager import get_logger
 
 if TYPE_CHECKING:
     from oregon_processing.util.communicator import Communicator
@@ -39,7 +38,7 @@ class DataExporter:
         self._communicator = communicator
         self._format_manager = format_manager
         self._command_manager = command_manager
-        self._logger = logging.getLogger('oregon_processing.data_exporter')
+        self._logger = get_logger(__name__)
 
     def __enter__(self):
         """Enter context manager."""

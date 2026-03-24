@@ -5,9 +5,9 @@ Firmware Updater for Oregon RFID Device
 Handles the firmware update process for Oregon RFID readers.
 """
 
-import logging
 import time
 
+from oregon_processing.util.logging_manager import get_logger
 
 class FirmwareUpdater:
     """Handles firmware update process for Oregon RFID devices."""
@@ -25,7 +25,7 @@ class FirmwareUpdater:
         """
         self._communicator = communicator
         self._command_manager = command_manager
-        self._logger = logging.getLogger('oregon_processing.firmware_updater')
+        self._logger = get_logger(__name__)
 
     def __enter__(self):
         """Enter context manager."""

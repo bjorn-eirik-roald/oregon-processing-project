@@ -6,38 +6,7 @@ from oregon_processing.util.oregon_config import OregonConfig
 from oregon_processing.util.database_manager import DatabaseManager
 from oregon_processing.util.logging_manager import LoggingManager, get_logger
 
-
 class ExportProtocol:
-
-    def __init__(self):
-        self._exit_stack = None
-        self._session = None
-
-    def __enter__(self):
-        try:
-            self._exit_stack = ExitStack()
-
-            self._session = self._exit_stack.enter_context(_ExportProtocolSession())
-            return self._session
-        except Exception:
-            # Create a temporary logger to capture initialization errors
-            logger = logging.getLogger()
-            # If no handlers exist, set up a basic one
-            if not logger.hasHandlers():
-                logging.basicConfig(level=logging.ERROR)
-            logger.exception("Failed to enter ExportProtocol context")
-
-            if self._exit_stack:
-                self._exit_stack.close()
-            raise
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        if self._exit_stack:
-            return self._exit_stack.__exit__(exc_type, exc_value, traceback)
-        return False
-
-
-class _ExportProtocolSession:
 
     def __init__(self):
         self._exit_stack = None

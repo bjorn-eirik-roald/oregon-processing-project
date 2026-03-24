@@ -1,4 +1,4 @@
-import logging
+from oregon_processing.util.logging_manager import get_logger
 from oregon_processing.util.oregon_config import OregonConfig
 from oregon_processing.util.communicator import Communicator
 from oregon_processing.util.util_functions import extract_filename_date
@@ -27,7 +27,7 @@ class DatabaseManager:
         """
         self._config = config
         self._communicator = communicator
-        self._logger = logging.getLogger('oregon_processing.database_manager')
+        self._logger = get_logger(__name__)
 
         # Root directories
         self._data_dir = None

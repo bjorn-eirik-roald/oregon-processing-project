@@ -3,8 +3,8 @@
 Format Manager for Oregon RFID device record format operations
 """
 
-import logging
 from statistics import mode
+from oregon_processing.util.logging_manager import get_logger
 
 
 class FormatManager:
@@ -58,7 +58,7 @@ class FormatManager:
         self._command_manager = command_manager
         self._detection_record_format = None
         self._startup_format = None
-        self._logger = logging.getLogger('oregon_processing.format_manager')
+        self._logger = get_logger(__name__)
 
         # Store startup format when initialized
         if self._communicator.is_connected:
