@@ -1,281 +1,421 @@
-# -*- coding: utf-8 -*-
-"""
-Logging Manager for Oregon RFID processing
-"""
-
-import sys
-import logging
-import logging.handlers
-from pathlib import Path
+from __future__ import annotations
+import inspect
+from dataclasses import dataclass
 from datetime import datetime
+import logging
+from pathlib import Path
+import re
+import sys
+from typing import Any
 
+
+
+@dataclass(frozen=True)
+class LogEvent:
+    """
+    Represents a single log event with level, timestamp, process, and message.
+    Used for in-memory storage of warnings and errors.
+    """
+    level: str
+    levelno: int
+    timestamp: str
+    process_name: str
+    message: str
+
+class WarningMemoryHandler(logging.Handler):
+    """
+    Custom logging handler that stores WARNING, ERROR, and CRITICAL log events in memory.
+    Useful for generating summaries or programmatic access to important log messages.
+    """
+    def __init__(self) -> None:
+        super().__init__(level=logging.WARNING)
+        self._events: dict[str, list[LogEvent]] = {
+            "WARNING": [],
+            "ERROR": [],
+            "CRITICAL": [],
+        }
+
+    @property
+    def events(self) -> dict[str, list[LogEvent]]:
+        """Returns all stored log events by level."""
+        return self._events
+
+    def emit(self, record: logging.LogRecord) -> None:
+        # Ignore summary-generated records to avoid recursion
+        if getattr(record, "_from_summary", False):
+            return
+
+        if record.levelno < logging.WARNING:
+            return
+
+        level_name = record.levelname if record.levelname in self._events else "CRITICAL"
+        process_name = getattr(record, "source_process", record.name)
+        timestamp = datetime.fromtimestamp(record.created).strftime("%Y-%m-%d %H:%M:%S")
+
+        self._events[level_name].append(
+            LogEvent(
+                level=record.levelname,
+                levelno=record.levelno,
+                timestamp=timestamp,
+                process_name=process_name,
+                message=record.getMessage(),
+            )
+        )
+
+class SourceProcessAutoFilter(logging.Filter):
+    """
+    Logging filter that automatically injects the calling function or method name as 'source_process' into log records.
+    Works for both functions and class methods.
+    """
+    def __init__(self, logger_module_name: str = None):
+        super().__init__()
+        self._logger_module_name = logger_module_name
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if not hasattr(record, "source_process"):
+            # Determine the module name to search for
+            module_name = self._logger_module_name
+            if module_name is None:
+                # Try to infer from the logger name
+                module_name = getattr(record, "name", None)
+            # Walk up the stack to find the first frame matching the logger's module name
+            frame = inspect.currentframe()
+            found = False
+            while frame:
+                code = frame.f_code
+                frame_module = frame.f_globals.get("__name__", "")
+                # Exclude frames from this filter class itself
+                if frame_module == __name__ and code.co_name == "filter":
+                    frame = frame.f_back
+                    continue
+                # Stop at the first frame matching the logger's module
+                if module_name and frame_module == module_name:
+                    func_name = code.co_name
+                    if "self" in frame.f_locals:
+                        cls_name = type(frame.f_locals["self"]).__name__
+                        record.source_process = f"{cls_name}.{func_name}"
+                    elif "cls" in frame.f_locals:
+                        cls_name = frame.f_locals["cls"].__name__
+                        record.source_process = f"{cls_name}.{func_name}"
+                    else:
+                        record.source_process = func_name
+                    found = True
+                    break
+                frame = frame.f_back
+            if not found:
+                # Fallback: use the function name of the first non-logging frame
+                frame = inspect.currentframe()
+                while frame:
+                    code = frame.f_code
+                    frame_module = frame.f_globals.get("__name__", "")
+                    if not frame_module.startswith("logging") and not (frame_module == __name__ and code.co_name == "filter"):
+                        func_name = code.co_name
+                        if "self" in frame.f_locals:
+                            cls_name = type(frame.f_locals["self"]).__name__
+                            record.source_process = f"{cls_name}.{func_name}"
+                        elif "cls" in frame.f_locals:
+                            cls_name = frame.f_locals["cls"].__name__
+                            record.source_process = f"{cls_name}.{func_name}"
+                        else:
+                            record.source_process = func_name
+                        break
+                    frame = frame.f_back
+        return True
+
+class RelativePathMessageFilter(logging.Filter):
+    """
+    Shortens absolute path strings in log messages by replacing known base paths with aliases.
+    Useful for making logs more readable and portable.
+    """
+    def __init__(self, relative_base_paths: dict[str, Path]) -> None:
+        super().__init__()
+        self._compiled_patterns: list[tuple[re.Pattern[str], str]] = []
+
+        for alias, base_path in relative_base_paths.items():
+            resolved_base = str(Path(base_path).resolve())
+            normalized_alias = alias.rstrip("/\\")
+
+            if not normalized_alias:
+                continue
+
+            for candidate in {resolved_base, resolved_base.replace("\\", "/")}:
+                pattern = re.compile(re.escape(candidate), flags=re.IGNORECASE)
+                self._compiled_patterns.append((pattern, normalized_alias))
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        # Optionally skip this filter for certain records
+        if getattr(record, "_skip_path_alias_filter", False):
+            return True
+
+        if not self._compiled_patterns:
+            return True
+
+        message = record.getMessage()
+        shortened_message = message
+
+        for pattern, alias in self._compiled_patterns:
+            shortened_message = pattern.sub(f"<{alias}>", shortened_message)
+
+        if shortened_message != message:
+            record.msg = shortened_message
+            record.args = ()
+
+        return True
+
+class ClearFormatAwareFormatter(logging.Formatter):
+    """
+    Formatter that can output a log message with no formatting if the '_clear_format' attribute is set.
+    Used for summary blocks or blank lines in logs.
+    """
+    def format(self, record: logging.LogRecord) -> str:
+        if getattr(record, "_clear_format", False):
+            # If message is empty, output a blank line; else output message as-is, no formatting
+            msg = record.getMessage()
+            return msg if msg.strip() else ""
+        return super().format(record)
 
 class LoggingManager:
-    """Manages logging configuration with console and file output."""
-
-    def __init__(self, log_name: str, log_dir: Path = None, temp: bool = False, file_logging: bool = True):
+    """
+    Context manager for setting up and tearing down logging for an application or process.
+    Handles console and file logging, in-memory warning/error storage, and log formatting.
+    Provides a summary of warnings and errors at exit.
+    """
+    def __init__(
+        self,
+        write_to_console: bool = True,
+        write_to_report_file: bool = True,
+        report_file: Path | str | None = None,
+        relative_base_paths: dict[str, Path | str] | None = None,
+        console_level: int = logging.INFO,
+        file_level: int = logging.DEBUG,
+    ):
         """
         Initialize the LoggingManager.
 
-        Parameters
-        ----------
-        log_name : str
-            Name for the log file (without extension)
-        log_dir : Path, optional
-            Directory where log files will be written. If None and file_logging is True,
-            uses a temporary location in the current working directory until set_log_directory
-            is called. Ignored if file_logging is False.
-        temp : bool, optional
-            If True, marks the current log location as temporary and schedules it for
-            cleanup on exit. Default is False. Note: if log_dir is None, the log is
-            always treated as temporary regardless of this parameter. Ignored if file_logging
-            is False.
-        file_logging : bool, optional
-            If True, enables file logging in addition to console logging. If False,
-            only console logging is enabled. Default is True.
+        Args:
+            write_to_console: If True, log to console.
+            write_to_report_file: If True, log to a file.
+            report_file: Path to the log file (required if write_to_report_file is True).
+            relative_base_paths: Mapping of path aliases for shortening paths in log messages.
+            console_level: Logging level for the console handler.
+            file_level: Logging level for the file handler.
         """
-        self._log_name = log_name
-        self._log_dir = log_dir
-        self._log_path = None
-        self._file_handler = None
-        self._console_handler = None
-        self._memory_handler = None
-        self._logger = None
-        self._is_temp = temp  # Track whether current log file is temporary
-        self._file_logging = file_logging  # Track whether file logging is enabled
-        self._temp_log_paths = set()  # Track all temporary log files for cleanup
-        self._console_formatter = None  # Will be initialized in _setup_logging
-        self._file_formatter = None  # Will be initialized in _setup_logging
+        self._write_to_console = write_to_console
+        self._write_to_report_file = write_to_report_file
+        self._report_file = Path(report_file) if report_file is not None else None
+        self._relative_base_paths = {alias: Path(base_path).resolve()for alias, base_path in (relative_base_paths or {}).items()}
+        self._console_level = console_level
+        self._file_level = file_level
 
-    def __enter__(self):
-        """Enter context manager."""
-        self._setup_logging()
+        if self._write_to_report_file and self._report_file is None:
+            raise ValueError("report_file must be provided when write_to_report_file is True.")
+
+        self._console_handler: logging.Handler | None = None
+        self._file_handler: logging.Handler | None = None
+        self._memory_handler = WarningMemoryHandler()
+        self._relative_path_filter = RelativePathMessageFilter(self._relative_base_paths)
+
+        self._console_formatter = ClearFormatAwareFormatter("%(levelname)s[%(source_process)s]: %(message)s")
+        self._file_formatter = ClearFormatAwareFormatter("%(levelname)s[%(asctime)s][%(source_process)s]: %(message)s",datefmt="%Y-%m-%d %H:%M:%S")
+
+
+        self._root_logger = None
+        self._logger = None
+
+    def __enter__(self) -> logging.Logger:
+        """
+        Set up logging handlers and return the logger for use in a with-statement.
+        """
+        try:
+            self._setup_handlers()
+            self._logger = get_logger(__name__)
+        except Exception as e:
+            self.__exit__(*sys.exc_info())
+            raise RuntimeError(f"Failed to set up logging handlers: {e}") from e
+
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        """Exit context manager."""
-        self._cleanup_logging()
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        """
+        Write a summary of warnings/errors and clean up all handlers on exit.
+        """
+        self._write_summary()
+        self._teardown_handlers()
 
-    def _setup_logging(self):
-        """Configure logging with console and file handlers."""
-        # Create custom formatter with process name support
-        class ProcessFormatter(logging.Formatter):
-            def format(self, record):
-                # Use process_name from extra if provided, otherwise use logger name
-                process = getattr(record, 'process_name', record.name)
-                record.process_display = process
-                return super().format(record)
+    @property
+    def warning_and_above_logs(self) -> dict[str, list[LogEvent]]:
+        """Returns all WARNING, ERROR, and CRITICAL log events captured in memory."""
+        return self._memory_handler.events
 
-        # Console formatter (no timestamp)
-        self._console_formatter = ProcessFormatter('%(levelname)s[%(process_display)s]: %(message)s')
+    @property
+    def report_file(self) -> Path:
+        """Get the current report file path. Raises if file logging is not enabled."""
+        if not self._write_to_report_file:
+            raise RuntimeError("File logging is not enabled, no report file available.")
 
-        # File formatter (includes date and time)
-        self._file_formatter = ProcessFormatter('%(levelname)s[%(asctime)s][%(process_display)s]: %(message)s')
-        self._file_formatter.datefmt = '%Y-%m-%d %H:%M:%S'
+        return self._report_file
 
-        # Memory handler (stores WARNING and higher level logs)
-        self._memory_handler = logging.handlers.MemoryHandler(capacity=1000, target=None, flushLevel=logging.CRITICAL + 1)
-        self._memory_handler.setLevel(logging.WARNING)
+    def transfer_log_file(self, new_report_file: Path | str) -> None:
+        """
+        Transfer the current log file to a new location. Useful for moving logs after creation.
+        If the new_report_file already exists, it will be overwritten.
+        """
+        if not self._write_to_report_file:
+            raise RuntimeError("File logging is not enabled, cannot transfer log file.")
+        if self._report_file is None:
+            raise RuntimeError("Current report file path is not set, cannot transfer log file.")
 
-        # Console handler
-        self._console_handler = logging.StreamHandler(sys.stdout)
+        if self._file_handler:
+            self._file_handler.flush()
+            self._file_handler.close()
+            self._root_logger.removeHandler(self._file_handler)
+
+        try:
+            # Use rename for atomic move if on the same filesystem
+            self._report_file.rename(new_report_file)
+
+            # Recreate the file handler with the new report file path
+            self._setup_file_handler(new_report_file)
+
+            # Update the internal report file reference to the new location
+            self._report_file = new_report_file
+
+            self._logger.info(f"Log file transferred to {new_report_file}", extra={"_skip_path_alias_filter": True})
+
+        except Exception as e:
+            raise RuntimeError(f"Failed to transfer log file to {new_report_file}: {e}") from e
+
+
+    def _setup_file_handler(self, report_file: Path | str) -> None:
+        self._file_handler = logging.FileHandler(report_file, encoding="utf-8")
+        self._file_handler.setLevel(self._file_level)
+        self._file_handler.setFormatter(self._file_formatter)
+        self._file_handler.addFilter(self._relative_path_filter)
+        self._root_logger.addHandler(self._file_handler)
+
+    def _setup_console_handler(self) -> None:
+        self._console_handler = logging.StreamHandler()
+        self._console_handler.setLevel(self._console_level)
         self._console_handler.setFormatter(self._console_formatter)
-        self._console_handler.setLevel(logging.INFO)
+        self._console_handler.addFilter(self._relative_path_filter)
+        self._root_logger.addHandler(self._console_handler)
 
-        # File handler - only create if file_logging is enabled
-        if self._file_logging:
-            # File handler - if log_dir is provided, use it; otherwise, use a temp file
-            if self._log_dir:
-                self._log_path = self._get_log_path(self._log_dir)
-            else:
-                # Use temporary location in current working directory
-                self._log_path = self._get_log_path(Path.cwd())
-                # Override: if no log_dir provided, file is always temporary
-                self._is_temp = True
+    def _setup_memory_handler(self) -> None:
+        self._memory_handler.setLevel(logging.WARNING)
+        self._memory_handler.addFilter(self._relative_path_filter)
+        self._root_logger.addHandler(self._memory_handler)
 
-            # Track temporary files for cleanup
-            if self._is_temp:
-                self._temp_log_paths.add(self._log_path)
-
-            self._file_handler = logging.FileHandler(self._log_path, mode='a', encoding='utf-8')
-            self._file_handler.setFormatter(self._file_formatter)
-            self._file_handler.setLevel(logging.DEBUG)
-
-        # Configure logger
-        self._logger = logging.getLogger('oregon_processing')
-        self._logger.setLevel(logging.DEBUG)
-        self._logger.addHandler(self._console_handler)
-        self._logger.addHandler(self._memory_handler)
-        if self._file_logging and self._file_handler:
-            self._logger.addHandler(self._file_handler)
-
-        # Prevent propagation to root logger to avoid duplicate output
-        self._logger.propagate = False
-
-    def _get_log_path(self, log_dir: Path) -> Path:
+    def _setup_handlers(self) -> None:
         """
-        Generate log file path with timestamp.
-
-        Parameters
-        ----------
-        log_dir : Path
-            Directory for log file
-
-        Returns
-        -------
-        Path
-            Full path to log file
+        Set up all logging handlers (console, file, memory) and filters/formatters on the root logger.
         """
-        log_dir = Path(log_dir)
-        log_dir.mkdir(parents=True, exist_ok=True)
+        self._root_logger = logging.getLogger()
+        self._root_logger.setLevel(logging.NOTSET) # Pass all logs to handlers and let handlers filter by level
+        self._root_logger.filters.clear()
+        self._root_logger.handlers.clear()
 
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        log_filename = f"{self._log_name}_{timestamp}.log"
-        return log_dir / log_filename
+        # Add console handler if enabled
+        if self._write_to_console:
+            self._setup_console_handler()
 
-    def set_log_directory(self, log_dir: Path, temp: bool = False):
+        # Add file handler if enabled
+        if self._write_to_report_file:
+            if self._report_file is None:
+                raise ValueError("report_file must be provided when write_to_report_file is True.")
+
+            self._report_file.parent.mkdir(parents=True, exist_ok=True)
+
+            self._setup_file_handler(self._report_file)
+
+        # Memory handler is always set up to capture warnings and above for summary generation
+        self._setup_memory_handler()
+
+    def _teardown_handlers(self) -> None:
         """
-        Set or update the log directory, moving the current log file if needed.
-
-        Transitions the log file from its current location to a new directory,
-        preserving all logged content. Supports moving from temporary locations
-        to permanent ones or between any two locations.
-
-        Only valid when file_logging is enabled. Does nothing if file_logging
-        is False.
-
-        Parameters
-        ----------
-        log_dir : Path
-            New directory for log files. Can be a string or Path object.
-        temp : bool, optional
-            If True, marks the new log file as temporary for cleanup on exit.
-            Default is False.
+        Remove and close all handlers and clear filters from the root logger.
         """
-        if not self._file_logging or not self._file_handler:
+        for handler in list(self._root_logger.handlers):
+            handler.flush()
+            handler.close()
+            self._root_logger.removeHandler(handler)
+
+        self._root_logger.filters.clear()
+
+        self._console_handler = None
+        self._file_handler = None
+
+    def _write_summary(self) -> None:
+        """
+        Write a summary of all WARNING, ERROR, and CRITICAL log events at the end of logging.
+        Outputs a count and indented list of all such events.
+        """
+        warning_count = len(self._memory_handler.events["WARNING"])
+        error_count = len(self._memory_handler.events["ERROR"])
+        critical_count = len(self._memory_handler.events["CRITICAL"])
+        total = warning_count + error_count + critical_count
+
+        # Write a clear, unformatted separator line before the summary block
+        self._logger.info("", extra={"_clear_format": True})
+
+        if total == 0:
+            self._logger.info(
+                "No WARNING, ERROR, or CRITICAL logs recorded.",
+                extra={"_from_summary": True},
+            )
+            # add two empty lines after the summary for better separation in the logs
+            self._logger.info("", extra={"_clear_format": True})
             return
 
-        if isinstance(log_dir, str):
-            log_dir = Path(log_dir)
-        log_dir.mkdir(parents=True, exist_ok=True)
+        self._logger.info(
+            f"WARNING={warning_count}, ERROR={error_count}, CRITICAL={critical_count}",
+            extra={"_from_summary": True},
+        )
 
-        # Create new log path - reuse old filename if exists, otherwise generate new
-        if self._log_path and self._log_path.exists():
-            new_log_path = log_dir / self._log_path.name
-        else:
-            new_log_path = self._get_log_path(log_dir)
+        # Indent the entire summary block as a sub-list, including level and source_process
+        indent = "        "
+        bullet_point = "• "
+        original_console_formatter = self._console_handler.formatter if self._console_handler else None
+        original_file_formatter = self._file_handler.formatter if self._file_handler else None
+        indented_console_formatter = ClearFormatAwareFormatter(indent + bullet_point + "%(levelname)s[%(source_process)s]: %(message)s")
+        indented_file_formatter = ClearFormatAwareFormatter(indent + bullet_point + "%(levelname)s[%(asctime)s][%(source_process)s]: %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
 
-        # Copy contents from old file if it exists
-        if self._log_path and self._log_path.exists():
-            with open(self._log_path, 'r', encoding='utf-8') as old_file:
-                old_contents = old_file.read()
+        # Temporarily set indented formatters
+        if self._console_handler:
+            self._console_handler.setFormatter(indented_console_formatter)
+        if self._file_handler:
+            self._file_handler.setFormatter(indented_file_formatter)
 
-            with open(new_log_path, 'a', encoding='utf-8') as new_file:
-                new_file.write(old_contents)
+        try:
+            for level in ("WARNING", "ERROR", "CRITICAL"):
+                for event in self._memory_handler.events[level]:
+                    summary_message = event.message.replace("\n", f"\n{indent}")
+                    self._logger.log(
+                        event.levelno,
+                        summary_message,
+                        extra={"_from_summary": True, "source_process": event.process_name},
+                    )
 
-            # If old file was marked as temporary, schedule it for cleanup
-            if self._is_temp:
-                self._temp_log_paths.add(self._log_path)
+            # add two empty lines after the summary for better separation in the logs
+            self._logger.info("", extra={"_clear_format": True})
 
-        self._log_path = new_log_path
-
-        # Remove old file handler
-        self._logger.removeHandler(self._file_handler)
-        self._file_handler.close()
-
-        # Create and add new file handler with stored formatter
-        self._file_handler = logging.FileHandler(new_log_path, mode='a', encoding='utf-8')
-        self._file_handler.setFormatter(self._file_formatter)
-        self._file_handler.setLevel(logging.DEBUG)
-        self._logger.addHandler(self._file_handler)
-
-        # Track new temp file if applicable
-        if temp:
-            self._temp_log_paths.add(new_log_path)
-
-        self._is_temp = temp  # Update temp status based on new location
-
-    def get_logger(self, name: str = None) -> logging.Logger:
-        """
-        Get a logger instance.
-
-        Parameters
-        ----------
-        name : str, optional
-            Logger name. If None, returns the root oregon_processing logger.
-
-        Returns
-        -------
-        logging.Logger
-            Logger instance
-        """
-        if name:
-            return logging.getLogger(f'oregon_processing.{name}')
-        return self._logger
-
-    def _cleanup_logging(self):
-        """Clean up logging handlers and temporary log files."""
-        # Display recap of warnings and errors before closing
-        if self._memory_handler:
+        finally:
+            # Restore original formatters
+            if self._console_handler and original_console_formatter:
+                self._console_handler.setFormatter(original_console_formatter)
+            if self._file_handler and original_file_formatter:
+                self._file_handler.setFormatter(original_file_formatter)
 
 
-            if self._memory_handler.buffer:
-                recap_header = "\nLOG RECAP - Warnings and Errors"
+def get_logger(name: str) -> logging.Logger:
+    """
+    Get a logger by name and ensure SourceProcessAutoFilter is attached.
+    name is typically __name__ of the module requesting the logger, but can be any string to identify the logger's context.
+    """
 
-                # Sort records by level (WARNING < ERROR < CRITICAL)
-                sorted_records = sorted(self._memory_handler.buffer, key=lambda r: r.levelno)
+    logger = logging.getLogger(name)
 
-                # Format recap for console using console formatter
-                console_recap_lines = [recap_header]
-                for record in sorted_records:
-                    formatted_line = self._console_formatter.format(record)
-                    indented_message = f"  • {formatted_line}"
-                    console_recap_lines.append(indented_message)
-
-                console_recap_text = "\n".join(console_recap_lines)
-
-                # Format recap for file using file formatter
-                file_recap_lines = [recap_header]
-                for record in sorted_records:
-                    formatted_line = self._file_formatter.format(record)
-                    indented_message = f"  • {formatted_line}"
-                    file_recap_lines.append(indented_message)
-
-                file_recap_text = "\n".join(file_recap_lines)
-
-                # Write recap to console handler
-                if self._console_handler:
-                    self._console_handler.stream.write(f"{console_recap_text}\n")
-                    self._console_handler.stream.flush()
-
-                # Write recap to file handler
-                if self._file_handler:
-                    self._file_handler.stream.write(f"{file_recap_text}\n")
-                    self._file_handler.stream.flush()
-            else:
-                # No warnings or errors
-                recap_message = "\nLOG RECAP - No warnings or errors detected."
-
-                # Write to both console and file
-                if self._console_handler:
-                    self._console_handler.stream.write(f"{recap_message}\n")
-                    self._console_handler.stream.flush()
-                if self._file_handler:
-                    self._file_handler.stream.write(f"{recap_message}\n")
-                    self._file_handler.stream.flush()
-
-        if self._logger:
-            if self._console_handler:
-                self._logger.removeHandler(self._console_handler)
-                self._console_handler.close()
-            if self._memory_handler:
-                self._logger.removeHandler(self._memory_handler)
-            if self._file_handler:
-                self._logger.removeHandler(self._file_handler)
-                self._file_handler.close()
-
-        # Clean up temporary files that were replaced/transitioned
-        # Keep the current log file as a crash log if it was never moved to final location
-        for temp_path in self._temp_log_paths:
-            if temp_path.exists() and temp_path != self._log_path:
-                temp_path.unlink()
+    # Attach SourceProcessAutoFilter with the logger's module name if not already present
+    has_filter = any(isinstance(f, SourceProcessAutoFilter) for f in getattr(logger, 'filters', []))
+    if not has_filter:
+        logger.addFilter(SourceProcessAutoFilter(logger_module_name=name))
+    return logger

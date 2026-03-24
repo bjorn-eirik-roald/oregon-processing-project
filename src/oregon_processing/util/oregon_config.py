@@ -54,14 +54,14 @@ class OregonConfig(Config):
         return self.root_export_data_dir / directory_names.root_event_records_dir_name
 
     @property
-    def root_export_logs_dir(self) -> Path:
+    def root_log_dir(self) -> Path:
         """Get the export logs directory path from the config."""
-        return self.root_output_dir / directory_names.root_export_logs_dir_name
+        return self.root_output_dir / directory_names.root_log_dir_name
 
     @property
     def crash_logs_dir(self) -> Path:
         """Get the crash logs directory path from the config."""
-        return self.root_export_logs_dir / directory_names.root_crash_logs_dir_name
+        return self.root_log_dir / directory_names.crash_logs_dir_name
 
 
 

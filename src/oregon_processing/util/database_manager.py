@@ -12,16 +12,7 @@ from pathlib import Path
 class DatabaseManager:
     """Manages database directories and date range tracking for exports."""
 
-    # Folder structure constants
-    EXPORT_LOGS_DIR_NAME = "01_export_logs"
-    EXPORT_DATA_DIR_NAME = "02_export_data"
-    DETECTION_RECORDS_DIR_NAME = "01_detection_records"
-    EVENT_RECORDS_DIR_NAME = "02_event_records"
-    CRASH_LOGS_DIR_NAME = "00_undefined_serial_number_crashes"
-
     DEFAULT_FIRST_DATE = date(2018, 1, 1)
-
-
 
     def __init__(self, config: OregonConfig, communicator: "Communicator"):
         """
@@ -41,8 +32,8 @@ class DatabaseManager:
         # Root directories
         self._data_dir = None
         self._export_logs_base_dir = None
-        self._export_logs_dir = None
-        self._crash_logs_dir = None
+        self._log_dir = None
+        self._crash_log_dir = None
         self._export_data_dir = None
 
         # Export data subdirectories
@@ -57,7 +48,6 @@ class DatabaseManager:
         """Exit context manager."""
         pass
 
-
     @property
     def data_dir(self) -> Path:
         """Get the root data directory path."""
@@ -66,18 +56,18 @@ class DatabaseManager:
         return self._data_dir
 
     @property
-    def export_logs_dir(self) -> Path:
+    def log_dir(self) -> Path:
         """Get the export logs directory path (for specific serial number)."""
-        if self._export_logs_dir is None:
+        if self._log_dir is None:
             raise RuntimeError("Directories not prepared yet.")
-        return self._export_logs_dir
+        return self._log_dir
 
     @property
     def crash_logs_dir(self) -> Path:
         """Get the crash logs directory path (for undefined/pre-connection crashes)."""
-        if self._crash_logs_dir is None:
+        if self._crash_log_dir is None:
             raise RuntimeError("Directories not prepared yet.")
-        return self._crash_logs_dir
+        return self._crash_log_dir
 
     @property
     def export_data_dir(self) -> Path:
@@ -110,6 +100,14 @@ class DatabaseManager:
         """Get the system logs directory path (alias for event_records_dir for backward compatibility)."""
         return self.event_records_dir
 
+    def prepare_crash_log_file(self) -> Path:
+        """Prepare and return the crash logs directory path."""
+        crash_logs_dir = self._config.crash_logs_dir
+        crash_logs_dir.mkdir(parents=True, exist_ok=True)
+
+        crash_log_file = crash_logs_dir / f"crash_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+        return crash_log_file
+
     def prepare_directories(self) -> None:
         """Prepare and create necessary directories for export."""
         logging_extra = {'process_name': 'Output Directory Setup'}
@@ -120,12 +118,11 @@ class DatabaseManager:
         serial_number = self._communicator.serial_number
 
         self._root_output_dir = self._config.root_output_dir
-        self._root_export_logs_dir = self._config.root_export_logs_dir
+        self._root_log_dir = self._config.root_log_dir
         self._root_export_data_dir = self._config.root_export_data_dir
 
         # Add serial number subdirectory to export logs, detection records, and event records
-        self._crash_logs_dir = self._config.crash_logs_dir
-        self._export_logs_dir = self._config.root_export_logs_dir / serial_number
+        self._log_dir = self._config.root_log_dir / serial_number
         self._detection_records_dir = self._config.root_detection_records_dir / serial_number
         self._event_records_dir = self._config.root_event_records_dir / serial_number
 
@@ -133,14 +130,14 @@ class DatabaseManager:
         self._logger.info(f"Root Export data directory: {Path(self._root_export_data_dir).relative_to(self._root_output_dir)}", extra=logging_extra)
         self._logger.info(f"Detection records directory: {Path(self._detection_records_dir).relative_to(self._root_output_dir)}", extra=logging_extra)
         self._logger.info(f"Event records directory: {Path(self._event_records_dir).relative_to(self._root_output_dir)}", extra=logging_extra)
-        self._logger.info(f"Export logs directory: {Path(self._export_logs_dir).relative_to(self._root_output_dir)}", extra=logging_extra)
-        self._logger.info(f"Crash logs directory: {Path(self._crash_logs_dir).relative_to(self._root_output_dir)}", extra=logging_extra)
+        self._logger.info(f"Export logs directory: {Path(self._log_dir).relative_to(self._root_output_dir)}", extra=logging_extra)
+        self._logger.info(f"Crash logs directory: {Path(self._crash_log_dir).relative_to(self._root_output_dir)}", extra=logging_extra)
 
 
         # Create all directories
         directories = [
-            (self._export_logs_dir, "Export logs directory"),
-            (self._crash_logs_dir, "Crash logs directory"),
+            (self._log_dir, "Export logs directory"),
+            (self._crash_log_dir, "Crash logs directory"),
             (self._root_export_data_dir, "Root export data directory"),
             (self._detection_records_dir, "Detection records directory"),
             (self._event_records_dir, "Event records directory"),
@@ -150,55 +147,6 @@ class DatabaseManager:
             if not dir_path.exists():
                 self._logger.info(f"Creating {dir_name}: {dir_path}", extra=logging_extra)
                 dir_path.mkdir(parents=True, exist_ok=True)
-
-    @classmethod
-    def prepare_crash_logs_dir(cls, config: OregonConfig) -> Path:
-        """Create and return the crash logs directory path."""
-        crash_logs_dir = config.crash_logs_dir
-        crash_logs_dir.mkdir(parents=True, exist_ok=True)
-        return crash_logs_dir
-
-    def _format_date_intervals(self, dates: list) -> str:
-        """
-        Convert a list of dates into formatted intervals.
-
-        Parameters
-        ----------
-        dates : list
-            Sorted list of date objects
-
-        Returns
-        -------
-        str
-            Formatted string of date intervals (e.g., "2021-01-01 to 2021-01-15, 2021-02-01 to 2021-02-10")
-        """
-        if not dates:
-            return "None"
-
-        intervals = []
-        interval_start = dates[0]
-        interval_end = dates[0]
-
-        for date_obj in dates[1:]:
-            if (date_obj - interval_end).days == 1:
-                # Consecutive date, extend interval
-                interval_end = date_obj
-            else:
-                # Gap found, save interval and start new one
-                if interval_start == interval_end:
-                    intervals.append(str(interval_start))
-                else:
-                    intervals.append(f"{interval_start} to {interval_end}")
-                interval_start = date_obj
-                interval_end = date_obj
-
-        # Add final interval
-        if interval_start == interval_end:
-            intervals.append(str(interval_start))
-        else:
-            intervals.append(f"{interval_start} to {interval_end}")
-
-        return ", ".join(intervals)
 
     def get_export_dates(self) -> dict:
         """
@@ -265,3 +213,53 @@ class DatabaseManager:
             'records': missing_record_dates,
             'system_logs': missing_event_dates
         }
+
+    @classmethod
+    def prepare_crash_log_dir(cls, config: OregonConfig) -> Path:
+        """Create and return the crash logs directory path."""
+        crash_logs_dir = config.crash_logs_dir
+        crash_logs_dir.mkdir(parents=True, exist_ok=True)
+        return crash_logs_dir
+
+    def _format_date_intervals(self, dates: list) -> str:
+        """
+        Convert a list of dates into formatted intervals.
+
+        Parameters
+        ----------
+        dates : list
+            Sorted list of date objects
+
+        Returns
+        -------
+        str
+            Formatted string of date intervals (e.g., "2021-01-01 to 2021-01-15, 2021-02-01 to 2021-02-10")
+        """
+        if not dates:
+            return "None"
+
+        intervals = []
+        interval_start = dates[0]
+        interval_end = dates[0]
+
+        for date_obj in dates[1:]:
+            if (date_obj - interval_end).days == 1:
+                # Consecutive date, extend interval
+                interval_end = date_obj
+            else:
+                # Gap found, save interval and start new one
+                if interval_start == interval_end:
+                    intervals.append(str(interval_start))
+                else:
+                    intervals.append(f"{interval_start} to {interval_end}")
+                interval_start = date_obj
+                interval_end = date_obj
+
+        # Add final interval
+        if interval_start == interval_end:
+            intervals.append(str(interval_start))
+        else:
+            intervals.append(f"{interval_start} to {interval_end}")
+
+        return ", ".join(intervals)
+

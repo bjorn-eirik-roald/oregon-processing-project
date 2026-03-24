@@ -1,13 +1,10 @@
-import sys
 import logging
 from contextlib import ExitStack
-from pathlib import Path
-from datetime import datetime
 
 from oregon_processing.util.communicator import Communicator
-from oregon_processing.util.oregon_config import OregonConfig, check_config_file_exists
+from oregon_processing.util.oregon_config import OregonConfig
 from oregon_processing.util.database_manager import DatabaseManager
-from oregon_processing.util.logging_manager import LoggingManager
+from oregon_processing.util.logging_manager import LoggingManager, get_logger
 
 
 class ExportProtocol:
@@ -24,14 +21,20 @@ class ExportProtocol:
             return self._session
         except Exception:
             # Create a temporary logger to capture initialization errors
-            logger = logging.getLogger('oregon_processing.export_protocol')
+            logger = logging.getLogger()
+            # If no handlers exist, set up a basic one
+            if not logger.hasHandlers():
+                logging.basicConfig(level=logging.ERROR)
             logger.exception("Failed to enter ExportProtocol context")
+
             if self._exit_stack:
                 self._exit_stack.close()
             raise
 
     def __exit__(self, exc_type, exc_value, traceback):
-        self._exit_stack.__exit__(exc_type, exc_value, traceback)
+        if self._exit_stack:
+            return self._exit_stack.__exit__(exc_type, exc_value, traceback)
+        return False
 
 
 class _ExportProtocolSession:
@@ -52,11 +55,18 @@ class _ExportProtocolSession:
             self._config = OregonConfig()
 
             # Set up logging with crash logs directory
-            crash_logs_dir = DatabaseManager.prepare_crash_logs_dir(self._config)
+            crash_log_file = DatabaseManager.prepare_crash_log_file(self._config)
             self._logging_manager = self._exit_stack.enter_context(
-                LoggingManager(log_name="export_protocol", log_dir=crash_logs_dir, temp=True, file_logging=True)
-            )
-            self._logger = self._logging_manager.get_logger('export_protocol')
+                LoggingManager(
+                    write_to_console = True,
+                    write_to_report_file = True,
+                    report_file = crash_log_file,
+                    relative_base_paths = [self._config.root_output_dir],
+                    console_level = logging.INFO,
+                    file_level = logging.DEBUG,)
+                    )
+
+            self._logger = get_logger(__name__)
 
             self._communicator = self._exit_stack.enter_context(Communicator())
 
@@ -64,8 +74,11 @@ class _ExportProtocolSession:
                 self._database_manager = self._exit_stack.enter_context(DatabaseManager(self._config, self._communicator))
                 self._database_manager.prepare_directories()
 
-                # Update log directory to final location
-                self._logging_manager.set_log_directory(self._database_manager.export_logs_dir)
+                # Update log file to final location
+                report_file_dir = self._database_manager.log_dir
+                report_file_name = self._logging_manager.report_file.name
+                report_file = report_file_dir / report_file_name
+                self._logging_manager.transfer_log_file(report_file)
         except Exception:
             if self._logger:
                 self._logger.exception("Failed to initialize export protocol", extra=logging_extra)
