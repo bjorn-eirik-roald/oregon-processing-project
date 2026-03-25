@@ -6,9 +6,9 @@ Provides methods for checking device health status, including supply voltage
 and other system parameters.
 """
 
+import re
 from oregon_processing.util.logging_manager import get_logger
 
-#import Oregon Communicator in type checking block to avoid circular import issues
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from oregon_processing.util.communicator import Communicator
@@ -20,6 +20,7 @@ class DeviceHealthChecker:
 
     RECOMMENDED_VOLTAGE = 14.0
     CRITICAL_VOLTAGE_THRESHOLD = 12.5
+    OLD_VERSION_THRESHOLD = 3.74
 
     def __init__(self, communicator: "Communicator"):
         """
@@ -58,24 +59,45 @@ class DeviceHealthChecker:
                 f"Device time is not synchronized to GNSS signals (current state: '{prompt_signature[2]}')"
             )
 
-        # Check supply voltage
-        if parsed_status['supply_voltage']:
-            try:
-                voltage = float(parsed_status['supply_voltage'])
-                if voltage < self.RECOMMENDED_VOLTAGE:
+        # check version
+        try:
+            version_str = str(parsed_status['version'])
+            version_number = None
+            # Expect format like 'V2.74N' or 'V2.74'
+
+            match = re.match(r"V([0-9]+\.[0-9]+)", version_str)
+            if match:
+                version_number = float(match.group(1))
+                if version_number < self.OLD_VERSION_THRESHOLD:
                     non_critical_warnings.append(
-                        f"Low supply voltage: {voltage}V (recommended to be >= {self.RECOMMENDED_VOLTAGE}V)"
+                        f"Device firmware version {version_str} is outdated (should be >= {self.OLD_VERSION_THRESHOLD})"
                     )
-
-                if voltage < self.CRITICAL_VOLTAGE_THRESHOLD:
-                    critical_warnings.append(
-                        f"Critical low supply voltage: {voltage}V (must be >= {self.CRITICAL_VOLTAGE_THRESHOLD}V)"
-                    )
-
-            except (ValueError, TypeError):
+            else:
                 non_critical_warnings.append(
-                    f"Could not parse supply voltage: {parsed_status['supply_voltage']}"
+                    f"Could not parse device firmware version: {version_str}"
                 )
+        except (ValueError, TypeError):
+            non_critical_warnings.append(
+                f"Could not parse device firmware version: {parsed_status['version']}"
+            )
+
+        # Check supply voltage
+        try:
+            voltage = float(parsed_status['supply_voltage'])
+            if voltage < self.RECOMMENDED_VOLTAGE:
+                non_critical_warnings.append(
+                    f"Low supply voltage: {voltage}V (recommended to be >= {self.RECOMMENDED_VOLTAGE}V)"
+                )
+
+            if voltage < self.CRITICAL_VOLTAGE_THRESHOLD:
+                critical_warnings.append(
+                    f"Critical low supply voltage: {voltage}V (must be >= {self.CRITICAL_VOLTAGE_THRESHOLD}V)"
+                )
+
+        except (ValueError, TypeError):
+            non_critical_warnings.append(
+                f"Could not parse supply voltage: {parsed_status['supply_voltage']}"
+            )
 
 
         health_report = {
