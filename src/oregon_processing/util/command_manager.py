@@ -318,7 +318,6 @@ class CommandManager:
             line = self._communicator._connection.readline().decode(errors="ignore").strip()
 
             if line:
-                raw_line = line
                 prompt_ready = self._is_ready_prompt(line)
 
                 if prompt_ready:

@@ -229,6 +229,7 @@ class LoggingManager:
         try:
             self._setup_handlers()
             self._logger = get_logger(__name__)
+            self._logger.debug("LoggingManager initialized with console_level=%s, file_level=%s, report_file=%s", self._console_level, self._file_level, self._report_file)
         except Exception as e:
             self.__exit__(*sys.exc_info())
             raise RuntimeError(f"Failed to set up logging handlers: {e}") from e
@@ -268,6 +269,7 @@ class LoggingManager:
         if self._file_handler:
             self._file_handler.flush()
             self._file_handler.close()
+            self._file_handler = None
             self._root_logger.removeHandler(self._file_handler)
 
         try:
@@ -280,30 +282,10 @@ class LoggingManager:
             # Update the internal report file reference to the new location
             self._report_file = new_report_file
 
-            self._logger.info(f"Log file transferred to {new_report_file}", extra={"_skip_path_alias_filter": True})
+            self._logger.debug(f"Log file transferred to {new_report_file}", extra={"_skip_path_alias_filter": True})
 
         except Exception as e:
             raise RuntimeError(f"Failed to transfer log file to {new_report_file}: {e}") from e
-
-
-    def _setup_file_handler(self, report_file: Path | str) -> None:
-        self._file_handler = logging.FileHandler(report_file, encoding="utf-8")
-        self._file_handler.setLevel(self._file_level)
-        self._file_handler.setFormatter(self._file_formatter)
-        self._file_handler.addFilter(self._relative_path_filter)
-        self._root_logger.addHandler(self._file_handler)
-
-    def _setup_console_handler(self) -> None:
-        self._console_handler = logging.StreamHandler()
-        self._console_handler.setLevel(self._console_level)
-        self._console_handler.setFormatter(self._console_formatter)
-        self._console_handler.addFilter(self._relative_path_filter)
-        self._root_logger.addHandler(self._console_handler)
-
-    def _setup_memory_handler(self) -> None:
-        self._memory_handler.setLevel(logging.WARNING)
-        self._memory_handler.addFilter(self._relative_path_filter)
-        self._root_logger.addHandler(self._memory_handler)
 
     def _setup_handlers(self) -> None:
         """
@@ -321,7 +303,8 @@ class LoggingManager:
         # Add file handler if enabled
         if self._write_to_report_file:
             if self._report_file is None:
-                raise ValueError("report_file must be provided when write_to_report_file is True.")
+                error_message = "Report_file must be provided when write_to_report_file is True."
+                raise ValueError(error_message)
 
             self._report_file.parent.mkdir(parents=True, exist_ok=True)
 
@@ -339,16 +322,18 @@ class LoggingManager:
             handler.close()
             self._root_logger.removeHandler(handler)
 
-        self._root_logger.filters.clear()
-
         self._console_handler = None
         self._file_handler = None
+        self._memory_handler = None
 
     def _write_summary(self) -> None:
         """
         Write a summary of all WARNING, ERROR, and CRITICAL log events at the end of logging.
         Outputs a count and indented list of all such events.
         """
+        if not self._memory_handler:
+            return
+
         warning_count = len(self._memory_handler.events["WARNING"])
         error_count = len(self._memory_handler.events["ERROR"])
         critical_count = len(self._memory_handler.events["CRITICAL"])
@@ -404,6 +389,27 @@ class LoggingManager:
                 self._console_handler.setFormatter(original_console_formatter)
             if self._file_handler and original_file_formatter:
                 self._file_handler.setFormatter(original_file_formatter)
+
+    def _setup_file_handler(self, report_file: Path | str) -> None:
+        self._file_handler = logging.FileHandler(report_file, encoding="utf-8")
+        self._file_handler.setLevel(self._file_level)
+        self._file_handler.setFormatter(self._file_formatter)
+        self._file_handler.addFilter(self._relative_path_filter)
+        self._root_logger.addHandler(self._file_handler)
+
+    def _setup_console_handler(self) -> None:
+        self._console_handler = logging.StreamHandler()
+        self._console_handler.setLevel(self._console_level)
+        self._console_handler.setFormatter(self._console_formatter)
+        self._console_handler.addFilter(self._relative_path_filter)
+        self._root_logger.addHandler(self._console_handler)
+
+    def _setup_memory_handler(self) -> None:
+        self._memory_handler.setLevel(logging.WARNING)
+        self._memory_handler.addFilter(self._relative_path_filter)
+        self._root_logger.addHandler(self._memory_handler)
+
+        self._root_logger.filters.clear()
 
 
 def get_logger(name: str) -> logging.Logger:

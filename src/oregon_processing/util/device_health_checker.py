@@ -45,8 +45,8 @@ class DeviceHealthChecker:
 
 
 
-        self._logger.info("Initializing health check of Oregon RFID device.")
-        self._logger.info("Retrieving System Status.")
+        self._logger.debug("Initializing health check of Oregon RFID device.")
+        self._logger.debug("Retrieving System Status.")
 
         critical_warnings = []
         non_critical_warnings = []
@@ -87,7 +87,7 @@ class DeviceHealthChecker:
         # Report health status
         if not health_report['healthy']:
             total_issues = len(critical_warnings) + len(non_critical_warnings)
-            warning_message = f"{total_issues} issue(s) detected during health check."
+            warning_message = f"Device health check detected {total_issues} issue(s)."
 
             if critical_warnings:
                 warning_message += "\n  Critical:"
@@ -102,6 +102,6 @@ class DeviceHealthChecker:
             self._logger.warning(warning_message)
 
         else:
-            self._logger.info("All parameters within normal range")
+            self._logger.info("Device health check passed. All parameters within normal range.")
 
         return health_report

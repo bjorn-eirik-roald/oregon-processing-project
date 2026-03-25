@@ -254,10 +254,10 @@ class DataExporter:
         if mode != 'Standby':
             old_mode = mode
             self._communicator.change_mode('Standby')
+            self._logger.info(f"Changed device mode to Standby for export. Will return to {old_mode} mode after export is complete.")
 
         # Header
-        self._logger.info("Initializing Event Record Export")
-        self._logger.info(f"Dates to export: {len(dates)} date(s)")
+        self._logger.info("Initializing export of event records from {} date(s).".format(len(dates)))
         self._logger.debug(f"Output directory: {output_dir}")
 
         # Prepare ranges and formatting
@@ -268,6 +268,7 @@ class DataExporter:
         all_successful = True
         export_count = 0
 
+        self._logger.debug("Exporting event records to files.")
         for date_num, current_date in enumerate(all_dates):
 
             output_filepath = output_dir / f"{self._communicator.serial_number}_event_records_{current_date.strftime('%Y_%m_%d')}.txt"
@@ -307,17 +308,22 @@ class DataExporter:
                 message += f" Lines written: {n_lines}."
                 self._logger.info(message)
                 export_count += 1
+            else:
+                message += "Failed to export event records for this date."
+                self._logger.error(message)
 
         failed_exports = num_dates - export_count
 
-        self._logger.info("Completed Event Record Export")
-        self._logger.info(f"Total dates processed: {num_dates}")
 
+
+        if all_successful:
+            self._logger.info("Completed Event Record Export. Total dates processed: {}.".format(num_dates))
         if not all_successful:
-            self._logger.warning(f"{failed_exports} exports failed.")
+            self._logger.warning(f"Completed Event Record Export with {failed_exports} exports failed.")
 
         if old_mode:
             self._communicator.change_mode(old_mode)
+            self._logger.info(f"Returned device mode to {old_mode} after export.")
 
         return True if all_successful else False
 
@@ -359,14 +365,16 @@ class DataExporter:
         if mode != 'Standby':
             old_mode = mode
             self._communicator.change_mode('Standby')
+            self._logger.info(f"Changed device mode to Standby for export. Will return to {old_mode} mode after export is complete.")
 
         upload_history = self._communicator.get_upload_history()
         total_number_of_records = upload_history["total_records"]
 
-        self._logger.info("Initializing Detection Records Export")
-        self._logger.info(f"Dates to export: {len(dates)} date(s)")
-        self._logger.info(f"Total records on device: {total_number_of_records}")
+        self._logger.info("Initializing export of detection records from {} date(s).".format(len(dates)))
+        self._logger.debug(f"Total records on device: {total_number_of_records}")
         self._logger.debug(f"Output directory: {output_dir}")
+
+
         self._logger.debug("Setting detection record format for export.")
 
         default_format = self.DEFAULT_DETECTION_RECORD_FORMAT[self._communicator.device_type]
@@ -374,9 +382,9 @@ class DataExporter:
             self._logger.error("Failed to set detection record format. Cannot continue.")
             return False
 
-        self._logger.info("Detection record format set successfully.")
+        self._logger.debug("Detection record format set successfully.")
 
-        self._logger.info("Requesting all records from device. This may take a while if there are many records on the device. Please wait...")
+        self._logger.info(f"Requesting all ({total_number_of_records}) records from device. This may take a while if there are many records on the device. Please wait...")
 
         try:
             response = self._command_manager.send_command("UP*")
@@ -404,7 +412,7 @@ class DataExporter:
             self._logger.error(error_message)
             raise RuntimeError(error_message)
 
-        self._logger.info("Filtering detection records to export dates.")
+        self._logger.debug("Filtering detection records to export dates.")
         # Convert dates to strings for comparison (YYYY-MM-DD format sorts chronologically)
         target_dates_set = set(d.strftime("%Y-%m-%d") for d in dates)
 
@@ -427,10 +435,11 @@ class DataExporter:
             if record_date_str in target_dates_set:
                 filtered_detection_records.append(parts)
 
+        self._logger.debug("Detection records filtered successfully.")
 
-        self._logger.info("Organizing detection records by date.")
-        detection_records_by_date = {} # dict with date keys and list of detection records values
-        unique_tags_by_date = {} # dict with date keys and set of unique tags values
+        self._logger.debug("Organizing detection records by date.")
+        detection_records_by_date = {}  # dict with date keys and list of detection records values
+        unique_tags_by_date = {}        # dict with date keys and set of unique tags values
         all_dates = sorted(dates)
         num_dates = len(all_dates)
 
@@ -453,6 +462,7 @@ class DataExporter:
             unique_tags_by_date[current_date].add(record_tag)
             unique_tags.add(record_tag)
 
+        self._logger.debug("Detection records organized by date successfully.")
 
         # Calculate max width for summary number alignment
         max_summary_width = max(
@@ -461,11 +471,14 @@ class DataExporter:
             len(str(num_dates - len(detection_records_by_date)))
         )
 
-        self._logger.info(f"Total detection records in date range: {str(len(filtered_detection_records)).rjust(max_summary_width)}")
-        self._logger.info(f"Number of dates with records:          {str(len(detection_records_by_date)).rjust(max_summary_width)}")
-        self._logger.info(f"Number of dates without records:       {str(num_dates - len(detection_records_by_date)).rjust(max_summary_width)}")
-        self._logger.info(f"Number of unique tags:                 {str(len(unique_tags)).rjust(max_summary_width)}")
+        summary_message = (f"Detection Records Summary:\n"
+            f"    Total detection records in date range: {str(len(filtered_detection_records)).rjust(max_summary_width)}\n"
+            f"    Number of dates with records:          {str(len(detection_records_by_date)).rjust(max_summary_width)}\n"
+            f"    Number of dates without records:       {str(num_dates - len(detection_records_by_date)).rjust(max_summary_width)}\n"
+            f"    Number of unique tags detected:        {str(len(unique_tags)).rjust(max_summary_width)}"
+        )
 
+        self._logger.info(summary_message)
 
         # Calculate max width for counter alignment
         max_counter_width = len(f"({num_dates}/{num_dates})")
@@ -479,6 +492,7 @@ class DataExporter:
         max_unique_tags_width = len(str(max_unique_tags))
 
         all_successful = True
+        num_failed_exports = 0
         self._logger.info("Exporting detection records to files.")
         for date_num, current_date in enumerate(all_dates):
             output_filepath = f"{output_dir}/{self._communicator.serial_number}_detection_records_{current_date.strftime('%Y_%m_%d')}.txt"
@@ -516,15 +530,17 @@ class DataExporter:
             except Exception as e:
                 self._logger.error(f"Failed to write detection records for {current_date} to file: {e}")
                 all_successful = False
+                num_failed_exports += 1
                 continue
 
         if all_successful:
             self._logger.info("All detection record exports completed successfully.")
         else:
-            self._logger.warning("Some detection record exports failed. Please check the logs for details.")
+            self._logger.warning(f"{num_failed_exports} detection record exports failed. Please check the logs for details.")
 
         if old_mode:
             self._communicator.change_mode(old_mode)
+            self._logger.info(f"Returned device mode to {old_mode} after export.")
 
         return all_successful
 

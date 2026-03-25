@@ -50,11 +50,11 @@ class ExportProtocol:
             raise
         except NoConfigError:
             raise
-        except Exception:
+        except Exception as e:
             if self._logger:
-                self._logger.exception("Failed to initialize export protocol")
+                self._logger.exception("Failed to initialize export protocol:\n\n %s", e)
             else:
-                print("Failed to initialize export protocol")
+                print(f"Failed to initialize export protocol: {e}")
 
             if self._exit_stack:
                 self._exit_stack.close()

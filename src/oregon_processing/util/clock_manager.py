@@ -2,9 +2,15 @@
 """
 Oregon RFID Clock Manager - Handles device date/time operations
 """
+from __future__ import annotations
+from typing import TYPE_CHECKING
+from datetime import datetime, timedelta, timezone
 
 from oregon_processing.util.logging_manager import get_logger
-from datetime import datetime, timedelta, timezone
+
+if TYPE_CHECKING:
+    from oregon_processing.util.command_manager import CommandManager
+    from oregon_processing.util.communicator import Communicator
 
 class ClockManager:
     """Manages device clock synchronization and datetime operations."""
@@ -16,7 +22,7 @@ class ClockManager:
         'E': "Ellapsed time since power-up"
     }
 
-    def __init__(self, communicator, command_manager):
+    def __init__(self, communicator: "Communicator", command_manager: "CommandManager"):
         """
         Initialize ClockManager.
 
@@ -119,7 +125,7 @@ class ClockManager:
 
 
 
-        self._logger.info("Checking device date/time.")
+        self._logger.debug("Checking device date/time.")
 
         device_result = self.get_device_datetime()
         computer_datetime = datetime.now()
@@ -170,11 +176,11 @@ class ClockManager:
                 print() # Add spacing after input for cleaner output
 
             if confirm not in ['y', 'yes']:
-                self._logger.info("User selected not to sync device time.")
+                self._logger.debug("User selected not to sync device time.")
 
                 return report
             else:
-                self._logger.info("User selected to synch computer/device times.")
+                self._logger.debug("User selected to synch computer/device times.")
 
             try:
                 report = self._sync_device_time(computer_datetime_utc, report)
@@ -364,12 +370,20 @@ class ClockManager:
         report : dict
             Report dictionary to update with sync results.
         """
-        self._logger.info("Setting device timezone to UTC.")
+        self._logger.debug("Setting device timezone to UTC.")
         self._command_manager.send_command("TZ 0")
+        self._logger.info(f"Device timezone set to UTC.")
 
-        self._logger.info(f"Setting device time to {computer_datetime_utc.strftime('%Y-%m-%d %H:%M:%S')} UTC.")
+        self._logger.debug(f"Setting device time to {computer_datetime_utc.strftime('%Y-%m-%d %H:%M:%S')} UTC.")
         dt_command = computer_datetime_utc.strftime("DT %Y-%m-%d %H:%M:%S")
         response_lines = self._command_manager.send_command(dt_command)
+
+        if len(response_lines) == 0:
+            error_message = "No response received after sending DT command."
+            self._logger.error(error_message)
+            raise ValueError(error_message)
+
+        self._logger.info(f"Device time was updated to {computer_datetime_utc.strftime('%Y-%m-%d %H:%M:%S')} UTC.")
 
         report['was_updated'] = True
         report['update_command_sent'] = dt_command
@@ -435,20 +449,22 @@ class ClockManager:
         computer_offset_hours = computer_dt.astimezone().utcoffset().total_seconds() / 3600
         computer_tz_str = f"(UT{computer_offset_hours:+.1f})"
 
-        status_message = f"Device Clock Status: {'✓ IN SYNC' if is_synced else '⚠ OUT OF SYNC'} | Device Clock Source: {sync_status_name}"
-        self._logger.info(status_message)
+        status_message = f"Device Clock Status:\n    {'✓ IN SYNC' if is_synced else '⚠ OUT OF SYNC'}\n    Device Clock Source: {sync_status_name}\n"
+
 
         if device_dt:
-            self._logger.info(f"Device Time: {device_dt.strftime('%Y-%m-%d %H:%M:%S')} {device_tz_str}")
+            status_message += f"    Device Time: {device_dt.strftime('%Y-%m-%d %H:%M:%S')} {device_tz_str}\n"
         else:
             # Format timedelta as HH:MM:SS.mmm
             total_seconds = int(elapsed.total_seconds())
             hours, remainder = divmod(total_seconds, 3600)
             minutes, seconds = divmod(remainder, 60)
             milliseconds = elapsed.microseconds // 1000
-            self._logger.info(f"Device Time: elapsed-only (no absolute time): {hours:02d}:{minutes:02d}:{seconds:02d}.{milliseconds:03d}")
+            status_message += f"    Device Time: elapsed-only (no absolute time): {hours:02d}:{minutes:02d}:{seconds:02d}.{milliseconds:03d}\n"
 
-        self._logger.info(f"Computer Time: {computer_dt.strftime('%Y-%m-%d %H:%M:%S')} {computer_tz_str}")
+        status_message += f"    Computer Time: {computer_dt.strftime('%Y-%m-%d %H:%M:%S')} {computer_tz_str}"
 
         if time_diff is not None and not is_synced:
-            self._logger.info(f"Computer/Device Time Difference: {time_diff:+.1f}s ({abs(time_diff):.1f}s {'ahead' if time_diff > 0 else 'behind'})")
+            status_message += f"\n    Computer/Device Time Difference: {time_diff:+.1f}s ({abs(time_diff):.1f}s {'ahead' if time_diff > 0 else 'behind'})"
+
+        self._logger.info(status_message)

@@ -619,7 +619,7 @@ class Communicator:
 
 
 
-        self._logger.info("Starting post-connection handshake.")
+        self._logger.debug("Starting post-connection handshake.")
 
         self._update_reader_name()
         self._update_device_type()

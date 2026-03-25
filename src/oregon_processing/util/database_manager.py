@@ -96,7 +96,7 @@ class DatabaseManager:
         """Prepare and create necessary directories for export."""
 
 
-        self._logger.info("Preparing output directories.")
+        self._logger.debug("Preparing output directories.")
 
         # Get serial number from communicator
         serial_number = self._communicator.serial_number
@@ -112,11 +112,11 @@ class DatabaseManager:
         self._event_records_dir = self._config.root_event_records_dir / serial_number
 
         self._logger.info(f"Root output directory: {self._root_output_dir}", extra={"_skip_path_alias_filter": True})
-        self._logger.info(f"Root Export data directory: {self._root_export_data_dir}")
-        self._logger.info(f"Detection records directory: {self._detection_records_dir}")
-        self._logger.info(f"Event records directory: {self._event_records_dir}")
-        self._logger.info(f"Export logs directory: {self._log_dir}")
-        self._logger.info(f"Crash logs directory: {self._crash_log_dir}")
+        self._logger.debug(f"Root Export data directory: {self._root_export_data_dir}")
+        self._logger.debug(f"Detection records directory: {self._detection_records_dir}")
+        self._logger.debug(f"Event records directory: {self._event_records_dir}")
+        self._logger.debug(f"Export logs directory: {self._log_dir}")
+        self._logger.debug(f"Crash logs directory: {self._crash_log_dir}")
 
 
         # Create all directories
@@ -184,13 +184,13 @@ class DatabaseManager:
         if last_event_date and last_event_date not in missing_event_dates:
             missing_event_dates = sorted(missing_event_dates + [last_event_date])
 
-        self._logger.info(f"Detection records: {len(missing_record_dates)} missing/incomplete date(s) out of {len(expected_dates)}")
+        self._logger.debug(f"Detection records: {len(missing_record_dates)} missing/incomplete date(s) out of {len(expected_dates)}")
         if missing_record_dates:
-            self._logger.info(f"Missing detection dates: {self._format_date_intervals(missing_record_dates)}")
+            self._logger.debug(f"Missing detection dates: {self._format_date_intervals(missing_record_dates)}")
 
-        self._logger.info(f"Event records: {len(missing_event_dates)} missing/incomplete date(s) out of {len(expected_dates)}")
+        self._logger.debug(f"Event records: {len(missing_event_dates)} missing/incomplete date(s) out of {len(expected_dates)}")
         if missing_event_dates:
-            self._logger.info(f"Missing event dates: {self._format_date_intervals(missing_event_dates)}")
+            self._logger.debug(f"Missing event dates: {self._format_date_intervals(missing_event_dates)}")
 
         return {
             'records': missing_record_dates,

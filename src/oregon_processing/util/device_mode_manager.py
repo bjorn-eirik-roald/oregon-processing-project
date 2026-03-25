@@ -35,7 +35,7 @@ class DeviceModeManager:
         """Enter context manager."""
 
         self._startup_mode = self._get_current_mode()
-        self._logger.info(f"Device startup mode: {self._startup_mode}")
+        self._logger.debug(f"Device startup mode: {self._startup_mode}")
 
         return self
 
@@ -89,10 +89,10 @@ class DeviceModeManager:
 
         current_mode = self._get_current_mode()
         if current_mode != mode_name:
-            self._logger.info(f"Changing device mode from '{current_mode}' to '{mode_name}' (sending {command} command).")
+            self._logger.debug(f"Changing device mode from '{current_mode}' to '{mode_name}' (sending {command} command).")
             self._command_manager.send_command(command)
             if self._get_current_mode() == mode_name:
-                self._logger.info(f"Device mode change successful.")
+                self._logger.debug(f"Device mode changed from '{current_mode}' to '{mode_name}'.")
             else:
                 self._logger.error(f"Device mode change failed! Device is still in '{self._get_current_mode()}' mode.")
                 return False
