@@ -96,14 +96,6 @@ class CommandManager:
         self._communicator = communicator
         self._last_prompt_signature = None
 
-    def __enter__(self):
-        """Enter context manager."""
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        """Exit context manager."""
-        pass
-
     @property
     def prompt_signature(self):
         """Get the last received prompt signature."""

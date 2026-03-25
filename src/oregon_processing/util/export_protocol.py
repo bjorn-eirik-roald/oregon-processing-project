@@ -3,7 +3,7 @@ from contextlib import ExitStack
 from datetime import datetime
 
 from oregon_processing.util.communicator import Communicator
-from oregon_processing.util.oregon_config import OregonConfig
+from oregon_processing.util.oregon_config import OregonConfig, NoConfigError
 from oregon_processing.util.database_manager import DatabaseManager
 from oregon_processing.util.logging_manager import LoggingManager, get_logger
 
@@ -19,7 +19,6 @@ class ExportProtocol:
 
     def __enter__(self):
         self._exit_stack = ExitStack()
-
 
         try:
             self._config = OregonConfig()
@@ -40,23 +39,27 @@ class ExportProtocol:
 
             self._communicator = self._exit_stack.enter_context(Communicator())
 
-            if self._communicator.is_connected:
-                self._database_manager = self._exit_stack.enter_context(DatabaseManager(self._config, self._communicator))
-                self._database_manager.prepare_directories()
+            self._database_manager = DatabaseManager(self._config, self._communicator)
+            self._database_manager.prepare_directories()
 
-                # Update log file to final location
-                report_file_dir = self._database_manager.log_dir
-                report_file_name = self._logging_manager.report_file.name
-                report_file = report_file_dir / f"export_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
-                self._logging_manager.transfer_log_file(report_file)
+            # Update log file to final location
+            report_file_dir = self._database_manager.log_dir
+            report_file = report_file_dir / f"export_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+            self._logging_manager.transfer_log_file(report_file)
+        except ConnectionError:
+            raise
+        except NoConfigError:
+            raise
         except Exception:
             if self._logger:
                 self._logger.exception("Failed to initialize export protocol")
             else:
                 print("Failed to initialize export protocol")
+
             if self._exit_stack:
                 self._exit_stack.close()
             raise
+
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):

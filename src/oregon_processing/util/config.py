@@ -7,20 +7,7 @@ from pathlib import Path
 from typing import Any
 from abc import ABC
 
-
-
-class NoConfigError(Exception):
-    """Raised when configuration file is missing or cannot be loaded."""
-    pass
-
-def check_config_file_exists(config_class: type[Config]) -> bool:
-
-    try:
-        config_class()
-        return True
-    except NoConfigError as e:
-        print(e)
-        return False
+from oregon_processing.util.exceptions import NoConfigError
 
 class Config(ABC):
 

@@ -40,14 +40,6 @@ class DataExporter:
         self._command_manager = command_manager
         self._logger = get_logger(__name__)
 
-    def __enter__(self):
-        """Enter context manager."""
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        """Exit context manager."""
-        pass
-
     def _split_detection_record(self, record_line: str, format_info: dict) -> list:
         """
         Split a detection record line into parts, handling the ARR field which contains spaces.
@@ -78,14 +70,11 @@ class DataExporter:
         # Split by spaces
         parts = record_line.split()
 
-        columns = format_info['columns']
         column_indices = format_info['column_indices']
         arr_index = column_indices.get('ARR')
 
         if arr_index is None:
             raise ValueError("ARR index not found in format info.")
-
-
 
         # If ARR is in the format, we expect one extra part (because ARR contains a space)
         # Check if we have enough parts to merge ARR
@@ -243,7 +232,7 @@ class DataExporter:
         ----------
         dates : list
             List of date objects to export
-        output_dir : str or Path
+        output_dir : Path
             Directory where output files will be written (default: current directory)
 
         Returns
@@ -252,26 +241,18 @@ class DataExporter:
             True if all exports completed successfully, False if any failed.
         """
 
-
-
-        if isinstance(output_dir, str):
-            try:
-                output_dir = Path(output_dir)
-            except Exception as e:
-                self._logger.error(f"Error converting output directory string to Path object: {e}")
-                return False
-
         if not self._communicator.is_connected:
-            self._logger.error("Not connected to device.")
+            self._logger.error("Not connected to device. Cannot export event records.")
             return False
 
         if not dates:
-            self._logger.warning("No dates provided for export.")
+            self._logger.warning("No dates provided for export. No event records will be exported.")
             return False
 
         old_mode = None
-        if self._communicator.mode != 'Standby':
-            old_mode = self._communicator.mode
+        mode = self._communicator.get_mode()
+        if mode != 'Standby':
+            old_mode = mode
             self._communicator.change_mode('Standby')
 
         # Header
@@ -283,7 +264,6 @@ class DataExporter:
         num_dates = len(dates)
         all_dates = sorted(dates)
         max_counter_width = len(f"({num_dates}/{num_dates})")
-        max_line_width = len(str(1440))  # assume up to one line per minute per day
 
         all_successful = True
         export_count = 0
@@ -323,7 +303,8 @@ class DataExporter:
                     f.write("#RECORDS START HERE\n")
                     f.write('\n'.join(response))
 
-                message += f" Lines written: {len(response)-3}."
+                n_lines = max(len(response) - 3, 0) # correct for header lines in response and also account for completely empty responses
+                message += f" Lines written: {n_lines}."
                 self._logger.info(message)
                 export_count += 1
 
@@ -365,29 +346,18 @@ class DataExporter:
             True if all exports completed successfully, False if any failed.
         """
 
-
-
-        if isinstance(output_dir, str):
-            try:
-                output_dir = Path(output_dir)
-            except Exception as e:
-                self._logger.error(f"Error converting output directory string to Path object: {e}")
-                return False
-
         if not self._communicator.is_connected:
-            self._logger.error("Not connected to device.")
+            self._logger.error("Not connected to device. Cannot export detection records.")
             return False
 
-        if not output_dir.exists():
-            output_dir.mkdir(parents=True, exist_ok=True)
-
         if not dates:
-            self._logger.warning("No dates provided for export.")
+            self._logger.warning("No dates provided for export. No detection records will be exported.")
             return False
 
         old_mode = None
-        if self._communicator.mode != 'Standby':
-            old_mode = self._communicator.mode
+        mode = self._communicator.get_mode()
+        if mode != 'Standby':
+            old_mode = mode
             self._communicator.change_mode('Standby')
 
         upload_history = self._communicator.get_upload_history()
@@ -397,15 +367,23 @@ class DataExporter:
         self._logger.info(f"Dates to export: {len(dates)} date(s)")
         self._logger.info(f"Total records on device: {total_number_of_records}")
         self._logger.debug(f"Output directory: {output_dir}")
-        self._logger.info("Setting detection record format to default for export.")
+        self._logger.debug("Setting detection record format for export.")
 
         default_format = self.DEFAULT_DETECTION_RECORD_FORMAT[self._communicator.device_type]
         if not self._format_manager.set_detection_record_format(default_format):
             self._logger.error("Failed to set detection record format. Cannot continue.")
             return False
 
-        self._logger.info("Requesting all records from device.")
-        response = self._command_manager.send_command("UP*")
+        self._logger.info("Detection record format set successfully.")
+
+        self._logger.info("Requesting all records from device. This may take a while if there are many records on the device. Please wait...")
+
+        try:
+            response = self._command_manager.send_command("UP*")
+        except Exception as e:
+            self._logger.error(f"Failed to retrieve records from device: {e}")
+            return False
+
         self._logger.info("All records received.")
 
         # Retrieve detection record format to determine column order, tag index, and datetime index
@@ -440,7 +418,7 @@ class DataExporter:
             try:
                 parts = self._split_detection_record(line, format_info)
             except ValueError:
-                self._logger.warning(f"Warning: Skipping malformed detection record during filtering: {line}")
+                self._logger.error(f"Error: Encountered malformed detection record during filtering. Skipping record: {line}")
                 continue  # Skip malformed detection records
 
             # Extract date portion from ARR field (YYYY-MM-DD HH:MM:SS.ddd)
@@ -464,12 +442,14 @@ class DataExporter:
             record_date = datetime.strptime(detection_record[arr_idx].split()[0], "%Y-%m-%d").date()
             record_tag = detection_record[tag_idx]
 
+            # first time seeing this date, initialize list and set for it
             if record_date != current_date:
                 current_date = record_date
                 detection_records_by_date[current_date] = []
                 unique_tags_by_date[current_date] = set()
 
-            detection_records_by_date[current_date].append(sep.join(detection_record))
+            output_line = sep.join(detection_record)
+            detection_records_by_date[current_date].append(output_line)
             unique_tags_by_date[current_date].add(record_tag)
             unique_tags.add(record_tag)
 
@@ -498,6 +478,8 @@ class DataExporter:
         max_unique_tags = max((len(tags) for tags in unique_tags_by_date.values()), default=0)
         max_unique_tags_width = len(str(max_unique_tags))
 
+        all_successful = True
+        self._logger.info("Exporting detection records to files.")
         for date_num, current_date in enumerate(all_dates):
             output_filepath = f"{output_dir}/{self._communicator.serial_number}_detection_records_{current_date.strftime('%Y_%m_%d')}.txt"
             counter = f"({date_num + 1}/{num_dates})"
@@ -512,30 +494,37 @@ class DataExporter:
 
             self._logger.info(f"{spacing}Export {counter}. Exporting data from {current_date}. Number of detection records: {count_str}. Unique tags: {unique_tags_str}.")
 
-            with open(output_filepath, 'w') as f:
-                f.write("Oregon RFID Detection Records\n")
-                f.write(f"Device Serial Number: {self._communicator.serial_number}\n")
-                f.write(f"Device Type: {self._communicator.device_type}\n")
-                f.write("Export Date/Time: " + time.strftime("%Y-%m-%d %H:%M:%S") + "\n")
-                f.write("Date of Record: " + current_date.strftime("%Y-%m-%d") + "\n")
-                f.write("Number of Records: " + count_str.strip() + "\n")
-                f.write("Number of unique tags: " + unique_tags_str.strip() + "\n")
-                f.write("=========================\n\n")
-                f.write("Field Names:\n")
-                for col, field_name in format_info['field_names'].items():
-                    f.write(f"{col}: {field_name}\n")
-                f.write("=========================\n\n")
-                f.write("#RECORDS START HERE\n")
-                f.write(f"{format_columns_str.replace(' ', sep)}\n")
-                # Write detection records for the date
-                if current_date in detection_records_by_date:
-                    f.write('\n'.join(detection_records_by_date[current_date]))
+            try:
+                with open(output_filepath, 'w') as f:
+                    f.write("Oregon RFID Detection Records\n")
+                    f.write(f"Device Serial Number: {self._communicator.serial_number}\n")
+                    f.write(f"Device Type: {self._communicator.device_type}\n")
+                    f.write("Export Date/Time: " + time.strftime("%Y-%m-%d %H:%M:%S") + "\n")
+                    f.write("Date of Record: " + current_date.strftime("%Y-%m-%d") + "\n")
+                    f.write("Number of Records: " + count_str.strip() + "\n")
+                    f.write("Number of unique tags: " + unique_tags_str.strip() + "\n")
+                    f.write("=========================\n\n")
+                    f.write("Field Names:\n")
+                    for col, field_name in format_info['field_names'].items():
+                        f.write(f"{col}: {field_name}\n")
+                    f.write("=========================\n\n")
+                    f.write("#RECORDS START HERE\n")
+                    f.write(f"{format_columns_str.replace(' ', sep)}\n")
+                    # Write detection records for the date
+                    if current_date in detection_records_by_date:
+                        f.write('\n'.join(detection_records_by_date[current_date]))
+            except Exception as e:
+                self._logger.error(f"Failed to write detection records for {current_date} to file: {e}")
+                all_successful = False
+                continue
 
-
-        self._logger.info("Completed Detection Record Export")
+        if all_successful:
+            self._logger.info("All detection record exports completed successfully.")
+        else:
+            self._logger.warning("Some detection record exports failed. Please check the logs for details.")
 
         if old_mode:
             self._communicator.change_mode(old_mode)
 
-        return True
+        return all_successful
 

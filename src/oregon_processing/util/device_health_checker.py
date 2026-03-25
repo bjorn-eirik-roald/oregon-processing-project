@@ -33,14 +33,6 @@ class DeviceHealthChecker:
         self._communicator = communicator
         self._logger = get_logger(__name__)
 
-    def __enter__(self):
-        """Enter context manager."""
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        """Exit context manager."""
-        pass
-
     def check_device_health(self):
         """
         Calls for system status and checks parsed system status for potential issues.

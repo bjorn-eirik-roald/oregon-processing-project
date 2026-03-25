@@ -40,14 +40,6 @@ class DatabaseManager:
         self._detection_records_dir = None
         self._event_records_dir = None
 
-    def __enter__(self):
-        """Enter context manager."""
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        """Exit context manager."""
-        pass
-
     @property
     def data_dir(self) -> Path:
         """Get the root data directory path."""
@@ -119,12 +111,12 @@ class DatabaseManager:
         self._detection_records_dir = self._config.root_detection_records_dir / serial_number
         self._event_records_dir = self._config.root_event_records_dir / serial_number
 
-        self._logger.info(f"Root output directory: {self._root_output_dir}")
-        self._logger.info(f"Root Export data directory: {Path(self._root_export_data_dir).relative_to(self._root_output_dir)}")
-        self._logger.info(f"Detection records directory: {Path(self._detection_records_dir).relative_to(self._root_output_dir)}")
-        self._logger.info(f"Event records directory: {Path(self._event_records_dir).relative_to(self._root_output_dir)}")
-        self._logger.info(f"Export logs directory: {Path(self._log_dir).relative_to(self._root_output_dir)}")
-        self._logger.info(f"Crash logs directory: {Path(self._crash_log_dir).relative_to(self._root_output_dir)}")
+        self._logger.info(f"Root output directory: {self._root_output_dir}", extra={"_skip_path_alias_filter": True})
+        self._logger.info(f"Root Export data directory: {self._root_export_data_dir}")
+        self._logger.info(f"Detection records directory: {self._detection_records_dir}")
+        self._logger.info(f"Event records directory: {self._event_records_dir}")
+        self._logger.info(f"Export logs directory: {self._log_dir}")
+        self._logger.info(f"Crash logs directory: {self._crash_log_dir}")
 
 
         # Create all directories
@@ -154,20 +146,18 @@ class DatabaseManager:
             Dictionary with 'records' and 'system_logs' keys containing lists of missing dates
         """
 
-
-
         if self._detection_records_dir is None or self._event_records_dir is None:
             raise RuntimeError("Directories not prepared yet.")
 
-        self._logger.info("Scanning for existing detection record files...")
+        self._logger.debug("Scanning for existing detection record files...")
         record_files = list(self._detection_records_dir.glob("*.txt"))
-        self._logger.info(f"Found {len(record_files)} detection record file(s) from current RFID reader.")
+        self._logger.debug(f"Found {len(record_files)} detection record file(s) from current RFID reader.")
 
-        self._logger.info("Scanning for existing event record files...")
+        self._logger.debug("Scanning for existing event record files...")
         event_files = list(self._event_records_dir.glob("*.txt"))
-        self._logger.info(f"Found {len(event_files)} event record file(s) from current RFID reader.")
+        self._logger.debug(f"Found {len(event_files)} event record file(s) from current RFID reader.")
 
-        self._logger.info("Extracting dates from filenames...")
+        self._logger.debug("Extracting dates from filenames...")
 
         record_file_dates = set(d for d in [extract_filename_date(f.name) for f in record_files] if d is not None)
         event_file_dates = set(d for d in [extract_filename_date(f.name) for f in event_files] if d is not None)

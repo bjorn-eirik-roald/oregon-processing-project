@@ -33,6 +33,10 @@ class DeviceModeManager:
 
     def __enter__(self):
         """Enter context manager."""
+
+        self._startup_mode = self._get_current_mode()
+        self._logger.info(f"Device startup mode: {self._startup_mode}")
+
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -101,6 +105,7 @@ class DeviceModeManager:
             return
 
         if not self._startup_mode:
+            self._logger.warning("Startup mode not set. Cannot return to startup mode.")
             return
 
         # Map startup mode to mode names used by change_mode()

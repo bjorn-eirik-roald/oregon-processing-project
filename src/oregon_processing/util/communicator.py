@@ -43,6 +43,7 @@ class Communicator:
         self._reader_name = None
         self._serial_number = None
         self._detection_record_format = None
+        self._mode = None
 
         self._logger = get_logger(__name__)
 
@@ -57,14 +58,23 @@ class Communicator:
             if success:
                 # Enter all managers via ExitStack (they are context managers)
                 # Register in reverse order so they exit in LIFO order
-                self._command_manager = self._exit_stack.enter_context(CommandManager(self))
-                self._mode_manager = self._exit_stack.enter_context(DeviceModeManager(self, self._command_manager))
-                self._format_manager = self._exit_stack.enter_context(FormatManager(self, self._command_manager))
-                self._data_exporter = self._exit_stack.enter_context(DataExporter(self, self._format_manager, self._command_manager))
-                self._clock_manager = self._exit_stack.enter_context(ClockManager(self, self._command_manager))
-                self._health_checker = self._exit_stack.enter_context(DeviceHealthChecker(self))
+                self._command_manager = CommandManager(self)
 
                 self._post_connect_handshake()
+
+                self._mode_manager = self._exit_stack.enter_context(DeviceModeManager(self, self._command_manager))
+                self._format_manager = self._exit_stack.enter_context(FormatManager(self, self._command_manager))
+                self._data_exporter = DataExporter(self, self._format_manager, self._command_manager)
+                self._clock_manager = ClockManager(self, self._command_manager)
+                self._health_checker = DeviceHealthChecker(self)
+
+            else:
+                raise ConnectionError("Failed to connect to Oregon device.")
+
+        except ConnectionError as e:
+            error_message = f"Connection error: {e}"
+            self._logger.error(error_message)
+            raise
         except Exception:
             self._logger.exception("Failed to initialize Communicator")
             self._exit_stack.close()
@@ -108,16 +118,6 @@ class Communicator:
         return self._connection is not None
 
     @property
-    def mode(self):
-        """Get the current operating mode from the system status."""
-        if self._mode_manager:
-            return self._mode_manager._get_current_mode()
-
-        self._logger.warning("Mode manager not initialized; cannot retrieve current mode.")
-
-        return None
-
-    @property
     def prompt_signature(self):
         if self._command_manager:
             return self._command_manager.prompt_signature
@@ -126,38 +126,15 @@ class Communicator:
 
         return None
 
-
-    def _connect(self):
-        """Attempt to connect to Oregon RFID sensor using the Connector."""
-        with Connector() as connector:
-            result = connector.connect()
-
-        if result:
-            self._connection = result['connection']
-            self._port = result['port']
-            self._baudrate = result['baudrate']
-            return True
-
-        return False
-
-    def _post_connect_handshake(self):
-        """Send a quick SY command to verify connection and capture prompt signature. Store reader name and FM format"""
-
-        if not self._connection:
-            return
-
-
-
-        self._logger.info("Starting post-connection handshake.")
-
-        self._update_reader_name()
-        self._update_device_type()
-
-        self._logger.info(f"Connected to device '{self.reader_name}' of type '{self.device_type}' with serial number '{self.serial_number}'.")
-
-        startup_mode = self.mode
+    def get_mode(self):
+        """Get the current operating mode from the system status."""
         if self._mode_manager:
-            self._mode_manager.startup_mode = startup_mode
+            self._mode =  self._mode_manager._get_current_mode()
+            return self._mode
+
+        self._logger.warning("Mode manager not initialized; cannot retrieve current mode.")
+
+        return None
 
     def change_mode(self, mode_name: str) -> bool:
         """
@@ -424,9 +401,11 @@ class Communicator:
             Parsed upload history with upload records and metadata.
         """
 
+
+        self.get_mode() # update mode property
         old_mode = None
-        if self.mode.lower() != 'standby':
-            old_mode = self.mode
+        if self._mode.lower() != 'standby':
+            old_mode = self._mode
             self.change_mode('Standby')
 
         upload_history_lines = self._command_manager.send_command("UH")
@@ -514,81 +493,6 @@ class Communicator:
             self._last_upload_date = upload_datetime.date()
 
         return history
-
-    def _update_reader_name(self) -> str:
-        """
-        Retrieve the reader name from the device using the SY command.
-
-        Returns
-        -------
-        str
-            The reader name, or None if not set or an error occurs.
-        """
-
-
-
-        if not self._connection:
-            self._logger.error("Not connected to device.")
-            return False
-
-        try:
-            parsed_status = self.get_system_status()
-            self._reader_name = parsed_status["reader_name"]
-            return True
-
-        except Exception as e:
-            self._logger.error(f"Error retrieving reader name: {e}")
-            return False
-
-    def _update_serial_number(self) -> str:
-        """
-        Retrieve the serial number from the device using the SY command.
-
-        Returns
-        -------
-        str
-            The serial number, or None if not set or an error occurs.
-        """
-
-
-
-        if not self._connection:
-            self._logger.error("Not connected to device.")
-            return False
-
-        try:
-            parsed_status = self.get_system_status()
-            self._serial_number = parsed_status["serial_number"]
-            return True
-
-        except Exception as e:
-            self._logger.error(f"Error retrieving serial number: {e}")
-            return False
-
-    def _update_device_type(self) -> str:
-        """
-        Retrieve the device type from the device using the SY command.
-
-        Returns
-        -------
-        str
-            The device type, or None if not set or an error occurs.
-        """
-
-
-
-        if not self._connection:
-            self._logger.error("Not connected to device.")
-            return False
-
-        try:
-            parsed_status = self.get_system_status()
-            self._device_type = parsed_status["device_type"]
-            return True
-
-        except Exception as e:
-            self._logger.error(f"Error retrieving device type: {e}")
-            return False
 
     def control_device_datetime(self, tolerance_seconds: int = 15, attempt_sync: bool = True) -> dict:
         """
@@ -693,4 +597,109 @@ class Communicator:
             True if all exports completed successfully, False if any failed.
         """
         return self._data_exporter.export_detection_records(dates, output_dir, sep)
+
+    def _connect(self):
+        """Attempt to connect to Oregon RFID sensor using the Connector."""
+        with Connector() as connector:
+            result = connector.connect()
+
+        if result:
+            self._connection = result['connection']
+            self._port = result['port']
+            self._baudrate = result['baudrate']
+            return True
+
+        return False
+
+    def _post_connect_handshake(self):
+        """Send a quick SY command to verify connection and capture prompt signature. Store reader name and FM format"""
+
+        if not self._connection:
+            return
+
+
+
+        self._logger.info("Starting post-connection handshake.")
+
+        self._update_reader_name()
+        self._update_device_type()
+
+        self._logger.info(f"Connected to device '{self.reader_name}' of type '{self.device_type}' with serial number '{self.serial_number}'.")
+
+    def _update_reader_name(self) -> str:
+        """
+        Retrieve the reader name from the device using the SY command.
+
+        Returns
+        -------
+        str
+            The reader name, or None if not set or an error occurs.
+        """
+
+
+
+        if not self._connection:
+            self._logger.error("Not connected to device.")
+            return False
+
+        try:
+            parsed_status = self.get_system_status()
+            self._reader_name = parsed_status["reader_name"]
+            return True
+
+        except Exception as e:
+            self._logger.error(f"Error retrieving reader name: {e}")
+            return False
+
+    def _update_serial_number(self) -> str:
+        """
+        Retrieve the serial number from the device using the SY command.
+
+        Returns
+        -------
+        str
+            The serial number, or None if not set or an error occurs.
+        """
+
+
+
+        if not self._connection:
+            self._logger.error("Not connected to device.")
+            return False
+
+        try:
+            parsed_status = self.get_system_status()
+            self._serial_number = parsed_status["serial_number"]
+            return True
+
+        except Exception as e:
+            self._logger.error(f"Error retrieving serial number: {e}")
+            return False
+
+    def _update_device_type(self) -> str:
+        """
+        Retrieve the device type from the device using the SY command.
+
+        Returns
+        -------
+        str
+            The device type, or None if not set or an error occurs.
+        """
+
+
+
+        if not self._connection:
+            self._logger.error("Not connected to device.")
+            return False
+
+        try:
+            parsed_status = self.get_system_status()
+            self._device_type = parsed_status["device_type"]
+            return True
+
+        except Exception as e:
+            self._logger.error(f"Error retrieving device type: {e}")
+            return False
+
+
 

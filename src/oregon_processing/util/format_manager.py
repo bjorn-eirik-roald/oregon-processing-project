@@ -66,11 +66,63 @@ class FormatManager:
 
     def __enter__(self):
         """Enter context manager."""
+
+        self._startup_format = self._fetch_detection_record_format()
+
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Exit context manager; restore startup format."""
         self._restore_startup_format()
+
+    def get_format_info(self) -> dict:
+        """
+        Get the current detection record format information.
+
+        Returns
+        -------
+        dict
+            Format information with 'columns_raw', 'columns', and 'column_indices'
+        """
+        return self._fetch_detection_record_format()
+
+    def set_detection_record_format(self, format_string: str) -> bool:
+        """
+        Set the detection record format on the device using the FM command.
+
+        Parameters
+        ----------
+        format_string : str
+            The format string to set (e.g., "DTY ARR SPC TRF DUR SPC TTY SPC TAG SCD NCD EFA")
+
+        Returns
+        -------
+        bool
+            True if format was set successfully, False otherwise.
+        """
+
+
+        if not self._communicator.is_connected:
+            self._logger.error("Not connected to device. Cannot set detection record format.")
+            return False
+
+        try:
+            fm_command = f"FM {format_string}"
+            self._command_manager.send_command(fm_command)
+
+            # Verify the format was set and update cache
+            self._detection_record_format = self._fetch_detection_record_format()
+
+            if self._detection_record_format['columns_raw'] == format_string:
+                return True
+            else:
+                self._logger.warning(f"WARNING: Format mismatch. Expected '{format_string}', got '{self._detection_record_format['columns_raw']}'")
+                return False
+
+        except Exception:
+            self._logger.exception(f"Error setting detection record format.")
+            return False
+
 
     def _fetch_detection_record_format(self) -> dict:
         """
@@ -91,9 +143,9 @@ class FormatManager:
             raise ConnectionError("Not connected to device.")
 
         old_mode = None
-
-        if self._communicator.mode.lower() != 'standby':
-            old_mode = self._communicator.mode
+        mode = self._communicator.get_mode()
+        if mode.lower() != 'standby':
+            old_mode = mode
             self._communicator.change_mode('Standby')
 
         response_lines = self._command_manager.send_command("FM")
@@ -126,42 +178,6 @@ class FormatManager:
             'field_names': field_names,
         }
 
-    def set_detection_record_format(self, format_string: str) -> bool:
-        """
-        Set the detection record format on the device using the FM command.
-
-        Parameters
-        ----------
-        format_string : str
-            The format string to set (e.g., "DTY ARR SPC TRF DUR SPC TTY SPC TAG SCD NCD EFA")
-
-        Returns
-        -------
-        bool
-            True if format was set successfully, False otherwise.
-        """
-
-
-        if not self._communicator.is_connected:
-            self._logger.error("Not connected to device.")
-            return False
-
-        try:
-            fm_command = f"FM {format_string}"
-            self._command_manager.send_command(fm_command)
-
-            # Verify the format was set and update cache
-            self._detection_record_format = self._fetch_detection_record_format()
-
-            if self._detection_record_format['columns_raw'] == format_string:
-                return True
-            else:
-                self._logger.warning(f"WARNING: Format mismatch. Expected '{format_string}', got '{self._detection_record_format['columns_raw']}'")
-                return False
-
-        except Exception as e:
-            self._logger.error(f"Error setting detection record format: {e}")
-            return False
 
     def _restore_startup_format(self) -> bool:
         """
@@ -179,6 +195,7 @@ class FormatManager:
 
         if self._startup_format is None:
             # No startup format stored, nothing to restore
+            self._logger.warning("No startup format stored. Cannot restore format.")
             return True
 
         current_format = self._fetch_detection_record_format()
@@ -194,19 +211,5 @@ class FormatManager:
         else:
             self._logger.info("Original detection record format restored.")
 
-
-        # Format has changed - restore to startup format using set_detection_record_format
         return success
-
-    def get_format_info(self) -> dict:
-        """
-        Get the current detection record format information.
-
-        Returns
-        -------
-        dict
-            Format information with 'columns_raw', 'columns', and 'column_indices'
-        """
-        return self._fetch_detection_record_format()
-
 
