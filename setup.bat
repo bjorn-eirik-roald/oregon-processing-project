@@ -30,7 +30,7 @@ REM ==============================
 
 echo.
 echo =====================================================
-echo Stage 1/4: Detecting Python launcher...
+echo Stage 1/5: Detecting Python launcher...
 echo =====================================================
 echo.
 
@@ -60,7 +60,7 @@ REM ==============================
 :VERIFY_PYTHON
 echo.
 echo =====================================================
-echo Stage 2/4: Verifying Python %PYTHON_VERSION% is installed...
+echo Stage 2/5: Verifying Python %PYTHON_VERSION% is installed...
 echo =====================================================
 echo.
 
@@ -99,7 +99,7 @@ REM ==============================
 
 echo.
 echo =====================================================
-echo Stage 3/4: Setting up virtual environment...
+echo Stage 3/5: Setting up virtual environment...
 echo =====================================================
 echo.
 if exist "%VENV_DIR%" (
@@ -141,7 +141,7 @@ REM ==============================
 
 echo.
 echo =====================================================
-echo Stage 4/4: Installing %PACKAGE_NAME% Package
+echo Stage 4/5: Installing %PACKAGE_NAME% Package
 echo =====================================================
 echo.
 
@@ -161,6 +161,45 @@ if %ERRORLEVEL% neq 0 (
 )
 
 echo [INFO] %PACKAGE_NAME% package installed successfully.
+goto HIDE_FOLDERS
+REM ==============================
+
+REM ==============================
+:HIDE_FOLDERS
+
+echo.
+echo =====================================================
+echo Stage 5/5: Hide internal folders
+echo =====================================================
+echo.
+
+REM Hide all folders starting with "."
+for /d %%D in (.*) do (
+attrib +h "%%D" >nul 2>&1
+)
+
+REM Hide all files starting with "."
+for %%F in (.*) do (
+attrib +h "%%F" >nul 2>&1
+)
+
+REM Explicitly hide src folder
+if exist "src" (
+attrib +h "src" >nul 2>&1
+)
+
+REM Explicitly hide pyproject.toml
+if exist "pyproject.toml" (
+attrib +h "pyproject.toml" >nul 2>&1
+)
+
+REM Check if hiding folders was successful
+if %ERRORLEVEL% neq 0 (
+    GOTO HIDE_FOLDERS_ERROR
+)
+
+REM Confirmation message
+echo [INFO] Internal folders have been hidden.
 goto POST_INSTALL_SUCCESS
 REM ==============================
 
@@ -243,6 +282,12 @@ pause
 exit /b 1
 REM ==============================
 
+REM ==============================
+:HIDE_FOLDERS_ERROR
+echo [ERROR] Failed to hide internal folders.
+pause
+exit /b 1
+REM ==============================
 
 
 
