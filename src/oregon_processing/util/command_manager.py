@@ -359,6 +359,12 @@ class CommandManager:
         cleaned = [l for l in cleaned if l != "Database file open"]
         # Remove lines that contain 'ORMR ready'
         cleaned = [l for l in cleaned if 'ORMR ready' not in l]
+        #Bluetooth is off
+        cleaned = [l for l in cleaned if l != "Bluetooth is off"]
+        #Bluetooth is on
+        cleaned = [l for l in cleaned if l != "Bluetooth is on"]
+        # COMM ready
+        cleaned = [l for l in cleaned if l != "COMM ready"]
         # Remove echoed command and empty lines
         cleaned = [l for l in cleaned if l and l != command]
         return cleaned

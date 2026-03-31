@@ -20,6 +20,62 @@ class Connector:
         """Exit context manager."""
         pass
 
+    def connect(self):
+        """
+        Attempt to connect to Oregon RFID sensor with circular retry options.
+
+        Returns
+        -------
+        dict or None
+            Dictionary with 'connection', 'port', and 'baudrate' keys if successful, None otherwise.
+        """
+
+
+
+        self._logger.info("Initializing connection attempt")
+
+        first_attempt = True
+
+        while True:
+
+            if not first_attempt:
+                # Ask user to select baud rate
+                bauds = self._select_baud_rate()
+                if not bauds:
+                    return None
+
+                # Ask user to select port(s)
+                selected_ports = self._select_ports()
+
+                if not selected_ports:
+                    return None
+            else:
+                # First attampt: Try defauilt baud rate and look for Prolific ports
+                self._logger.debug("First connection attempt: trying default baud rate and searching for Prolific ports.")
+                bauds = [self.BAUD_RATES[0]]  # Start with default baud rate
+                selected_ports = self._handle_prolific_port_search(self._get_all_ports())
+
+                first_attempt = False
+
+            result = self._attempt_connection(selected_ports, bauds)
+
+            if result:
+                return result
+
+            # Connection failed, ask if user wants to retry
+            self._logger.info("Connection failed on all attempted port/baud combinations.")
+
+            while True:
+                retry = input("\nWould you like to retry? (y/n): ").strip().lower()
+                if retry in ['y', 'yes', 'n', 'no']:
+                    break
+
+            if retry not in ['y', 'yes']:
+                self._logger.debug("User has chosen not to retry connection. Exiting connection process.")
+                return None
+            else:
+                self._logger.debug("User has chosen to retry connection.")
+
     def _select_baud_rate(self):
         """Allow user to select baud rate(s) to use for connection."""
 
@@ -136,7 +192,7 @@ class Connector:
         selection_options += "  4. Abort connection process"
 
         while True:
-            ports = [p for p in serial.tools.list_ports.comports()]
+            ports = self._get_all_ports()
 
             # select option for selecting port
             self._logger.info(selection_options)
@@ -209,47 +265,12 @@ class Connector:
 
         return None
 
-    def connect(self):
+    def _get_all_ports(self):
         """
-        Attempt to connect to Oregon RFID sensor with circular retry options.
-
+        Helper method to get list of all available ports.
         Returns
         -------
-        dict or None
-            Dictionary with 'connection', 'port', and 'baudrate' keys if successful, None otherwise.
+        list
+            List of available port objects.
         """
-
-
-
-        self._logger.info("Initializing connection attempt")
-
-        while True:
-            # Ask user to select baud rate
-            bauds = self._select_baud_rate()
-            if not bauds:
-                return None
-
-            # Ask user to select port(s)
-            selected_ports = self._select_ports()
-
-            if not selected_ports:
-                return None
-
-            result = self._attempt_connection(selected_ports, bauds)
-
-            if result:
-                return result
-
-            # Connection failed, ask if user wants to retry
-            self._logger.info("Connection failed on all attempted port/baud combinations.")
-
-            while True:
-                retry = input("\nWould you like to retry? (y/n): ").strip().lower()
-                if retry in ['y', 'yes', 'n', 'no']:
-                    break
-
-            if retry not in ['y', 'yes']:
-                self._logger.debug("User has chosen not to retry connection. Exiting connection process.")
-                return None
-            else:
-                self._logger.debug("User has chosen to retry connection.")
+        return [p for p in serial.tools.list_ports.comports()]

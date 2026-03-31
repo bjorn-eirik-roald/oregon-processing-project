@@ -380,7 +380,7 @@ class Communicator:
             elif 'bluetooth' in line_lower:
                 status['bluetooth_status'] = line.strip()
 
-            elif "gnss logged every / minutes" in line_lower or 'gnss log is off' in line_lower:
+            elif "gnss logged every " in line_lower or 'gnss log is off' in line_lower:
                 status['gnss_log_interval_minutes'] = True
             else:
                 raise ValueError(f"Unrecognized line format in system status at row {line_num + 1}: '{line}'")
