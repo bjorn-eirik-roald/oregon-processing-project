@@ -9,6 +9,8 @@ from oregon_processing.util.logging_manager import LoggingManager, get_logger
 
 class ExportProtocol:
 
+    EXPORT_EVENT_RECORD_FLAG = False
+
     def __init__(self):
         self._exit_stack = None
         self._config = None
@@ -92,10 +94,15 @@ class ExportProtocol:
 
         missing_export_dates = self._database_manager.get_export_dates()
 
-        self._communicator.export_event_records(
-            dates=missing_export_dates['system_logs'],
-            output_dir=self._database_manager.event_records_dir
-        )
+
+        if self.EXPORT_EVENT_RECORD_FLAG:
+            self._communicator.export_event_records(
+                dates=missing_export_dates['system_logs'],
+                output_dir=self._database_manager.event_records_dir
+            )
+        else:
+            self._logger.info("Skipping event record export as currently configured.")
+
         self._communicator.export_detection_records(
             dates=missing_export_dates['records'],
             output_dir=self._database_manager.records_dir
