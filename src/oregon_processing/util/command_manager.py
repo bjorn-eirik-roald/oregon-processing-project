@@ -102,6 +102,89 @@ class CommandManager:
         self.send_command("SY")  # Update last prompt signature
         return self._last_prompt_signature
 
+    def send_command(self, command: str, timeout: float = 5) -> list:
+        """
+        Send a command and read lines until a prompt signature indicates completion.
+
+        The device sometimes emits stray prompt signatures (or prefixes the prompt on
+        the same line as data). We now:
+        - Strip prompt signatures from the front of any line and keep the remainder.
+        - Ignore signature-only lines until we've received at least one data line.
+        - Stop reading once a standalone prompt arrives after data, or when the idle
+          timeout elapses.
+
+        Returns the cleaned response (list of lines) with echoed command and prompts
+        removed.
+
+        Parameters
+        ----------
+        command : str
+            Command to send to the device.
+        timeout : float
+            Idle timeout in seconds. The timeout resets each time data arrives.
+            Default: 5 seconds.
+
+        Returns
+        -------
+        list
+            Cleaned response lines (echoed command and prompt removed).
+
+        Raises
+        ------
+        ConnectionError
+            If not connected to device.
+        """
+        if not self._communicator.is_connected:
+            raise ConnectionError("Not connected to device.")
+
+        # Send command
+        self._transmit_command(command)
+
+        lines = []
+        last_data_time = time.time()
+
+        while True:
+            line = self._communicator._connection.readline().decode(errors="ignore").strip()
+
+            if line:
+                prompt_ready = self._is_ready_prompt(line)
+
+                if prompt_ready:
+                    # Signature is valid and nothing follows - unit is ready, we can stop
+                    break
+
+                # Check if line starts with valid signature
+                if len(line) >= 4 and self._is_ready_prompt(line):
+                    # This shouldn't happen (would be caught above), but handle it gracefully
+                    pass
+                elif len(line) >= 4:
+                    # Try to extract data after a potential prompt
+                    potential_sig = line[:4]
+                    try:
+                        if all(c in valid for c, valid in zip(potential_sig, (
+                            {'0', 'H', 'N'}, {'R', 'S', 'Z'}, {'G', 'N', 'U', 'E'}, {'B', '*'}
+                        ))):
+                            # Valid signature with data after it
+                            data = line[4:].lstrip('>').strip()
+                            if data:
+                                lines.append(data)
+                                last_data_time = time.time()
+                                continue
+                    except:
+                        pass
+
+                # Line doesn't start with valid signature, treat as data
+                if line:
+                    lines.append(line)
+                    last_data_time = time.time()
+
+            # Idle timeout: only break if no new data arrives within timeout
+            if time.time() - last_data_time > timeout:
+                break
+
+        cleaned = self._clean_response(lines, command)
+        return cleaned
+
     def validate_command(self, command: str) -> bool:
         """
         Validate command by extracting the main code and checking against VALID_MAIN_COMMANDS.
@@ -273,85 +356,8 @@ class CommandManager:
         self._communicator._connection.write((command + "\r\n").encode())
         self._communicator._connection.flush()
 
-    def send_command(self, command: str, timeout: float = 5) -> list:
-        """
-        Send a command and read lines until a prompt signature indicates completion.
-
-        The device sometimes emits stray prompt signatures (or prefixes the prompt on
-        the same line as data). We now:
-        - Strip prompt signatures from the front of any line and keep the remainder.
-        - Ignore signature-only lines until we've received at least one data line.
-        - Stop reading once a standalone prompt arrives after data, or when the idle
-          timeout elapses.
-
-        Returns the cleaned response (list of lines) with echoed command and prompts
-        removed.
-
-        Parameters
-        ----------
-        command : str
-            Command to send to the device.
-        timeout : float
-            Idle timeout in seconds. The timeout resets each time data arrives.
-            Default: 5 seconds.
-
-        Returns
-        -------
-        list
-            Cleaned response lines (echoed command and prompt removed).
-
-        Raises
-        ------
-        ConnectionError
-            If not connected to device.
-        """
-        if not self._communicator.is_connected:
-            raise ConnectionError("Not connected to device.")
-
-        # Send command
-        self._transmit_command(command)
-
-        lines = []
-        last_data_time = time.time()
-
-        while True:
-            line = self._communicator._connection.readline().decode(errors="ignore").strip()
-
-            if line:
-                prompt_ready = self._is_ready_prompt(line)
-
-                if prompt_ready:
-                    # Signature is valid and nothing follows - unit is ready, we can stop
-                    break
-
-                # Check if line starts with valid signature
-                if len(line) >= 4 and self._is_ready_prompt(line):
-                    # This shouldn't happen (would be caught above), but handle it gracefully
-                    pass
-                elif len(line) >= 4:
-                    # Try to extract data after a potential prompt
-                    potential_sig = line[:4]
-                    try:
-                        if all(c in valid for c, valid in zip(potential_sig, (
-                            {'0', 'H', 'N'}, {'R', 'S', 'Z'}, {'G', 'N', 'U', 'E'}, {'B', '*'}
-                        ))):
-                            # Valid signature with data after it
-                            data = line[4:].lstrip('>').strip()
-                            if data:
-                                lines.append(data)
-                                last_data_time = time.time()
-                                continue
-                    except:
-                        pass
-
-                # Line doesn't start with valid signature, treat as data
-                if line:
-                    lines.append(line)
-                    last_data_time = time.time()
-
-            # Idle timeout: only break if no new data arrives within timeout
-            if time.time() - last_data_time > timeout:
-                break
+    def _clean_response(self, lines: list, command: str) -> list:
+        """Clean response lines by removing echoed command, prompts, and known extraneous lines."""
 
         # Clean lines
         cleaned = lines
@@ -367,6 +373,8 @@ class CommandManager:
         cleaned = [l for l in cleaned if l != "COMM ready"]
         # Remove echoed command and empty lines
         cleaned = [l for l in cleaned if l and l != command]
+
         return cleaned
+
 
 
