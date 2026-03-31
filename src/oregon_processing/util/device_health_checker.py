@@ -20,7 +20,7 @@ class DeviceHealthChecker:
 
     RECOMMENDED_VOLTAGE = 14.0
     CRITICAL_VOLTAGE_THRESHOLD = 12.5
-    OLD_VERSION_THRESHOLD = 3.74
+    OLD_VERSION_THRESHOLD = 2.74
 
     def __init__(self, communicator: "Communicator"):
         """
