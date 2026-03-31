@@ -42,6 +42,7 @@ class Communicator:
         self._last_upload_date = None
         self._reader_name = None
         self._serial_number = None
+        self._device_type = None
         self._detection_record_format = None
         self._mode = None
 
