@@ -353,8 +353,14 @@ class CommandManager:
             if time.time() - last_data_time > timeout:
                 break
 
+        # Clean lines
+        cleaned = lines
+        # remove 'Database file open' lines that sometimes appear at the end of responses
+        cleaned = [l for l in cleaned if l != "Database file open"]
+        # Remove lines that contain 'ORMR ready'
+        cleaned = [l for l in cleaned if 'ORMR ready' not in l]
         # Remove echoed command and empty lines
-        cleaned = [l for l in lines if l and l != command]
+        cleaned = [l for l in cleaned if l and l != command]
         return cleaned
 
 

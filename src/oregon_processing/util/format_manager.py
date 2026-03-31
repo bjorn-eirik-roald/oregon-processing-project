@@ -123,7 +123,6 @@ class FormatManager:
             self._logger.exception(f"Error setting detection record format.")
             return False
 
-
     def _fetch_detection_record_format(self) -> dict:
         """
         Fetch and parse the detection record format from the device using the FM command.
@@ -177,7 +176,6 @@ class FormatManager:
             'column_indices': column_indices,
             'field_names': field_names,
         }
-
 
     def _restore_startup_format(self) -> bool:
         """
