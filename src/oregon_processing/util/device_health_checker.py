@@ -6,14 +6,24 @@ Provides methods for checking device health status, including supply voltage
 and other system parameters.
 """
 
+from dataclasses import dataclass
 import re
 from oregon_processing.util.logging_manager import get_logger
 
 from typing import TYPE_CHECKING
+
+from src.oregon_processing.util.system_status import FirmwareVersion, SystemStatus
 if TYPE_CHECKING:
     from oregon_processing.util.communicator import Communicator
 
 
+@dataclass
+class DeviceHealthReport:
+    """Data class representing the health report of the Oregon RFID device."""
+
+    healthy: bool
+    critical_warnings: list[str]
+    warnings: list[str]
 
 class DeviceHealthChecker:
     """Manages system health checks for Oregon RFID device."""
@@ -34,80 +44,59 @@ class DeviceHealthChecker:
         self._communicator = communicator
         self._logger = get_logger(__name__)
 
-    def check_device_health(self):
+    def check_device_health(self) -> DeviceHealthReport:
         """
         Calls for system status and checks parsed system status for potential issues.
 
         Returns
         -------
-        dict
-            Dictionary with 'healthy' (bool) and 'warnings' (list of str) keys.
+        DeviceHealthReport
+            Data class representing the health report of the Oregon RFID device.
         """
-
-
 
         self._logger.debug("Initializing health check of Oregon RFID device.")
         self._logger.debug("Retrieving System Status.")
 
         critical_warnings = []
         non_critical_warnings = []
-        parsed_status = self._communicator.get_system_status()
+
+        system_status: SystemStatus = self._communicator.get_system_status()
         prompt_signature = self._communicator.prompt_signature
 
+        # Check time synchronization status based on prompt signature (3rd character should be 'G' for GNSS sync)
         if prompt_signature[2] != 'G':
             non_critical_warnings.append(
                 f"Device time is not synchronized to GNSS signals (current state: '{prompt_signature[2]}')"
             )
 
-        # check version
-        try:
-            version_str = str(parsed_status['version'])
-            version_number = None
-            # Expect format like 'V2.74N' or 'V2.74'
-
-            match = re.match(r"V([0-9]+\.[0-9]+)", version_str)
-            if match:
-                version_number = float(match.group(1))
-                if version_number < self.OLD_VERSION_THRESHOLD:
-                    non_critical_warnings.append(
-                        f"Device firmware version {version_str} is outdated (should be >= {self.OLD_VERSION_THRESHOLD})"
-                    )
-            else:
-                non_critical_warnings.append(
-                    f"Could not parse device firmware version: {version_str}"
-                )
-        except (ValueError, TypeError):
+        # Check firmware version
+        firmware_version: FirmwareVersion = system_status.version
+        if firmware_version.version_number < self.OLD_VERSION_THRESHOLD:
             non_critical_warnings.append(
-                f"Could not parse device firmware version: {parsed_status['version']}"
+                f"Device firmware version V{firmware_version.major}.{firmware_version.minor}{firmware_version.suffix or ''} is outdated (should be >= {self.OLD_VERSION_THRESHOLD})"
             )
 
         # Check supply voltage
-        try:
-            voltage = float(parsed_status['supply_voltage'])
-            if voltage < self.RECOMMENDED_VOLTAGE:
-                non_critical_warnings.append(
-                    f"Low supply voltage: {voltage}V (recommended to be >= {self.RECOMMENDED_VOLTAGE}V)"
-                )
+        voltage: float = system_status.supply_voltage
 
-            if voltage < self.CRITICAL_VOLTAGE_THRESHOLD:
-                critical_warnings.append(
-                    f"Critical low supply voltage: {voltage}V (must be >= {self.CRITICAL_VOLTAGE_THRESHOLD}V)"
-                )
-
-        except (ValueError, TypeError):
+        if voltage < self.RECOMMENDED_VOLTAGE:
             non_critical_warnings.append(
-                f"Could not parse supply voltage: {parsed_status['supply_voltage']}"
+                f"Low supply voltage: {voltage}V (recommended to be >= {self.RECOMMENDED_VOLTAGE}V)"
             )
 
+        if voltage < self.CRITICAL_VOLTAGE_THRESHOLD:
+            critical_warnings.append(
+                f"Critical low supply voltage: {voltage}V (must be >= {self.CRITICAL_VOLTAGE_THRESHOLD}V)"
+            )
 
-        health_report = {
-            'healthy': len(critical_warnings) == 0 and len(non_critical_warnings) == 0,
-            'critical_warnings': critical_warnings,
-            'warnings': non_critical_warnings
-        }
+        health_report = DeviceHealthReport(
+            healthy=len(critical_warnings) == 0 and len(non_critical_warnings) == 0,
+            critical_warnings=critical_warnings,
+            warnings=non_critical_warnings
+        )
 
         # Report health status
-        if not health_report['healthy']:
+        if not health_report.healthy:
             total_issues = len(critical_warnings) + len(non_critical_warnings)
             warning_message = f"Device health check detected {total_issues} issue(s)."
 

@@ -6,6 +6,7 @@ from oregon_processing.util.communicator import Communicator
 from oregon_processing.util.oregon_config import OregonConfig
 from oregon_processing.util.database_manager import DatabaseManager
 from oregon_processing.util.logging_manager import LoggingManager, get_logger
+from src.oregon_processing.util.device_health_checker import DeviceHealthReport
 from src.oregon_processing.util.exceptions import ConfigNotFoundError, ConnectionFailedError, UnexpectedResponseError
 
 class ExportProtocol:
@@ -85,9 +86,9 @@ class ExportProtocol:
             self._logger.error("Oregon RFID device is not connected. Aborting.")
             return
 
-        health_report = self._communicator.check_device_health()
-        if len(health_report['critical_warnings']) > 0:
-            message = "Device health check failed. Please address the following critical issues before proceeding: \n  -" + "\n  -".join(health_report.get('critical_warnings', []))
+        health_report: DeviceHealthReport = self._communicator.check_device_health()
+        if len(health_report.critical_warnings) > 0:
+            message = "Device health check failed. Please address the following critical issues before proceeding: \n  -" + "\n  -".join(health_report.critical_warnings)
             self._logger.error(message)
             return
 

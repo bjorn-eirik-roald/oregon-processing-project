@@ -7,6 +7,7 @@ Device Mode Manager for Oregon RFID
 from typing import TYPE_CHECKING
 
 from oregon_processing.util.logging_manager import get_logger
+from src.oregon_processing.util.system_status import SystemStatus
 if TYPE_CHECKING:
     from oregon_processing.util.communicator import Communicator
     from oregon_processing.util.command_manager import CommandManager
@@ -135,7 +136,7 @@ class DeviceModeManager:
         str
             Current mode: "Standby", "Run", or "Sleep"
         """
-        status = self._communicator.get_system_status()
-        return status.get('mode', 'Unknown')
+        status: SystemStatus = self._communicator.get_system_status()
+        return status.mode
 
 
