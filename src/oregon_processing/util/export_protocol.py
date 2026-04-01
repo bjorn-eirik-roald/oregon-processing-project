@@ -33,10 +33,9 @@ class ExportProtocol:
                     write_to_console = True,
                     write_to_report_file = True,
                     report_file = crash_log_file,
-                    relative_base_paths = {"output_dir": self._config.root_output_dir},
-                    console_level = logging.INFO,
-                    file_level = logging.DEBUG,)
+                    relative_base_paths = {"output_dir": self._config.root_output_dir}
                     )
+            )
 
             self._logger = get_logger(__name__)
 
