@@ -32,16 +32,16 @@ class DeviceHealthChecker:
     CRITICAL_VOLTAGE_THRESHOLD = 12.5
     OLD_VERSION_THRESHOLD = 2.74
 
-    def __init__(self, system_status_checker: SystemStatusChecker, command_manager: CommandManager):
+    def __init__(self, command_manager: CommandManager, system_status_checker: SystemStatusChecker):
         """
         Initialize DeviceHealthChecker.
 
         Parameters
         ----------
-        system_status_checker : SystemStatusChecker
-            SystemStatusChecker instance for checking system status.
         command_manager : CommandManager
             CommandManager instance for managing device commands.
+        system_status_checker : SystemStatusChecker
+            SystemStatusChecker instance for checking system status.
         """
         self._logger = get_logger(__name__)
 

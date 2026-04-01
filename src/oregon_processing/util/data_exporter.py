@@ -23,7 +23,7 @@ class DataExporter:
 
     DEFAULT_DETECTION_RECORD_FORMAT = {'ORSR':'DTY ARR SPC TRF DUR SPC TTY SPC TAG SCD NCD EFA LON LAT',
                                        'ORMR':'DTY ARR SPC TRF DUR SPC TTY SPC ANT TAG SCD NCD EFA LON LAT'}
-    def __init__(self, format_manager: FormatManager, command_manager: CommandManager,
+    def __init__(self, command_manager: CommandManager, format_manager: FormatManager,
                  upload_history_checker: UploadHistoryChecker, mode_manager: DeviceModeManager,
                  system_status: SystemStatus):
         """

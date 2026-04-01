@@ -1,5 +1,7 @@
-import serial
-import serial.tools.list_ports
+
+from serial import Serial
+from serial.tools import list_ports
+
 
 from oregon_processing.util.logging_manager import get_logger
 
@@ -9,7 +11,7 @@ class ConnectionResult:
 
     def __init__(self, success, connection=None, port=None, baudrate=None, error_message=None):
         self.success: bool = success
-        self.connection: serial.Serial = connection
+        self.connection: Serial = connection
         self.port: str = port
         self.baudrate: int = baudrate
         self.error_message: str = error_message
@@ -241,7 +243,7 @@ class Connector:
 
                 ser = None
                 try:
-                    ser: serial.Serial = serial.Serial(port, baudrate=baud, timeout=0.2, write_timeout=0.2)
+                    ser: Serial = Serial(port, baudrate=baud, timeout=0.2, write_timeout=0.2)
                     ser.reset_input_buffer()
                     ser.reset_output_buffer()
 
@@ -275,4 +277,4 @@ class Connector:
         list
             List of available port objects.
         """
-        return [p for p in serial.tools.list_ports.comports()]
+        return [p for p in list_ports.comports()]
