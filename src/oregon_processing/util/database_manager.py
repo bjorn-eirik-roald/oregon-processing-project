@@ -172,8 +172,8 @@ class DatabaseManager:
 
         self._logger.debug("Extracting dates from filenames...")
 
-        record_file_dates = set(d for d in [extract_filename_date(f.name) for f in record_files] if d is not None)
-        event_file_dates = set(d for d in [extract_filename_date(f.name) for f in event_files] if d is not None)
+        record_file_dates = set(d for d in [extract_filename_date(f.name, logger=self._logger) for f in record_files] if d is not None)
+        event_file_dates = set(d for d in [extract_filename_date(f.name, logger=self._logger) for f in event_files] if d is not None)
 
         # Generate expected date range from DEFAULT_FIRST_DATE to today
         today = date.today()
