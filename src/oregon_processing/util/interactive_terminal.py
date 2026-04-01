@@ -17,18 +17,15 @@ except ImportError:
 class InteractiveTerminal:
     """Interactive terminal for sending commands to Oregon RFID device."""
 
-    def __init__(self, communicator, command_manager):
+    def __init__(self, command_manager):
         """
         Initialize the interactive terminal.
 
         Parameters
         ----------
-        communicator : Communicator
-            Communicator instance for device communication.
         command_manager : CommandManager
             CommandManager instance for sending commands to device.
         """
-        self._communicator = communicator
         self._command_manager = command_manager
         self._logger = get_logger(__name__)
 
@@ -56,9 +53,9 @@ class InteractiveTerminal:
                     break
 
                 # Validate command format
-                if not self._communicator._command_manager.validate_command(cmd):
+                if not self._command_manager.validate_command(cmd):
                     self._logger.warning("Invalid command. Use a two-letter code followed by a space (e.g., 'SY ').")
-                    self._logger.info(f"Valid codes: {sorted(self._communicator._command_manager.VALID_MAIN_COMMANDS)}")
+                    self._logger.info(f"Valid codes: {sorted(self._command_manager.VALID_MAIN_COMMANDS)}")
                     continue
 
                 # send command and get cleaned response
