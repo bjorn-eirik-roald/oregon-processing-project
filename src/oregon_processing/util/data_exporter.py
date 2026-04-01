@@ -40,187 +40,6 @@ class DataExporter:
         self._command_manager = command_manager
         self._logger = get_logger(__name__)
 
-    def _split_detection_record(self, record_line: str, format_info: dict) -> list:
-        """
-        Split a detection record line into parts, handling the ARR field which contains spaces.
-
-        The ARR (arrival datetime) field has the format "YYYY-MM-DD HH:MM:SS.ddd" which contains
-        a space between the date and time. When splitting by spaces, this creates two tokens
-        instead of one, so we need to merge them back together.
-
-        Note: Some records may be missing trailing fields (e.g., HDP) that FM reports.
-
-        Parameters
-        ----------
-        record_line : str
-            The detection record line to split
-        format_info : dict
-            Format information containing 'columns' and 'column_indices'
-
-        Returns
-        -------
-        list
-            List of field values with ARR properly merged if present
-
-        Raises
-        ------
-        ValueError
-            If the record has an unexpected number of parts
-        """
-        # Split by spaces
-        parts = record_line.split()
-
-        column_indices = format_info['column_indices']
-        arr_index = column_indices.get('ARR')
-
-        if arr_index is None:
-            raise ValueError("ARR index not found in format info. ARR field is required for proper splitting of detection records. From format info: {}".format(format_info))
-
-        # If ARR is in the format, we expect one extra part (because ARR contains a space)
-        # Check if we have enough parts to merge ARR
-        if len(parts) < arr_index + 2:
-            raise ValueError(
-                f"Not enough parts to merge ARR at index {arr_index}, got {len(parts)} parts. Record line: '{record_line}'"
-            )
-
-        # Merge the two ARR parts (date and time) back together
-        # The date part is at arr_index, time part is at arr_index+1
-        arr_date = parts[arr_index]
-        arr_time = parts[arr_index + 1]
-        parts[arr_index] = f"{arr_date} {arr_time}"
-
-        # Remove the time part (which is now merged into arr_index)
-        parts.pop(arr_index + 1)
-
-        # After merging, we might have fewer parts than columns if trailing fields are missing
-        # This is acceptable - some records may not have all fields (e.g., HDP)
-
-        return parts
-
-    def export_system_status(self, output_dir: Path) -> bool:
-        """
-        Run the SY (system status) command and write the response to a text file.
-
-        Parameters
-        ----------
-        output_dir : str or Path
-            Directory where system status will be written.
-
-        Returns
-        -------
-        bool
-            True if successful, False otherwise.
-        """
-
-
-
-        if isinstance(output_dir, str):
-            try:
-                output_dir = Path(output_dir)
-            except Exception as e:
-                self._logger.error(f"Error converting output directory string to Path object: {e}")
-                return False
-
-        if not self._communicator.is_connected:
-            self._logger.error("Not connected to device.")
-            return False
-
-        if not output_dir.exists():
-            output_dir.mkdir(parents=True, exist_ok=True)
-
-        output_filepath = output_dir / f"{self._communicator.serial_number}_system_status_{datetime.now().strftime('%Y_%m_%d_%H%M%S')}.txt"
-
-        try:
-            self._logger.info("Exporting system status to file.")
-            parsed_status = self._communicator.get_system_status()
-
-            with open(output_filepath, 'w') as f:
-                f.write("Oregon RFID System Status\n")
-                f.write("Export Date/Time: " + time.strftime("%Y-%m-%d %H:%M:%S") + "\n")
-                f.write("=========================\n\n")
-
-                # Write system status
-                f.write(f"Device Type: {parsed_status['device_type']}\n")
-                f.write(f"Version: {parsed_status['version']}\n")
-                f.write(f"Serial Number: {parsed_status['serial_number']}\n")
-                f.write(f"Reader Name: {parsed_status['reader_name']}\n")
-                f.write(f"Mode: {parsed_status['mode']}\n")
-                f.write(f"Supply Voltage: {parsed_status['supply_voltage']}\n")
-                f.write(f"Standby Amps: {parsed_status['standby_amps']}\n")
-                f.write(f"Noise: {parsed_status['noise']}\n")
-                f.write(f"Shutdown Supercap: {parsed_status['shutdown_supercap']}\n")
-                f.write(f"Sleep Battery: {parsed_status['sleep_battery']}\n")
-                f.write(f"Tags in Archive: {parsed_status['tags_in_archive']}\n\n")
-
-                if parsed_status['warnings']:
-                    f.write("Warnings:\n")
-                    for warning in parsed_status['warnings']:
-                        f.write(f"  - {warning}\n")
-                    f.write("\n")
-                else:
-                    f.write("No warnings detected.\n\n")
-
-            self._logger.info(f"System status written to {output_filepath}")
-
-            return True
-
-        except Exception as e:
-            self._logger.error(f"Error writing system status to file: {e}")
-            return False
-
-    def export_upload_log(self, output_dir: Path) -> bool:
-        """
-        Run the UH (upload log) command and write the response to a text file.
-
-        Parameters
-        ----------
-        output_dir : str or Path
-            Directory where output file will be written.
-
-        Returns
-        -------
-        bool
-            True if successful, False otherwise.
-        """
-
-
-
-        if isinstance(output_dir, str):
-            try:
-                output_dir = Path(output_dir)
-            except Exception as e:
-                self._logger.error(f"Error converting output directory string to Path object: {e}")
-                return False
-
-        if not self._communicator.is_connected:
-            self._logger.error("Not connected to device.")
-            return False
-
-        if not output_dir.exists():
-            output_dir.mkdir(parents=True, exist_ok=True)
-
-        output_filepath = output_dir / f"{self._communicator.serial_number}_upload_log_{datetime.now().strftime('%Y_%m_%d_%H%M%S')}.txt"
-
-        try:
-            self._logger.info("Exporting upload log to file:")
-            upload_history_lines = self._command_manager.send_command("UH")
-
-            with open(output_filepath, 'w') as f:
-                f.write("Oregon RFID Upload Log\n")
-                f.write("Export Date/Time: " + time.strftime("%Y-%m-%d %H:%M:%S") + "\n")
-                f.write("=========================\n\n")
-
-                # Write upload log
-                f.write('\n'.join(upload_history_lines))
-
-            self._logger.info(f"Upload log exported. Total lines written: {len(upload_history_lines)}. Output written to {output_filepath}")
-
-            return True
-
-        except Exception as e:
-            self._logger.error(f"Error writing upload log to file: {e}")
-            return False
-
     def export_event_records(self, dates: list, output_dir: Path = Path("")) -> bool:
         """
         Export event records for specified dates.
@@ -543,4 +362,62 @@ class DataExporter:
             self._logger.info(f"Returned device mode to {old_mode} after export.")
 
         return all_successful
+
+    def _split_detection_record(self, record_line: str, format_info: dict) -> list:
+        """
+        Split a detection record line into parts, handling the ARR field which contains spaces.
+
+        The ARR (arrival datetime) field has the format "YYYY-MM-DD HH:MM:SS.ddd" which contains
+        a space between the date and time. When splitting by spaces, this creates two tokens
+        instead of one, so we need to merge them back together.
+
+        Note: Some records may be missing trailing fields (e.g., HDP) that FM reports.
+
+        Parameters
+        ----------
+        record_line : str
+            The detection record line to split
+        format_info : dict
+            Format information containing 'columns' and 'column_indices'
+
+        Returns
+        -------
+        list
+            List of field values with ARR properly merged if present
+
+        Raises
+        ------
+        ValueError
+            If the record has an unexpected number of parts
+        """
+        # Split by spaces
+        parts = record_line.split()
+
+        column_indices = format_info['column_indices']
+        arr_index = column_indices.get('ARR')
+
+        if arr_index is None:
+            raise ValueError("ARR index not found in format info. ARR field is required for proper splitting of detection records. From format info: {}".format(format_info))
+
+        # If ARR is in the format, we expect one extra part (because ARR contains a space)
+        # Check if we have enough parts to merge ARR
+        if len(parts) < arr_index + 2:
+            raise ValueError(
+                f"Not enough parts to merge ARR at index {arr_index}, got {len(parts)} parts. Record line: '{record_line}'"
+            )
+
+        # Merge the two ARR parts (date and time) back together
+        # The date part is at arr_index, time part is at arr_index+1
+        arr_date = parts[arr_index]
+        arr_time = parts[arr_index + 1]
+        parts[arr_index] = f"{arr_date} {arr_time}"
+
+        # Remove the time part (which is now merged into arr_index)
+        parts.pop(arr_index + 1)
+
+        # After merging, we might have fewer parts than columns if trailing fields are missing
+        # This is acceptable - some records may not have all fields (e.g., HDP)
+
+        return parts
+
 
