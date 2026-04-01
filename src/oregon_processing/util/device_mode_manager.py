@@ -41,7 +41,7 @@ class DeviceModeManager:
         """Enter context manager."""
 
         try:
-            self._startup_mode = self._get_current_mode()
+            self._startup_mode = self.get_current_mode()
             self._logger.debug(f"Device startup mode: {self._startup_mode}")
         except Exception as e:
             error_message = "Failed to get current device mode on context enter."
@@ -93,14 +93,14 @@ class DeviceModeManager:
             self._logger.error(error_message)
             raise ConnectionError(error_message)
 
-        current_mode = self._get_current_mode()
+        current_mode = self.get_current_mode()
         if current_mode != mode_name:
             self._logger.debug(f"Changing device mode from '{current_mode}' to '{mode_name}' (sending {command} command).")
             self._command_manager.send_command(command)
-            if self._get_current_mode() == mode_name:
+            if self.get_current_mode() == mode_name:
                 self._logger.debug(f"Device mode changed from '{current_mode}' to '{mode_name}'.")
             else:
-                self._logger.error(f"Device mode change failed! Device is still in '{self._get_current_mode()}' mode.")
+                self._logger.error(f"Device mode change failed! Device is still in '{self.get_current_mode()}' mode.")
                 return False
 
         return True
@@ -127,7 +127,7 @@ class DeviceModeManager:
 
         self.change_mode(target_mode)
 
-    def _get_current_mode(self) -> str:
+    def get_current_mode(self) -> str:
         """
         Get the current operating mode from the system status.
 

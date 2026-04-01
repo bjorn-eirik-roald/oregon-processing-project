@@ -13,13 +13,13 @@ from oregon_processing.util.command_manager import CommandManager
 from oregon_processing.util.clock_manager import ClockManager
 from oregon_processing.util.device_mode_manager import DeviceModeManager
 from oregon_processing.util.interactive_terminal import InteractiveTerminal
-from oregon_processing.util.firmware_updater import FirmwareUpdater
 from oregon_processing.util.format_manager import FormatManager
 from oregon_processing.util.data_exporter import DataExporter
-from oregon_processing.util.device_health_checker import DeviceHealthChecker
+from oregon_processing.util.device_health_checker import DeviceHealthChecker, DeviceHealthReport
 from oregon_processing.util.logging_manager import get_logger
 from src.oregon_processing.util.exceptions import ConnectionFailedError, UnexpectedResponseError, UnexpectedResponseError
 from src.oregon_processing.util.system_status import SystemStatusChecker, SystemStatus
+from src.oregon_processing.util.upload_history import UploadHistory
 
 
 
@@ -133,13 +133,13 @@ class Communicator:
 
     def get_mode(self):
         """Get the current operating mode from the system status."""
-        if self._mode_manager:
-            self._mode =  self._mode_manager._get_current_mode()
-            return self._mode
+        if not self._mode_manager:
+            error_message = "Mode manager not initialized. Cannot retrieve current mode."
+            self._logger.error(error_message)
+            raise RuntimeError(error_message)
 
-        error_message = "Mode manager not initialized; cannot retrieve current mode."
-        self._logger.error(error_message)
-        raise RuntimeError(error_message)
+        self._mode =  self._mode_manager.get_current_mode()
+        return self._mode
 
     def change_mode(self, mode_name: str) -> bool:
         """
@@ -163,7 +163,9 @@ class Communicator:
             error_message = "Mode manager not initialized. Cannot change mode."
             self._logger.error(error_message)
             raise RuntimeError(error_message)
-        return self._mode_manager.change_mode(mode_name)
+
+        success: bool = self._mode_manager.change_mode(mode_name)
+        return success
 
     def check_device_health(self):
         """
@@ -181,7 +183,9 @@ class Communicator:
             error_message = "Health checker not initialized. Cannot check device health."
             self._logger.error(error_message)
             raise RuntimeError(error_message)
-        return self._health_checker.check_device_health()
+
+        health_report: DeviceHealthReport = self._health_checker.check_device_health()
+        return health_report
 
     def start_interactive_terminal(self):
         """
@@ -213,116 +217,33 @@ class Communicator:
 
         return self._system_status_checker.get_system_status()
 
-    def get_upload_history(self):
+    def get_upload_history(self) -> UploadHistory:
         """
         Parse upload history output from UH command.
 
         Returns
         -------
-        dict
+        UploadHistory
             Parsed upload history with upload records and metadata.
         """
 
+        if not self._command_manager:
+            error_message = "Command manager not initialized. Cannot retrieve upload history."
+            self._logger.error(error_message)
+            raise RuntimeError(error_message)
 
-        self.get_mode() # update mode property
-        old_mode = None
-        if self._mode.lower() != 'standby':
-            old_mode = self._mode
-            self.change_mode('Standby')
+        if not self._connection:
+            error_message = "Not connected to device. Cannot retrieve upload history."
+            self._logger.error(error_message)
+            raise ConnectionError(error_message)
 
-        upload_history_lines = self._command_manager.send_command("UH")
+        if not self._mode_manager:
+            error_message = "Mode manager not initialized. Cannot retrieve upload history."
+            self._logger.error(error_message)
+            raise RuntimeError(error_message)
 
-        if old_mode:
-            self.change_mode(old_mode)
-
-        history = {
-            'reader_name': None,
-            'site': None,
-            'upload_count': None,
-            'uploads': [],
-            'new_records': None,
-            'total_records': None,
-            'raw_output': upload_history_lines
-        }
-
-        for i, line in enumerate(upload_history_lines):
-            line_stripped = line.strip()
-
-            # Parse header line: "Reader: <name>  Site: <site>"
-            if line_stripped.startswith('Reader:'):
-                parts = line_stripped.split('Site:')
-                if len(parts) == 2:
-                    reader_part = parts[0].replace('Reader:', '').strip()
-                    site_part = parts[1].strip()
-                    history['reader_name'] = reader_part
-                    history['site'] = site_part
-
-            # Parse upload histories count
-            elif 'Upload Histories:' in line:
-                parts = line_stripped.split('Upload Histories:')
-                if len(parts) == 2:
-                    try:
-                        history['upload_count'] = int(parts[1].strip())
-                    except ValueError:
-                        pass
-
-            # Skip header row (Num   UP Date    Time    Records)
-            elif line_stripped.startswith('Num'):
-                continue
-
-            # Parse upload record lines (numbered entries)
-            elif line_stripped and line_stripped[0].isdigit():
-                parts = line_stripped.split()
-                if len(parts) >= 4:
-                    try:
-                        upload_record = {
-                            'num': int(parts[0]),
-                            'date': parts[1],
-                            'time': parts[2],
-                            'records': int(parts[3])
-                        }
-                        history['uploads'].append(upload_record)
-                    except (ValueError, IndexError):
-                        error_message = f"Unrecognized line format in upload history at row {i + 1}: '{line}'"
-                        self._logger.error(error_message)
-                        raise UnexpectedResponseError(error_message)
-
-            # Parse NEW records line
-            elif line_stripped.startswith('NEW'):
-                parts = line_stripped.split()
-                if len(parts) >= 2:
-                    try:
-                        history['new_records'] = int(parts[-1])
-                    except ValueError:
-                        error_message = f"Unrecognized line format in upload history at row {i + 1}: '{line}'"
-                        self._logger.error(error_message)
-                        raise UnexpectedResponseError(error_message)
-
-            # Parse Total line
-            elif line_stripped.startswith('Total'):
-                parts = line_stripped.split()
-                if len(parts) >= 2:
-                    try:
-                        history['total_records'] = int(parts[-1])
-                    except ValueError:
-                        error_message = f"Unrecognized line format in upload history at row {i + 1}: '{line}'"
-                        self._logger.error(error_message)
-                        raise UnexpectedResponseError(error_message)
-
-            else:
-                error_message = f"Unrecognized line format in upload history at row {i + 1}: '{line}'"
-                self._logger.error(error_message)
-                raise UnexpectedResponseError(error_message)
-
-
-        # Store the most recent upload date (last entry in uploads list)
-        if history['uploads']:
-            last_upload = history['uploads'][-1]
-
-            upload_datetime = datetime.strptime(f"{last_upload['date']} {last_upload['time']}", "%Y-%m-%d %H:%M:%S")
-            self._last_upload_date = upload_datetime.date()
-
-        return history
+        upload_history: UploadHistory = self._mode_manager.get_upload_history()
+        return upload_history
 
     def control_device_datetime(self, tolerance_seconds: int = 15, attempt_sync: bool = True) -> dict:
         """
@@ -370,7 +291,8 @@ class Communicator:
         bool
             True if all exports completed successfully, False if any failed.
         """
-        return self._data_exporter.export_event_records(dates, output_dir)
+        success: bool = self._data_exporter.export_event_records(dates, output_dir)
+        return success
 
     def export_detection_records(self, dates: list, output_dir: Path = Path(""), sep=',') -> bool:
         """
@@ -392,7 +314,8 @@ class Communicator:
         bool
             True if all exports completed successfully, False if any failed.
         """
-        return self._data_exporter.export_detection_records(dates, output_dir, sep)
+        success: bool = self._data_exporter.export_detection_records(dates, output_dir, sep)
+        return success
 
     def _post_connect_handshake(self):
         """Send a quick SY command to verify connection and capture prompt signature. Store reader name and FM format"""
@@ -422,8 +345,9 @@ class Communicator:
 
 
         if not self._connection:
-            self._logger.error("Not connected to device.")
-            return False
+            error_message = "Not connected to device. Cannot retrieve reader name."
+            self._logger.error(error_message)
+            raise ConnectionError(error_message)
 
         try:
             system_status: SystemStatus = self.get_system_status()
@@ -431,8 +355,9 @@ class Communicator:
             return True
 
         except Exception as e:
-            self._logger.error(f"Error retrieving reader name: {e}")
-            return False
+            error_message = f"Error retrieving reader name: {e}"
+            self._logger.error(error_message)
+            raise RuntimeError(error_message)
 
     def _update_serial_number(self) -> str:
         """
