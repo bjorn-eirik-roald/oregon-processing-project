@@ -415,12 +415,16 @@ class Communicator:
             elif "gnss logged every " in line_lower or 'gnss log is off' in line_lower:
                 status['gnss_log_interval_minutes'] = True
             else:
-                raise ValueError(f"Unrecognized line format in system status at row {line_num + 1}: '{line}'")
+                error_message = f"Unrecognized line format in system status at row {line_num + 1} of SY response: '{line}'"
+                self._logger.error(error_message)
+                raise UnexpectedResponseError(error_message)
 
         must_have_fields = ['device_type', 'version', 'serial_number', 'reader_name', 'mode']
         for field in must_have_fields:
             if not status[field]:
-                raise ValueError(f"Missing expected field '{field}' in system status. Parsed value: '{status[field]}'")
+                error_message = f"Missing expected field '{field}' in system status. Parsed value: '{status[field]}'"
+                self._logger.error(error_message)
+                raise UnexpectedResponseError(error_message)
 
         return status
 
@@ -494,7 +498,9 @@ class Communicator:
                         }
                         history['uploads'].append(upload_record)
                     except (ValueError, IndexError):
-                        pass
+                        error_message = f"Unrecognized line format in upload history at row {i + 1}: '{line}'"
+                        self._logger.error(error_message)
+                        raise UnexpectedResponseError(error_message)
 
             # Parse NEW records line
             elif line_stripped.startswith('NEW'):
@@ -503,7 +509,9 @@ class Communicator:
                     try:
                         history['new_records'] = int(parts[-1])
                     except ValueError:
-                        pass
+                        error_message = f"Unrecognized line format in upload history at row {i + 1}: '{line}'"
+                        self._logger.error(error_message)
+                        raise UnexpectedResponseError(error_message)
 
             # Parse Total line
             elif line_stripped.startswith('Total'):
@@ -512,10 +520,14 @@ class Communicator:
                     try:
                         history['total_records'] = int(parts[-1])
                     except ValueError:
-                        pass
+                        error_message = f"Unrecognized line format in upload history at row {i + 1}: '{line}'"
+                        self._logger.error(error_message)
+                        raise UnexpectedResponseError(error_message)
 
             else:
-                raise ValueError(f"Unrecognized line format in upload history: '{line}'")
+                error_message = f"Unrecognized line format in upload history at row {i + 1}: '{line}'"
+                self._logger.error(error_message)
+                raise UnexpectedResponseError(error_message)
 
 
         # Store the most recent upload date (last entry in uploads list)
@@ -549,7 +561,9 @@ class Communicator:
             difference_seconds, was_updated, update_command_sent, update_response, error
         """
         if not self._connection:
-            raise ConnectionError("Not connected to device.")
+            error_message = f"Not connected to device. Cannot check or control device datetime."
+            self._logger.error(error_message)
+            raise ConnectionError(error_message)
 
         return self._clock_manager.control_device_datetime(tolerance_seconds, attempt_sync)
 
