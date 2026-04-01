@@ -74,13 +74,13 @@ class DataExporter:
         arr_index = column_indices.get('ARR')
 
         if arr_index is None:
-            raise ValueError("ARR index not found in format info.")
+            raise ValueError("ARR index not found in format info. ARR field is required for proper splitting of detection records. From format info: {}".format(format_info))
 
         # If ARR is in the format, we expect one extra part (because ARR contains a space)
         # Check if we have enough parts to merge ARR
         if len(parts) < arr_index + 2:
             raise ValueError(
-                f"Not enough parts to merge ARR at index {arr_index}, got {len(parts)} parts"
+                f"Not enough parts to merge ARR at index {arr_index}, got {len(parts)} parts. Record line: '{record_line}'"
             )
 
         # Merge the two ARR parts (date and time) back together

@@ -9,6 +9,8 @@ and validating prompt signatures.
 from oregon_processing.util.logging_manager import get_logger
 import time
 
+from src.oregon_processing.util.exceptions import UnexpectedResponseError
+
 
 class CommandManager:
     """Manages command sending, receiving, and response validation for Oregon RFID devices."""
@@ -135,7 +137,9 @@ class CommandManager:
             If not connected to device.
         """
         if not self._communicator.is_connected:
-            raise ConnectionError("Not connected to device.")
+            error_message = f"Cannot send command '{command}': Not connected to device."
+            self._logger.error(error_message)
+            raise ConnectionError(error_message)
 
         # Send command
         self._transmit_command(command)
@@ -170,7 +174,9 @@ class CommandManager:
                                 lines.append(data)
                                 last_data_time = time.time()
                                 continue
-                    except:
+                    except UnexpectedResponseError as e:
+                        error_message = f"Error parsing line '{line}': {e}"
+                        self._logger.error(error_message)
                         pass
 
                 # Line doesn't start with valid signature, treat as data
@@ -296,7 +302,7 @@ class CommandManager:
         if not isinstance(signature, str):
             error_msg = f"Expected signature to be a string, got {type(signature)} instead."
             self._logger.error(error_msg)
-            raise TypeError(error_msg)
+            raise UnexpectedResponseError(error_msg)
 
         if len(signature) != 4:
             return False
@@ -340,7 +346,9 @@ class CommandManager:
         """
 
         if not self._communicator.is_connected:
-            raise ConnectionError("Not connected to device.")
+            error_message = f"Cannot send command '{command}': Not connected to device."
+            self._logger.error(error_message)
+            raise ConnectionError(error_message)
 
         # Clear buffer by actually reading and discarding stray bytes
         self._communicator._connection.reset_input_buffer()

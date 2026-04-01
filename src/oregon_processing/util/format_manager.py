@@ -3,8 +3,8 @@
 Format Manager for Oregon RFID device record format operations
 """
 
-from statistics import mode
 from oregon_processing.util.logging_manager import get_logger
+from src.oregon_processing.util.exceptions import UnexpectedResponseError
 
 
 class FormatManager:
@@ -153,7 +153,7 @@ class FormatManager:
             self._communicator.change_mode(old_mode)
 
         if len(response_lines) != 1:
-            raise ValueError(f"Unexpected number of lines in FM response: {len(response_lines)}")
+            raise UnexpectedResponseError(f"Unexpected number of lines in FM response: {len(response_lines)}")
 
         columns_raw = response_lines[0].strip()
         tokens = columns_raw.split()

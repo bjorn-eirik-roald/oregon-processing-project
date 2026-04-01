@@ -3,9 +3,10 @@ from contextlib import ExitStack
 from datetime import datetime
 
 from oregon_processing.util.communicator import Communicator
-from oregon_processing.util.oregon_config import OregonConfig, NoConfigError
+from oregon_processing.util.oregon_config import OregonConfig
 from oregon_processing.util.database_manager import DatabaseManager
 from oregon_processing.util.logging_manager import LoggingManager, get_logger
+from src.oregon_processing.util.exceptions import ConfigNotFoundError, ConnectionFailedError, UnexpectedResponseError
 
 class ExportProtocol:
 
@@ -48,9 +49,11 @@ class ExportProtocol:
             report_file_dir = self._database_manager.log_dir
             report_file = report_file_dir / f"export_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
             self._logging_manager.transfer_log_file(report_file)
-        except ConnectionError:
+        except ConnectionFailedError:
             raise
-        except NoConfigError:
+        except ConfigNotFoundError:
+            raise
+        except UnexpectedResponseError:
             raise
         except Exception as e:
             if self._logger:

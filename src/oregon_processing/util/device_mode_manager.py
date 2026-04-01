@@ -15,6 +15,11 @@ if TYPE_CHECKING:
 class DeviceModeManager:
     """Manages device operating modes (Standby, Run, Sleep)."""
 
+    MODES = {
+        'standby': {'display': 'Standby', 'command': 'ST'},
+        'run': {'display': 'Run', 'command': 'ON'},
+        'sleep': {'display': 'Sleep', 'command': 'OF'}
+    }
     def __init__(self, communicator: "Communicator", command_manager: "CommandManager"):
         """
         Initialize DeviceModeManager with communicator and command manager.
@@ -68,24 +73,19 @@ class DeviceModeManager:
             True if mode change successful, False otherwise.
         """
 
+        mode_name = mode_name.lower()
 
+        if mode_name not in self.MODES:
+            error_message = f"Invalid mode: {mode_name}. Can only set modes to: Standby, Run, Sleep"
+            self._logger.error(error_message)
+            raise ValueError(error_message)
 
-        # Map mode names to commands
-        mode_commands = {
-            'Standby': 'ST',
-            'Run': 'ON',
-            'Sleep': 'OF'
-        }
-
-        if mode_name not in mode_commands:
-            self._logger.error(f"Invalid mode: {mode_name}. Valid modes are: Standby, Run, Sleep")
-            return False
+        command = self.MODES[mode_name]['command']
 
         if not self._communicator._connection:
-            self._logger.error("Not connected to device.")
-            return False
-
-        command = mode_commands[mode_name]
+            error_message = "Not connected to device. Cannot change mode."
+            self._logger.error(error_message)
+            raise ConnectionError(error_message)
 
         current_mode = self._get_current_mode()
         if current_mode != mode_name:
@@ -108,20 +108,10 @@ class DeviceModeManager:
             self._logger.warning("Startup mode not set. Cannot return to startup mode.")
             return
 
-        # Map startup mode to mode names used by change_mode()
-        mode_map = {
-            'standby': 'Standby',
-            'run': 'Run',
-            'sleep': 'Sleep'
-        }
-
-
-
-        startup_mode_lower = self._startup_mode.lower()
-        target_mode = mode_map.get(startup_mode_lower)
+        target_mode = self._startup_mode.lower()
 
         if target_mode is None:
-            self._logger.warning("WARNING: Unknown start-up mode. Reader has been set to Sleep mode to be safe.")
+            self._logger.warning(f"WARNING: Start-up mode is None. Can not return to startup mode. Setting reader to Sleep mode to be safe.")
             target_mode = 'Sleep'
 
         self.change_mode(target_mode)

@@ -18,6 +18,7 @@ from oregon_processing.util.format_manager import FormatManager
 from oregon_processing.util.data_exporter import DataExporter
 from oregon_processing.util.device_health_checker import DeviceHealthChecker
 from oregon_processing.util.logging_manager import get_logger
+from src.oregon_processing.util.exceptions import ConnectionFailedError, UnexpectedResponseError, UnexpectedResponseError
 
 
 
@@ -55,8 +56,14 @@ class Communicator:
         self._exit_stack = ExitStack()
 
         try:
-            success = self._connect()
-            if success:
+            connector =  Connector()
+            result = connector.connect()
+
+            if result and 'connection' in result and result['connection']:
+                self._connection = result['connection']
+                self._port = result['port']
+                self._baudrate = result['baudrate']
+
                 # Enter all managers via ExitStack (they are context managers)
                 # Register in reverse order so they exit in LIFO order
                 self._command_manager = CommandManager(self)
@@ -70,11 +77,12 @@ class Communicator:
                 self._health_checker = DeviceHealthChecker(self)
 
             else:
-                raise ConnectionError("Failed to connect to Oregon device.")
+                error_message = f"Failed to connect to Oregon device."
+                self._logger.error(error_message)
+                raise ConnectionFailedError(error_message)
 
-        except ConnectionError as e:
-            error_message = f"Connection error: {e}"
-            self._logger.error(error_message)
+        except ConnectionFailedError as e:
+            self._exit_stack.close()
             raise
         except Exception:
             self._logger.exception("Failed to initialize Communicator")
@@ -265,11 +273,15 @@ class Communicator:
 
         # Parse first 3 lines by position (these are always in the same order)
         if len(status_lines) < 3:
-            raise ValueError(f"Expected at least 3 lines in SY response, got {len(status_lines)}")
+            error_message = f"Expected at least 3 lines in SY response, got {len(status_lines)}"
+            self._logger.error(error_message)
+            raise UnexpectedResponseError(error_message)
 
         for line_num, line in enumerate(status_lines):
             if not line.strip():
-                raise ValueError(f"Empty line encountered in SY response at row {line_num + 1}")
+                error_message = f"Empty line encountered in SY response at row {line_num + 1} of SY response."
+                self._logger.error(error_message)
+                raise UnexpectedResponseError(error_message)
 
             line = line.strip()
             line_lower = line.lower()
@@ -278,21 +290,27 @@ class Communicator:
             if line_num == 0:
                 # Line 0: device type
                 if not "oregon rfid" in line_lower:
-                    raise ValueError(f"Unexpected device type line format at row 1: '{line}'")
+                    error_message = f"Unexpected device type line format at row 1 of SY response: '{line}'"
+                    self._logger.error(error_message)
+                    raise UnexpectedResponseError(error_message)
 
                 if 'single antenna' in line_lower:
                     status['device_type'] = 'ORSR'
                 elif 'multiple antenna' in line_lower:
                     status['device_type'] = 'ORMR'
                 else:
-                    raise ValueError(f"Could not determine device type from line 1: '{line}'")
+                    error_message = f"Could not determine device type from line 1 of SY response: '{line}'"
+                    self._logger.error(error_message)
+                    raise UnexpectedResponseError(error_message)
 
 
             # Line 1: version and serial number
             elif line_num == 1:
                 line_splits = line.split()
                 if len(line_splits) != 2:
-                    raise ValueError(f"Unexpected version/serial line format at row 2: '{line}'")
+                    error_message = f"Unexpected version/serial line format at row 2 of SY response: '{line}'"
+                    self._logger.error(error_message)
+                    raise UnexpectedResponseError(error_message)
 
                 version = line_splits[0]
                 version_valid = True
@@ -304,30 +322,44 @@ class Communicator:
                     if len(version) != 5: version_valid = False
                     if version[0].upper() != 'V': version_valid = False
                 else:
-                    raise ValueError(f"Unknown device type '{status['device_type']}' for version/serial parsing.")
+                    error_message = f"Unknown device type '{status['device_type']}' for version/serial parsing."
+                    self._logger.error(error_message)
+                    raise UnexpectedResponseError(error_message)
 
                 if not version_valid:
-                    raise ValueError(f"Unexpected version format in row 2: '{line}'")
+                    error_message = f"Unexpected version format in row 2 of SY response: '{line}'"
+                    self._logger.error(error_message)
+                    raise UnexpectedResponseError(error_message)
 
                 serial_number = line_splits[1].strip()
                 # Validate serial number format: hex digits separated by hyphens (e.g., 0011-000C-0C36-3039-3455-37)
                 if not all(c in '0123456789ABCDEFabcdef-' for c in serial_number):
-                    raise ValueError(f"Unexpected serial number in row 2: '{line}'")
+                    error_message = f"Unexpected serial number in row 2 of SY response: '{line}'"
+                    self._logger.error(error_message)
+                    raise UnexpectedResponseError(error_message)
                 if not serial_number or serial_number.startswith('-') or serial_number.endswith('-'):
-                    raise ValueError(f"Unexpected serial number in row 2: '{line}'")
+                    error_message = f"Unexpected serial number in row 2 of SY response: '{line}'"
+                    self._logger.error(error_message)
+                    raise UnexpectedResponseError(error_message)
 
                 status['version'] = version
                 status['serial_number'] = serial_number
 
             # Line 2: reader name
             elif line_num == 2:
-                # No validation possible here yet
-                # TODO add validfation by restricting to allowed names. Only possible once we have changed all names.
                 status['reader_name'] = line
 
             # Mode line (contains "mode")
             elif 'mode' in line_lower:
-                status['mode'] = line.strip().split(' mode')[0].strip() or None
+                mode = line.strip().split(' mode')[0].strip() or None
+
+                # valdate mode is one of expected values
+                if mode and mode.lower() not in ['standby', 'run', 'sleep']:
+                    error_message = f"Unexpected mode value parsed from SY response: '{mode}' in line: '{line}'"
+                    self._logger.error(error_message)
+                    raise UnexpectedResponseError(error_message)
+
+                status['mode'] = mode
 
             # Supply voltage
             elif 'supply voltage' in line_lower:
@@ -598,19 +630,6 @@ class Communicator:
             True if all exports completed successfully, False if any failed.
         """
         return self._data_exporter.export_detection_records(dates, output_dir, sep)
-
-    def _connect(self):
-        """Attempt to connect to Oregon RFID sensor using the Connector."""
-        with Connector() as connector:
-            result = connector.connect()
-
-        if result:
-            self._connection = result['connection']
-            self._port = result['port']
-            self._baudrate = result['baudrate']
-            return True
-
-        return False
 
     def _post_connect_handshake(self):
         """Send a quick SY command to verify connection and capture prompt signature. Store reader name and FM format"""

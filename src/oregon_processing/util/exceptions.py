@@ -1,3 +1,24 @@
-class NoConfigError(Exception):
+class ConfigNotFoundError(Exception):
     """Raised when configuration file is missing or cannot be loaded."""
     pass
+
+class InvalidConfigError(Exception):
+    """Raised when configuration file is invalid or cannot be parsed."""
+    pass
+
+class ConnectionFailedError(Exception):
+    """Raised when a connection to a required service fails."""
+    pass
+
+class UnexpectedResponseError(Exception):
+    """Raised when an unexpected response is received from a service."""
+    pass
+
+class CommandTransmissionError(Exception):
+    """Raised when a command fails to be transmitted to a PIT reader."""
+    pass
+
+class UserAbortError(Exception):
+    """Raised when the user aborts an operation."""
+    pass
+

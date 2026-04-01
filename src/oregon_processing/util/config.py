@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 from abc import ABC
 
-from oregon_processing.util.exceptions import NoConfigError
+from oregon_processing.util.exceptions import ConfigNotFoundError, InvalidConfigError
 
 class Config(ABC):
 
@@ -63,7 +63,8 @@ class Config(ABC):
                 path = cls._prompt_directory(prompt, default)
                 value = str(path)
             else:
-                raise TypeError(f"Unsupported config attribute type: {typ} for {key}")
+                raise InvalidConfigError(f"Unsupported config attribute type: {typ} for {key}")
+
             payload[key] = value
 
         errors = cls._validate_payload(payload)
@@ -148,7 +149,7 @@ class Config(ABC):
 
     def _load_and_validate(self) -> None:
         if not self._config_file_path.exists():
-            raise NoConfigError(
+            raise ConfigNotFoundError(
                 f"No config file found at '{self._config_file_path}'.\n"
                 f"Run {self.__class__.__name__}.create_or_overwrite_config() to create a config file before continuing. \n"
                 f"You can also use designated config creation scripts in the bin directory."
@@ -160,7 +161,7 @@ class Config(ABC):
         errors = self._validate_payload(payload)
 
         if errors:
-            raise ValueError("; ".join(errors))
+            raise InvalidConfigError("; ".join(errors))
         for key, attr_info in self.ATTR_MAP.items():
             value = payload[key]
             typ = attr_info['type']
@@ -182,12 +183,12 @@ class Config(ABC):
         elif isinstance(value, str):
             normalized = value.strip()
             if normalized == "":
-                raise ValueError(f"Invalid config: '{field_name}' must be a directory path.")
+                raise InvalidConfigError(f"Invalid config: '{field_name}' must be a directory path.")
             path = Path(normalized)
         else:
-            raise ValueError(f"Invalid config: '{field_name}' must be a directory path.")
+            raise InvalidConfigError(f"Invalid config: '{field_name}' must be a directory path.")
         if not path.exists() or not path.is_dir():
-            raise ValueError(f"Invalid config: '{field_name}' directory does not exist: {path}")
+            raise InvalidConfigError(f"Invalid config: '{field_name}' directory does not exist: {path}")
         return path
 
     @staticmethod
@@ -195,43 +196,43 @@ class Config(ABC):
         if isinstance(value, str):
             return value
         if value is None:
-            raise ValueError(f"Invalid config: '{field_name}' must be a string.")
+            raise InvalidConfigError(f"Invalid config: '{field_name}' must be a string.")
         return str(value)
 
     @staticmethod
     def _to_float(field_name: str, value: Any) -> float:
         if isinstance(value, bool) or value is None:
-            raise ValueError(f"Invalid config: '{field_name}' must be a float.")
+            raise InvalidConfigError(f"Invalid config: '{field_name}' must be a float.")
         if isinstance(value, (int, float)):
             return float(value)
         if isinstance(value, str):
             normalized = value.strip().replace(" ", "").replace(",", ".")
             if normalized == "":
-                raise ValueError(f"Invalid config: '{field_name}' must be a float.")
+                raise InvalidConfigError(f"Invalid config: '{field_name}' must be a float.")
             return float(normalized)
-        raise ValueError(f"Invalid config: '{field_name}' must be a float.")
+        raise InvalidConfigError(f"Invalid config: '{field_name}' must be a float.")
 
     @staticmethod
     def _to_int(field_name: str, value: Any) -> int:
         if isinstance(value, bool) or value is None:
-            raise ValueError(f"Invalid config: '{field_name}' must be an int.")
+            raise InvalidConfigError(f"Invalid config: '{field_name}' must be an int.")
         if isinstance(value, int):
             return value
         if isinstance(value, float):
             if value.is_integer():
                 return int(value)
-            raise ValueError(f"Invalid config: '{field_name}' must be an int.")
+            raise InvalidConfigError(f"Invalid config: '{field_name}' must be an int.")
         if isinstance(value, str):
             normalized = value.strip().replace(" ", "")
             if normalized == "":
-                raise ValueError(f"Invalid config: '{field_name}' must be an int.")
+                raise InvalidConfigError(f"Invalid config: '{field_name}' must be an int.")
             if "." in normalized or "," in normalized:
                 as_float = float(normalized.replace(",", "."))
                 if not as_float.is_integer():
-                    raise ValueError(f"Invalid config: '{field_name}' must be an int.")
+                    raise InvalidConfigError(f"Invalid config: '{field_name}' must be an int.")
                 return int(as_float)
             return int(normalized)
-        raise ValueError(f"Invalid config: '{field_name}' must be an int.")
+        raise InvalidConfigError(f"Invalid config: '{field_name}' must be an int.")
 
     @staticmethod
     def _prompt_yes_no(prompt: str) -> bool:
@@ -256,7 +257,7 @@ class Config(ABC):
                 continue
             try:
                 return cls._to_path(prompt, selected)
-            except ValueError:
+            except InvalidConfigError:
                 print(f"Invalid input: '{selected}' is not a valid directory path. Please enter a valid directory path.")
 
     @classmethod
@@ -271,7 +272,7 @@ class Config(ABC):
                 continue
             try:
                 return cls._to_string(prompt, selected)
-            except ValueError:
+            except InvalidConfigError:
                 print(f"Invalid input: '{selected}' is not a valid string. Please enter a valid string value.")
 
     @classmethod
@@ -286,7 +287,7 @@ class Config(ABC):
                 continue
             try:
                 return cls._to_float(prompt, selected)
-            except ValueError:
+            except InvalidConfigError:
                 print(f"Invalid input: '{selected}' is not a valid number. Please enter a valid float value.")
 
     @classmethod
@@ -301,7 +302,7 @@ class Config(ABC):
                 continue
             try:
                 return cls._to_int(prompt, selected)
-            except ValueError:
+            except InvalidConfigError:
                 print(f"Invalid input: '{selected}' is not a valid integer. Please enter a valid integer value.")
 
 

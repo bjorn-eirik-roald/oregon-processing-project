@@ -12,14 +12,6 @@ class Connector:
     def __init__(self):
         self._logger = get_logger(__name__)
 
-    def __enter__(self):
-        """Enter context manager."""
-        return self
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        """Exit context manager."""
-        pass
-
     def connect(self):
         """
         Attempt to connect to Oregon RFID sensor with circular retry options.
