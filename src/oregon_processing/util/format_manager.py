@@ -139,7 +139,9 @@ class FormatManager:
 
 
         if not self._communicator.is_connected:
-            raise ConnectionError("Not connected to device.")
+            error_message = f"Not connected to device. Cannot fetch detection record format."
+            self._logger.error(error_message)
+            raise ConnectionError(error_message)
 
         old_mode = None
         mode = self._communicator.get_mode()
@@ -153,7 +155,9 @@ class FormatManager:
             self._communicator.change_mode(old_mode)
 
         if len(response_lines) != 1:
-            raise UnexpectedResponseError(f"Unexpected number of lines in FM response: {len(response_lines)}")
+            error_message = f"Unexpected number of lines in FM response: {len(response_lines)}. Response: {response_lines}"
+            self._logger.error(error_message)
+            raise UnexpectedResponseError(error_message)
 
         columns_raw = response_lines[0].strip()
         tokens = columns_raw.split()

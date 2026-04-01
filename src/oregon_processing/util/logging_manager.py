@@ -231,8 +231,8 @@ class LoggingManager:
             self._logger = get_logger(__name__)
             self._logger.debug("LoggingManager initialized with console_level=%s, file_level=%s, report_file=%s", self._console_level, self._file_level, self._report_file)
         except Exception as e:
-            self.__exit__(*sys.exc_info())
-            raise RuntimeError(f"Failed to set up logging handlers: {e}") from e
+            self.__exit__(type(e), e, e.__traceback__)
+            raise RuntimeError(f"Failed to set up logging handlers: {e}")
 
         return self
 
@@ -252,7 +252,9 @@ class LoggingManager:
     def report_file(self) -> Path:
         """Get the current report file path. Raises if file logging is not enabled."""
         if not self._write_to_report_file:
-            raise RuntimeError("File logging is not enabled, no report file available.")
+            error_message = f"File logging is not enabled, no report file available."
+            self._logger.error(error_message)
+            raise RuntimeError(error_message)
 
         return self._report_file
 
@@ -262,9 +264,14 @@ class LoggingManager:
         If the new_report_file already exists, it will be overwritten.
         """
         if not self._write_to_report_file:
-            raise RuntimeError("File logging is not enabled, cannot transfer log file.")
+            error_message = f"File logging is not enabled, cannot transfer log file."
+            self._logger.error(error_message)
+            raise RuntimeError(error_message)
+
         if self._report_file is None:
-            raise RuntimeError("Current report file path is not set, cannot transfer log file.")
+            error_message = f"Current report file path is not set, cannot transfer log file."
+            self._logger.error(error_message)
+            raise RuntimeError(error_message)
 
         if self._file_handler:
             self._file_handler.flush()
@@ -285,7 +292,9 @@ class LoggingManager:
             self._logger.debug(f"Log file transferred to {new_report_file}", extra={"_skip_path_alias_filter": True})
 
         except Exception as e:
-            raise RuntimeError(f"Failed to transfer log file to {new_report_file}: {e}") from e
+            error_message = f"Failed to transfer log file to {new_report_file}: {e}"
+            self._logger.error(error_message)
+            raise RuntimeError(error_message) from e
 
     def _setup_handlers(self) -> None:
         """
@@ -304,6 +313,7 @@ class LoggingManager:
         if self._write_to_report_file:
             if self._report_file is None:
                 error_message = "Report_file must be provided when write_to_report_file is True."
+                self._logger.error(error_message)
                 raise ValueError(error_message)
 
             self._report_file.parent.mkdir(parents=True, exist_ok=True)
@@ -317,6 +327,10 @@ class LoggingManager:
         """
         Remove and close all handlers and clear filters from the root logger.
         """
+
+        if not self._root_logger:
+            return
+
         for handler in list(self._root_logger.handlers):
             handler.flush()
             handler.close()

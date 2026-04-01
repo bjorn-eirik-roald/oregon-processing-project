@@ -44,42 +44,54 @@ class DatabaseManager:
     def data_dir(self) -> Path:
         """Get the root data directory path."""
         if self._data_dir is None:
-            raise RuntimeError("Directories not prepared yet.")
+            error_message = f"Data directory not prepared yet. Call prepare_directories() first."
+            self._logger.error(error_message)
+            raise RuntimeError(error_message)
         return self._data_dir
 
     @property
     def log_dir(self) -> Path:
         """Get the export logs directory path (for specific serial number)."""
         if self._log_dir is None:
-            raise RuntimeError("Directories not prepared yet.")
+            error_message = "Directories not prepared yet."
+            self._logger.error(error_message)
+            raise RuntimeError(error_message)
         return self._log_dir
 
     @property
     def crash_logs_dir(self) -> Path:
         """Get the crash logs directory path (for undefined/pre-connection crashes)."""
         if self._crash_log_dir is None:
-            raise RuntimeError("Directories not prepared yet.")
+            error_message = "Directories not prepared yet."
+            self._logger.error(error_message)
+            raise RuntimeError(error_message)
         return self._crash_log_dir
 
     @property
     def export_data_dir(self) -> Path:
         """Get the export data directory path."""
         if self._export_data_dir is None:
-            raise RuntimeError("Directories not prepared yet.")
+            error_message = "Directories not prepared yet."
+            self._logger.error(error_message)
+            raise RuntimeError(error_message)
         return self._export_data_dir
 
     @property
     def detection_records_dir(self) -> Path:
         """Get the detection records directory path."""
         if self._detection_records_dir is None:
-            raise RuntimeError("Directories not prepared yet.")
+            error_message = "Directories not prepared yet."
+            self._logger.error(error_message)
+            raise RuntimeError(error_message)
         return self._detection_records_dir
 
     @property
     def event_records_dir(self) -> Path:
         """Get the event records directory path."""
         if self._event_records_dir is None:
-            raise RuntimeError("Directories not prepared yet.")
+            error_message = "Directories not prepared yet."
+            self._logger.error(error_message)
+            raise RuntimeError(error_message)
         return self._event_records_dir
 
     @property
@@ -94,7 +106,6 @@ class DatabaseManager:
 
     def prepare_directories(self) -> None:
         """Prepare and create necessary directories for export."""
-
 
         self._logger.debug("Preparing output directories.")
 
@@ -147,7 +158,9 @@ class DatabaseManager:
         """
 
         if self._detection_records_dir is None or self._event_records_dir is None:
-            raise RuntimeError("Directories not prepared yet.")
+            error_message = f"Directories not prepared yet. Call prepare_directories() first."
+            self._logger.error(error_message)
+            raise RuntimeError(error_message)
 
         self._logger.debug("Scanning for existing detection record files...")
         record_files = list(self._detection_records_dir.glob("*.txt"))

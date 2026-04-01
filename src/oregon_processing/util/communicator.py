@@ -128,12 +128,12 @@ class Communicator:
 
     @property
     def prompt_signature(self):
-        if self._command_manager:
-            return self._command_manager.prompt_signature
+        if not self._command_manager:
+            error_message = "Command manager not initialized; cannot retrieve prompt signature."
+            self._logger.error(error_message)
+            raise RuntimeError(error_message)
 
-        self._logger.warning("Command manager not initialized; cannot retrieve prompt signature.")
-
-        return None
+        return self._command_manager.prompt_signature
 
     def get_mode(self):
         """Get the current operating mode from the system status."""
@@ -141,9 +141,9 @@ class Communicator:
             self._mode =  self._mode_manager._get_current_mode()
             return self._mode
 
-        self._logger.warning("Mode manager not initialized; cannot retrieve current mode.")
-
-        return None
+        error_message = "Mode manager not initialized; cannot retrieve current mode."
+        self._logger.error(error_message)
+        raise RuntimeError(error_message)
 
     def change_mode(self, mode_name: str) -> bool:
         """
@@ -164,8 +164,9 @@ class Communicator:
 
 
         if not self._mode_manager:
-            self._logger.error("Mode manager not initialized.")
-            return False
+            error_message = "Mode manager not initialized. Cannot change mode."
+            self._logger.error(error_message)
+            raise RuntimeError(error_message)
         return self._mode_manager.change_mode(mode_name)
 
     def check_device_health(self):
@@ -181,8 +182,9 @@ class Communicator:
 
 
         if not self._health_checker:
-            self._logger.error("Health checker not initialized.")
-            return {'healthy': False, 'warnings': ['Health checker not initialized']}
+            error_message = "Health checker not initialized. Cannot check device health."
+            self._logger.error(error_message)
+            raise RuntimeError(error_message)
         return self._health_checker.check_device_health()
 
     def update_firmware(self, firmware_file_path: Path, new_version: str) -> bool:
@@ -208,12 +210,14 @@ class Communicator:
             try:
                 firmware_file_path = Path(firmware_file_path)
             except Exception as e:
-                self._logger.error(f"Error converting firmware path string to Path object: {e}")
-                return False
+                error_message = f"Firmware file path must be a valid string or Path object. Error converting '{firmware_file_path}' to Path: {e}"
+                self._logger.error(error_message)
+                raise ValueError(error_message)
 
         if not self._connection:
-            self._logger.error("Not connected to device.")
-            return False
+            error_message = "Not connected to device. Cannot update firmware."
+            self._logger.error(error_message)
+            raise ConnectionError(error_message)
 
         updater = FirmwareUpdater(self, self._command_manager)
         return updater.update(firmware_file_path, new_version)
@@ -228,8 +232,9 @@ class Communicator:
 
 
         if not self._connection:
-            self._logger.error("Not connected to device.")
-            return
+            error_message = "Not connected to device. Cannot start interactive terminal."
+            self._logger.error(error_message)
+            raise ConnectionError(error_message)
 
         terminal = InteractiveTerminal(self, self._command_manager)
         terminal.run()
@@ -698,8 +703,9 @@ class Communicator:
 
 
         if not self._connection:
-            self._logger.error("Not connected to device.")
-            return False
+            error_message = "Not connected to device. Cannot retrieve serial number."
+            self._logger.error(error_message)
+            raise ConnectionError(error_message)
 
         try:
             parsed_status = self.get_system_status()
@@ -707,8 +713,9 @@ class Communicator:
             return True
 
         except Exception as e:
-            self._logger.error(f"Error retrieving serial number: {e}")
-            return False
+            error_message = f"Error retrieving serial number: {e}"
+            self._logger.error(error_message)
+            raise RuntimeError(error_message)
 
     def _update_device_type(self) -> str:
         """
@@ -723,8 +730,9 @@ class Communicator:
 
 
         if not self._connection:
-            self._logger.error("Not connected to device.")
-            return False
+            error_message = f"Not connected to device. Cannot retrieve device type."
+            self._logger.error(error_message)
+            raise ConnectionError(error_message)
 
         try:
             parsed_status = self.get_system_status()
@@ -732,8 +740,8 @@ class Communicator:
             return True
 
         except Exception as e:
-            self._logger.error(f"Error retrieving device type: {e}")
-            return False
-
+            error_message = f"Error retrieving device type: {e}"
+            self._logger.error(error_message)
+            raise RuntimeError(error_message)
 
 

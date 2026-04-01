@@ -1,7 +1,7 @@
 import re
 from datetime import date
 
-def extract_filename_date(filename: str):
+def extract_filename_date(filename: str, logger=None) -> date:
     """
     Extract date from filename in format: *_YYYY_MM_DD.ext
 
@@ -27,6 +27,12 @@ def extract_filename_date(filename: str):
         try:
             return date(year, month, day)
         except ValueError:
-            raise ValueError(f"Date components extracted from filename are not valid: {year}-{month}-{day}")
+            error_message = f"Date components extracted from filename are not valid: {year}-{month}-{day}"
+            if logger:
+                logger.error(error_message)
+            raise ValueError(error_message)
     else:
-        raise ValueError(f"Filename does not contain a valid date in the expected format: {filename}")
+        error_message = f"Filename does not contain a valid date in the expected format: {filename}"
+        if logger:
+            logger.error(error_message)
+        raise ValueError(error_message)

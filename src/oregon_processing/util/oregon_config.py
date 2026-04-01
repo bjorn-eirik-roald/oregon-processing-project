@@ -25,6 +25,10 @@ class OregonConfig(Config):
     @property
     def user(self) -> str:
         """Get the username from the config."""
+        if self._user is None:
+            error_message = f"Configuration has not been loaded, user is not available."
+            raise RuntimeError(error_message)
+
         return self._user
 
     @property
@@ -34,7 +38,8 @@ class OregonConfig(Config):
         Raises if not loaded.
         """
         if self._root_output_dir is None:
-            raise RuntimeError("Configuration has not been loaded.")
+            error_message = f"Configuration has not been loaded, root output directory is not available."
+            raise RuntimeError(error_message)
         return self._root_output_dir
 
     @property
