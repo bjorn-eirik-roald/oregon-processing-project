@@ -99,6 +99,11 @@ class DeviceModeManager:
 
         return True
 
+    @classmethod
+    def is_valid_mode(cls, mode_name: str) -> bool:
+        """Check if the provided mode name is valid."""
+        return mode_name.lower() in cls.MODES
+
     def _return_to_startup_mode(self) -> None:
         """Return the Oregon RFID device to its start-up mode."""
         if not self._communicator._connection:

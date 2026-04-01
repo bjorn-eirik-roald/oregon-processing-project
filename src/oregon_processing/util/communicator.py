@@ -354,7 +354,7 @@ class Communicator:
                 mode = line.strip().split(' mode')[0].strip() or None
 
                 # valdate mode is one of expected values
-                if mode and mode.lower() not in ['standby', 'run', 'sleep']:
+                if not DeviceModeManager.is_valid_mode(mode):
                     error_message = f"Unexpected mode value parsed from SY response: '{mode}' in line: '{line}'"
                     self._logger.error(error_message)
                     raise UnexpectedResponseError(error_message)
