@@ -67,7 +67,12 @@ class FormatManager:
     def __enter__(self):
         """Enter context manager."""
 
-        self._startup_format = self._fetch_detection_record_format()
+        try:
+            self._startup_format = self._fetch_detection_record_format()
+        except Exception as e:
+            error_message = "Failed to fetch detection record format on context enter."
+            self._logger.exception(error_message)
+            raise
 
         return self
 

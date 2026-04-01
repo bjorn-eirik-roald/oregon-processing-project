@@ -84,7 +84,7 @@ class Communicator:
         except ConnectionFailedError as e:
             self._exit_stack.close()
             raise
-        except Exception:
+        except Exception as e:
             self._logger.exception("Failed to initialize Communicator")
             self._exit_stack.close()
             raise

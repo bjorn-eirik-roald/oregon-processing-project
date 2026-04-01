@@ -49,11 +49,14 @@ class ExportProtocol:
             report_file_dir = self._database_manager.log_dir
             report_file = report_file_dir / f"export_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
             self._logging_manager.transfer_log_file(report_file)
-        except ConnectionFailedError:
+        except ConnectionFailedError as e:
+            self._exit_stack.close()
             raise
-        except ConfigNotFoundError:
+        except ConfigNotFoundError as e:
+            self._exit_stack.close()
             raise
-        except UnexpectedResponseError:
+        except UnexpectedResponseError as e:
+            self._exit_stack.close()
             raise
         except Exception as e:
             if self._logger:
@@ -61,8 +64,7 @@ class ExportProtocol:
             else:
                 print(f"Failed to initialize export protocol: {e}")
 
-            if self._exit_stack:
-                self._exit_stack.close()
+            self._exit_stack.close()
             raise
 
         return self

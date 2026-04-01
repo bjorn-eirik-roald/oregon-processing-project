@@ -39,8 +39,13 @@ class DeviceModeManager:
     def __enter__(self):
         """Enter context manager."""
 
-        self._startup_mode = self._get_current_mode()
-        self._logger.debug(f"Device startup mode: {self._startup_mode}")
+        try:
+            self._startup_mode = self._get_current_mode()
+            self._logger.debug(f"Device startup mode: {self._startup_mode}")
+        except Exception as e:
+            error_message = "Failed to get current device mode on context enter."
+            self._logger.exception(error_message)
+            raise
 
         return self
 

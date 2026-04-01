@@ -231,7 +231,8 @@ class LoggingManager:
             self._logger = get_logger(__name__)
             self._logger.debug("LoggingManager initialized with console_level=%s, file_level=%s, report_file=%s", self._console_level, self._file_level, self._report_file)
         except Exception as e:
-            self.__exit__(type(e), e, e.__traceback__)
+            self._write_summary()
+            self._teardown_handlers()
             raise RuntimeError(f"Failed to set up logging handlers: {e}")
 
         return self

@@ -32,14 +32,6 @@ class InteractiveTerminal:
         self._command_manager = command_manager
         self._logger = get_logger(__name__)
 
-    def __enter__(self):
-        """Enter context manager."""
-        return self
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        """Exit context manager."""
-        pass
-
     def run(self):
         """
         Start the interactive terminal session.
