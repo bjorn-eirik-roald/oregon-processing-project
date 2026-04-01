@@ -4,6 +4,16 @@ import serial.tools.list_ports
 from oregon_processing.util.logging_manager import get_logger
 
 
+class ConnectionResult:
+    """Class to encapsulate the result of a connection attempt."""
+
+    def __init__(self, success, connection=None, port=None, baudrate=None, error_message=None):
+        self.success = success
+        self.connection = connection
+        self.port = port
+        self.baudrate = baudrate
+        self.error_message = error_message
+
 class Connector:
     """Class to handle connection establishment with Oregon RFID devices."""
 
@@ -12,14 +22,14 @@ class Connector:
     def __init__(self):
         self._logger = get_logger(__name__)
 
-    def connect(self):
+    def connect(self) -> ConnectionResult:
         """
         Attempt to connect to Oregon RFID sensor with circular retry options.
 
         Returns
         -------
-        dict or None
-            Dictionary with 'connection', 'port', and 'baudrate' keys if successful, None otherwise.
+        ConnectionResult
+            ConnectionResult object with success status, connection, port, and baudrate if successful, error_message otherwise.
         """
 
 
@@ -34,13 +44,13 @@ class Connector:
                 # Ask user to select baud rate
                 bauds = self._select_baud_rate()
                 if not bauds:
-                    return None
+                    return ConnectionResult(success=False, error_message="User cancelled baud rate selection.")
 
                 # Ask user to select port(s)
                 selected_ports = self._select_ports()
 
                 if not selected_ports:
-                    return None
+                    return ConnectionResult(success=False, error_message="User cancelled port selection.")
             else:
                 # First attampt: Try defauilt baud rate and look for Prolific ports
                 self._logger.debug("First connection attempt: trying default baud rate and searching for Prolific ports.")
@@ -64,7 +74,7 @@ class Connector:
 
             if retry not in ['y', 'yes']:
                 self._logger.debug("User has chosen not to retry connection. Exiting connection process.")
-                return None
+                return ConnectionResult(success=False, error_message="User chose not to retry connection.")
             else:
                 self._logger.debug("User has chosen to retry connection.")
 
@@ -220,7 +230,7 @@ class Connector:
                     break
 
 
-    def _attempt_connection(self, ports, bauds):
+    def _attempt_connection(self, ports, bauds) -> ConnectionResult:
         """Helper method to attempt connection on a list of ports with specified baud rates."""
 
 
@@ -242,20 +252,20 @@ class Connector:
 
                     if response:
                         self._logger.info(f"Successfully connected to {port} at {baud} baud.")
-                        return {'connection': ser, 'port': port, 'baudrate': baud}
-
-                    ser.close()
-                    self._logger.info("No response when attempting connection.")
+                        result = ConnectionResult(success=True, connection=ser, port=port, baudrate=baud)
+                        return result
+                    else:
+                        ser.close()
+                        self._logger.info("No response when attempting connection.")
                 except Exception as e:
 
                     if ser and ser.is_open:
                         ser.close()
 
-                    # Convert exception to single-line string
-                    error_msg = str(e).replace('\n', ' ')
-                    self._logger.error(f"Error: {error_msg}")
+                    error_message = f"Error when connecting to {port} at {baud} baud: {e}"
+                    self._logger.error(error_message)
 
-        return None
+        return ConnectionResult(success=False, error_message="Failed to connect on all attempted ports and baud rates.")
 
     def _get_all_ports(self):
         """

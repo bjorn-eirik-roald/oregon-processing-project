@@ -8,7 +8,7 @@ from contextlib import ExitStack
 from datetime import datetime
 from pathlib import Path
 
-from oregon_processing.util.connector import Connector
+from oregon_processing.util.connector import ConnectionResult, Connector
 from oregon_processing.util.command_manager import CommandManager
 from oregon_processing.util.clock_manager import ClockManager
 from oregon_processing.util.device_mode_manager import DeviceModeManager
@@ -19,6 +19,7 @@ from oregon_processing.util.data_exporter import DataExporter
 from oregon_processing.util.device_health_checker import DeviceHealthChecker
 from oregon_processing.util.logging_manager import get_logger
 from src.oregon_processing.util.exceptions import ConnectionFailedError, UnexpectedResponseError, UnexpectedResponseError
+from src.oregon_processing.util.system_status import SystemStatusChecker, SystemStatus
 
 
 
@@ -26,15 +27,14 @@ class Communicator:
     """Class to communicate with Oregon device via serial port."""
 
     def __init__(self):
-        self._connector = Connector()
+
         self._connection = None
-        self._port = None
-        self._baudrate = None
 
         self._exit_stack = None
 
         self._command_manager: CommandManager = None
         self._mode_manager: DeviceModeManager = None
+        self._system_status_checker: SystemStatusChecker = None
         self._clock_manager: ClockManager = None
         self._format_manager: FormatManager = None
         self._data_exporter: DataExporter = None
@@ -44,28 +44,23 @@ class Communicator:
         self._reader_name = None
         self._serial_number = None
         self._device_type = None
-        self._detection_record_format = None
         self._mode = None
 
         self._logger = get_logger(__name__)
 
     def __enter__(self):
-        """Allow use in 'with' statement."""
-
 
         self._exit_stack = ExitStack()
 
+        connection_result = None
         try:
-            connector =  Connector()
-            result = connector.connect()
+            connector = Connector()
+            connection_result: ConnectionResult = connector.connect()
 
-            if result and 'connection' in result and result['connection']:
-                self._connection = result['connection']
-                self._port = result['port']
-                self._baudrate = result['baudrate']
+            if connection_result and connection_result.success:
+                self._connection = connection_result.connection
 
-                # Enter all managers via ExitStack (they are context managers)
-                # Register in reverse order so they exit in LIFO order
+                # Command manager needed already in post-connect handshake
                 self._command_manager = CommandManager(self)
 
                 self._post_connect_handshake()
@@ -75,6 +70,7 @@ class Communicator:
                 self._data_exporter = DataExporter(self, self._format_manager, self._command_manager)
                 self._clock_manager = ClockManager(self, self._command_manager)
                 self._health_checker = DeviceHealthChecker(self)
+                self._system_status_checker = SystemStatusChecker(self._command_manager)
 
             else:
                 error_message = f"Failed to connect to Oregon device."
@@ -187,41 +183,6 @@ class Communicator:
             raise RuntimeError(error_message)
         return self._health_checker.check_device_health()
 
-    def update_firmware(self, firmware_file_path: Path, new_version: str) -> bool:
-        """
-        Update the firmware on the Oregon RFID reader.
-
-        Parameters
-        ----------
-        firmware_file_path : str or Path
-            Path to the firmware update file
-        new_version : str
-            Version string of the new firmware (e.g., "V2.2A")
-
-        Returns
-        -------
-        bool
-            True if update completed successfully, False otherwise.
-        """
-
-
-
-        if isinstance(firmware_file_path, str):
-            try:
-                firmware_file_path = Path(firmware_file_path)
-            except Exception as e:
-                error_message = f"Firmware file path must be a valid string or Path object. Error converting '{firmware_file_path}' to Path: {e}"
-                self._logger.error(error_message)
-                raise ValueError(error_message)
-
-        if not self._connection:
-            error_message = "Not connected to device. Cannot update firmware."
-            self._logger.error(error_message)
-            raise ConnectionError(error_message)
-
-        updater = FirmwareUpdater(self, self._command_manager)
-        return updater.update(firmware_file_path, new_version)
-
     def start_interactive_terminal(self):
         """
         Start an interactive terminal session for sending commands to the device.
@@ -236,202 +197,21 @@ class Communicator:
             self._logger.error(error_message)
             raise ConnectionError(error_message)
 
-        terminal = InteractiveTerminal(self, self._command_manager)
+        terminal = InteractiveTerminal(self._command_manager)
         terminal.run()
 
         self._logger.info("Interactive terminal session ended.")
         self._logger.info("As a safety measure, reconnecting to device to refresh state.")
         self._post_connect_handshake()
 
-    def get_system_status(self):
-        """
-        Parse system status output into a structured dictionary.
+    def get_system_status(self) -> SystemStatus:
 
-        The SY output has a fixed structure for the first 3 lines (device type, version/serial, reader name),
-        but subsequent lines may vary by firmware version. This parser uses position for the first 3 lines
-        and keyword matching for the remaining fields.
-        """
-
-        status_lines = self._command_manager.send_command("SY")
-
-        status = {
-            'device_type': None,
-            'version': None,
-            'serial_number': None,
-            'reader_name': None,
-            'mode': None,
-            'supply_voltage': None,
-            'standby_amps': None,
-            'noise': None,
-            'antenna_1': None,
-            'antenna_2': None,
-            'antenna_3': None,
-            'antenna_4': None,
-            'shutdown_supercap': None,
-            'sleep_battery': None,
-            'tags_in_archive': None,
-            'bluetooth_status': None,
-            'gnss_log_interval_minutes': False,
-            'raw_output': status_lines,
-            'warnings': []
-        }
-
-        # Parse first 3 lines by position (these are always in the same order)
-        if len(status_lines) < 3:
-            error_message = f"Expected at least 3 lines in SY response, got {len(status_lines)}"
+        if not self._system_status_checker:
+            error_message = "System status checker not initialized. Cannot get system status."
             self._logger.error(error_message)
-            raise UnexpectedResponseError(error_message)
+            raise RuntimeError(error_message)
 
-        for line_num, line in enumerate(status_lines):
-            if not line.strip():
-                error_message = f"Empty line encountered in SY response at row {line_num + 1} of SY response."
-                self._logger.error(error_message)
-                raise UnexpectedResponseError(error_message)
-
-            line = line.strip()
-            line_lower = line.lower()
-
-            # Line 0: device type
-            if line_num == 0:
-                # Line 0: device type
-                if not "oregon rfid" in line_lower:
-                    error_message = f"Unexpected device type line format at row 1 of SY response: '{line}'"
-                    self._logger.error(error_message)
-                    raise UnexpectedResponseError(error_message)
-
-                if 'single antenna' in line_lower:
-                    status['device_type'] = 'ORSR'
-                elif 'multiple antenna' in line_lower:
-                    status['device_type'] = 'ORMR'
-                else:
-                    error_message = f"Could not determine device type from line 1 of SY response: '{line}'"
-                    self._logger.error(error_message)
-                    raise UnexpectedResponseError(error_message)
-
-
-            # Line 1: version and serial number
-            elif line_num == 1:
-                line_splits = line.split()
-                if len(line_splits) != 2:
-                    error_message = f"Unexpected version/serial line format at row 2 of SY response: '{line}'"
-                    self._logger.error(error_message)
-                    raise UnexpectedResponseError(error_message)
-
-                version = line_splits[0]
-                version_valid = True
-                if status['device_type']=='ORSR':
-                    if len(version) != 6: version_valid = False
-                    if version[0].upper() != 'V': version_valid = False
-                    if version[-1].upper() not in ['M', 'N', 'F']: version_valid = False
-                elif status['device_type']  == 'ORMR':
-                    if len(version) != 5: version_valid = False
-                    if version[0].upper() != 'V': version_valid = False
-                else:
-                    error_message = f"Unknown device type '{status['device_type']}' for version/serial parsing."
-                    self._logger.error(error_message)
-                    raise UnexpectedResponseError(error_message)
-
-                if not version_valid:
-                    error_message = f"Unexpected version format in row 2 of SY response: '{line}'"
-                    self._logger.error(error_message)
-                    raise UnexpectedResponseError(error_message)
-
-                serial_number = line_splits[1].strip()
-                # Validate serial number format: hex digits separated by hyphens (e.g., 0011-000C-0C36-3039-3455-37)
-                if not all(c in '0123456789ABCDEFabcdef-' for c in serial_number):
-                    error_message = f"Unexpected serial number in row 2 of SY response: '{line}'"
-                    self._logger.error(error_message)
-                    raise UnexpectedResponseError(error_message)
-                if not serial_number or serial_number.startswith('-') or serial_number.endswith('-'):
-                    error_message = f"Unexpected serial number in row 2 of SY response: '{line}'"
-                    self._logger.error(error_message)
-                    raise UnexpectedResponseError(error_message)
-
-                status['version'] = version
-                status['serial_number'] = serial_number
-
-            # Line 2: reader name
-            elif line_num == 2:
-                status['reader_name'] = line
-
-            # Mode line (contains "mode")
-            elif 'mode' in line_lower:
-                mode = line.strip().split(' mode')[0].strip() or None
-
-                # valdate mode is one of expected values
-                if not DeviceModeManager.is_valid_mode(mode):
-                    error_message = f"Unexpected mode value parsed from SY response: '{mode}' in line: '{line}'"
-                    self._logger.error(error_message)
-                    raise UnexpectedResponseError(error_message)
-
-                status['mode'] = mode
-
-            # Supply voltage
-            elif 'supply voltage' in line_lower:
-                parts = line.split()
-                status['supply_voltage'] = parts[-1] if parts else None
-
-            # Standby/Sleep amps (could be "standby amps" or "sleep amps")
-            elif ('standby amps' in line_lower or 'sleep amps' in line_lower) and 'amps' in line_lower:
-                parts = line.split()
-                status['standby_amps'] = parts[-1] if parts else None
-
-            # Noise
-            elif line_lower.startswith('noise'):
-                parts = line.split()
-                status['noise'] = parts[-1] if parts else None
-
-            # Antenna readings (Antenna #1, #2, #3, #4)
-            elif 'antenna' in line_lower and '#' in line:
-                parts = line.split()
-                try:
-                    antenna_num = line.split('#')[1].strip().split()[0]
-                    antenna_value = parts[-1]
-                    if antenna_num == '1':
-                        status['antenna_1'] = antenna_value
-                    elif antenna_num == '2':
-                        status['antenna_2'] = antenna_value
-                    elif antenna_num == '3':
-                        status['antenna_3'] = antenna_value
-                    elif antenna_num == '4':
-                        status['antenna_4'] = antenna_value
-                except (IndexError, ValueError):
-                    pass
-
-            # Shutdown supercap/supply
-            elif 'shutdown' in line_lower and ('supercap' in line_lower or 'supply' in line_lower):
-                parts = line.split()
-                status['shutdown_supercap'] = parts[-1] if parts else None
-
-            # Sleep battery
-            elif 'sleep battery' in line_lower or (line_lower.startswith('battery') and 'sleep' not in line_lower):
-                parts = line.split()
-                status['sleep_battery'] = parts[-1] if parts else None
-
-            # Tags in archive
-            elif 'tags in archive' in line_lower:
-                parts = line.split()
-                status['tags_in_archive'] = parts[-1] if parts else None
-
-            # Bluetooth status
-            elif 'bluetooth' in line_lower:
-                status['bluetooth_status'] = line.strip()
-
-            elif "gnss logged every " in line_lower or 'gnss log is off' in line_lower:
-                status['gnss_log_interval_minutes'] = True
-            else:
-                error_message = f"Unrecognized line format in system status at row {line_num + 1} of SY response: '{line}'"
-                self._logger.error(error_message)
-                raise UnexpectedResponseError(error_message)
-
-        must_have_fields = ['device_type', 'version', 'serial_number', 'reader_name', 'mode']
-        for field in must_have_fields:
-            if not status[field]:
-                error_message = f"Missing expected field '{field}' in system status. Parsed value: '{status[field]}'"
-                self._logger.error(error_message)
-                raise UnexpectedResponseError(error_message)
-
-        return status
+        return self._system_status_checker.get_system_status()
 
     def get_upload_history(self):
         """
@@ -572,42 +352,6 @@ class Communicator:
 
         return self._clock_manager.control_device_datetime(tolerance_seconds, attempt_sync)
 
-    def export_system_status(self, output_dir: Path) -> bool:
-        """
-        Export system status to a file.
-
-        Delegates to DataExporter.export_system_status().
-
-        Parameters
-        ----------
-        output_dir : str or Path
-            Directory where system status will be written.
-
-        Returns
-        -------
-        bool
-            True if successful, False otherwise.
-        """
-        return self._data_exporter.export_system_status(output_dir)
-
-    def export_upload_log(self, output_dir: Path) -> bool:
-        """
-        Export upload log to a file.
-
-        Delegates to DataExporter.export_upload_log().
-
-        Parameters
-        ----------
-        output_dir : str or Path
-            Directory where upload log will be written.
-
-        Returns
-        -------
-        bool
-            True if successful, False otherwise.
-        """
-        return self._data_exporter.export_upload_log(output_dir)
-
     def export_event_records(self, dates: list, output_dir: Path = Path("")) -> bool:
         """
         Export event records for specified dates.
@@ -682,8 +426,8 @@ class Communicator:
             return False
 
         try:
-            parsed_status = self.get_system_status()
-            self._reader_name = parsed_status["reader_name"]
+            system_status: SystemStatus = self.get_system_status()
+            self._reader_name = system_status.reader_name
             return True
 
         except Exception as e:
@@ -708,8 +452,8 @@ class Communicator:
             raise ConnectionError(error_message)
 
         try:
-            parsed_status = self.get_system_status()
-            self._serial_number = parsed_status["serial_number"]
+            system_status: SystemStatus = self.get_system_status()
+            self._serial_number = system_status.serial_number
             return True
 
         except Exception as e:
@@ -735,8 +479,8 @@ class Communicator:
             raise ConnectionError(error_message)
 
         try:
-            parsed_status = self.get_system_status()
-            self._device_type = parsed_status["device_type"]
+            system_status: SystemStatus = self.get_system_status()
+            self._device_type = system_status.device_type
             return True
 
         except Exception as e:
