@@ -8,6 +8,7 @@ from oregon_processing.util.database_manager import DatabaseManager
 from oregon_processing.util.logging_manager import LoggingManager, get_logger
 from src.oregon_processing.util.device_health_checker import DeviceHealthReport
 from src.oregon_processing.util.exceptions import ConfigNotFoundError, ConnectionFailedError, UnexpectedResponseError
+from src.oregon_processing.util.system_status import SystemStatus
 
 class ExportProtocol:
 
@@ -42,7 +43,8 @@ class ExportProtocol:
 
             self._communicator = self._exit_stack.enter_context(Communicator())
 
-            self._database_manager = DatabaseManager(self._config, self._communicator)
+            system_status: SystemStatus = self._communicator.get_system_status()
+            self._database_manager = DatabaseManager(self._config, system_status)
             self._database_manager.prepare_directories()
 
             # Update log file to final location

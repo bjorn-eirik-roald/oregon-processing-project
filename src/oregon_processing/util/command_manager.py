@@ -8,6 +8,7 @@ and validating prompt signatures.
 
 from oregon_processing.util.logging_manager import get_logger
 import time
+from serial import Serial
 
 from src.oregon_processing.util.exceptions import UnexpectedResponseError
 
@@ -85,17 +86,18 @@ class CommandManager:
         "FR", "FRD", "FRR", "FRA",
     }
 
-    def __init__(self, communicator):
+    def __init__(self, connection: Serial):
         """
         Initialize the CommandManager.
 
         Parameters
         ----------
-        communicator : Communicator
-            Communicator instance for device communication.
+        connection :
+            The communication interface to the Oregon device (e.g., a serial connection).
         """
         self._logger = get_logger(__name__)
-        self._communicator = communicator
+
+        self._connection: Serial = connection
         self._last_prompt_signature = None
 
     @property
@@ -136,10 +138,6 @@ class CommandManager:
         ConnectionError
             If not connected to device.
         """
-        if not self._communicator.is_connected:
-            error_message = f"Cannot send command '{command}': Not connected to device."
-            self._logger.error(error_message)
-            raise ConnectionError(error_message)
 
         # Send command
         self._transmit_command(command)
@@ -148,7 +146,7 @@ class CommandManager:
         last_data_time = time.time()
 
         while True:
-            line = self._communicator._connection.readline().decode(errors="ignore").strip()
+            line = self._connection.readline().decode(errors="ignore").strip()
 
             if line:
                 prompt_ready = self._is_ready_prompt(line)
@@ -345,24 +343,19 @@ class CommandManager:
             If not connected to device.
         """
 
-        if not self._communicator.is_connected:
-            error_message = f"Cannot send command '{command}': Not connected to device."
-            self._logger.error(error_message)
-            raise ConnectionError(error_message)
-
         # Clear buffer by actually reading and discarding stray bytes
-        self._communicator._connection.reset_input_buffer()
+        self._connection.reset_input_buffer()
         time.sleep(0.05)  # Brief pause to let buffer clear
 
         # Drain any remaining bytes that reset_input_buffer() missed
-        self._communicator._connection.timeout = 0.1
-        while self._communicator._connection.in_waiting > 0:
-            self._communicator._connection.read(self._communicator._connection.in_waiting)
+        self._connection.timeout = 0.1
+        while self._connection.in_waiting > 0:
+            self._connection.read(self._connection.in_waiting)
             time.sleep(0.01)
 
         # Send the command
-        self._communicator._connection.write((command + "\r\n").encode())
-        self._communicator._connection.flush()
+        self._connection.write((command + "\r\n").encode())
+        self._connection.flush()
 
     def _clean_response(self, lines: list, command: str) -> list:
         """Clean response lines by removing echoed command, prompts, and known extraneous lines."""

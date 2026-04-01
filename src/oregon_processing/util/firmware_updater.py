@@ -6,26 +6,31 @@ Handles the firmware update process for Oregon RFID readers.
 """
 
 import time
+from serial import Serial
 
 from oregon_processing.util.logging_manager import get_logger
+from src.oregon_processing.util.command_manager import CommandManager
+
+
 
 class FirmwareUpdater:
     """Handles firmware update process for Oregon RFID devices."""
 
-    def __init__(self, communicator, command_manager):
+    def __init__(self, connection: Serial, command_manager: CommandManager):
         """
         Initialize the FirmwareUpdater.
 
         Parameters
         ----------
-        communicator : Communicator
-            Communicator instance for device communication.
+        connection : Serial
+            Serial connection instance for device communication.
         command_manager : CommandManager
             CommandManager instance for sending commands to device.
         """
-        self._communicator = communicator
-        self._command_manager = command_manager
         self._logger = get_logger(__name__)
+
+        self._connection: Serial = connection
+        self._command_manager: CommandManager = command_manager
 
     def update(self, firmware_file_path: str, new_version: str) -> bool:
         """
@@ -54,10 +59,6 @@ class FirmwareUpdater:
         """
 
 
-
-        if not self._communicator.is_connected:
-            self._logger.error("Not connected to device.")
-            return False
 
         # Verify firmware file exists before starting
         try:
@@ -135,8 +136,8 @@ class FirmwareUpdater:
             timeout = time.time() + 30  # 30 second timeout
 
             while time.time() < timeout:
-                if self._communicator._connection.in_waiting:
-                    line = self._communicator._connection.readline().decode(errors="ignore").strip()
+                if self._connection.in_waiting:
+                    line = self._connection.readline().decode(errors="ignore").strip()
                     if "start" in line.lower():
                         start_found = True
                         self._logger.info("Received!")
@@ -160,8 +161,8 @@ class FirmwareUpdater:
             last_data_time = time.time()
 
             while time.time() < response_timeout:
-                if self._communicator._connection.in_waiting:
-                    line = self._communicator._connection.readline().decode(errors="ignore").strip()
+                if self._connection.in_waiting:
+                    line = self._connection.readline().decode(errors="ignore").strip()
                     if line:
                         response_lines.append(line)
                         last_data_time = time.time()

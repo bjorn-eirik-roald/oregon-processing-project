@@ -9,12 +9,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from oregon_processing.util.logging_manager import get_logger
+from src.oregon_processing.util.device_mode_manager import DeviceModeManager
+from src.oregon_processing.util.system_status import SystemStatus
+from src.oregon_processing.util.upload_history import UploadHistory, UploadHistoryChecker
 
 if TYPE_CHECKING:
-    from oregon_processing.util.communicator import Communicator
     from oregon_processing.util.format_manager import FormatManager
     from oregon_processing.util.command_manager import CommandManager
-    from oregon_processing.util.database_manager import DatabaseManager
 
 
 class DataExporter:
@@ -22,23 +23,32 @@ class DataExporter:
 
     DEFAULT_DETECTION_RECORD_FORMAT = {'ORSR':'DTY ARR SPC TRF DUR SPC TTY SPC TAG SCD NCD EFA LON LAT',
                                        'ORMR':'DTY ARR SPC TRF DUR SPC TTY SPC ANT TAG SCD NCD EFA LON LAT'}
-    def __init__(self, communicator: "Communicator", format_manager: "FormatManager", command_manager: "CommandManager"):
+    def __init__(self, format_manager: FormatManager, command_manager: CommandManager,
+                 upload_history_checker: UploadHistoryChecker, mode_manager: DeviceModeManager,
+                 system_status: SystemStatus):
         """
         Initialize DataExporter with communicator and manager instances.
 
         Parameters
         ----------
-        communicator : Communicator
-            Connected Communicator instance to use for data retrieval.
         format_manager : FormatManager
             Format manager instance for handling detection record format operations.
         command_manager : CommandManager
             Command manager instance for sending commands to device.
+        upload_history_checker : UploadHistoryChecker
+            Upload history checker instance for managing upload history.
+        mode_manager : DeviceModeManager
+            Mode manager instance for handling device mode operations.
+        system_status : SystemStatus
+            System status instance for monitoring system status.
         """
-        self._communicator = communicator
-        self._format_manager = format_manager
-        self._command_manager = command_manager
         self._logger = get_logger(__name__)
+
+        self._format_manager: FormatManager = format_manager
+        self._command_manager: CommandManager = command_manager
+        self._upload_history_checker: UploadHistoryChecker = upload_history_checker
+        self._mode_manager: DeviceModeManager = mode_manager
+        self._system_status: SystemStatus = system_status
 
     def export_event_records(self, dates: list, output_dir: Path = Path("")) -> bool:
         """
@@ -60,19 +70,15 @@ class DataExporter:
             True if all exports completed successfully, False if any failed.
         """
 
-        if not self._communicator.is_connected:
-            self._logger.error("Not connected to device. Cannot export event records.")
-            return False
-
         if not dates:
             self._logger.warning("No dates provided for export. No event records will be exported.")
             return False
 
         old_mode = None
-        mode = self._communicator.get_mode()
+        mode = self._mode_manager.get_current_mode()
         if mode != 'Standby':
             old_mode = mode
-            self._communicator.change_mode('Standby')
+            self._mode_manager.change_mode('Standby')
             self._logger.info(f"Changed device mode to Standby for export. Will return to {old_mode} mode after export is complete.")
 
         # Header
@@ -90,7 +96,7 @@ class DataExporter:
         self._logger.debug("Exporting event records to files.")
         for date_num, current_date in enumerate(all_dates):
 
-            output_filepath = output_dir / f"{self._communicator.serial_number}_event_records_{current_date.strftime('%Y_%m_%d')}.txt"
+            output_filepath = output_dir / f"{self._system_status.serial_number}_event_records_{current_date.strftime('%Y_%m_%d')}.txt"
 
             counter = f"({date_num + 1}/{num_dates})"
             spacing = " " * (max_counter_width - len(counter))
@@ -113,8 +119,8 @@ class DataExporter:
                 # Generate output filename with date
                 with open(output_filepath, 'w') as f:
                     f.write("Oregon RFID Event Records\n")
-                    f.write(f"Device Serial Number: {self._communicator.serial_number}\n")
-                    f.write(f"Device Type: {self._communicator.device_type}\n")
+                    f.write(f"Device Serial Number: {self._system_status.serial_number}\n")
+                    f.write(f"Device Type: {self._system_status.device_type}\n")
                     f.write("Export Date/Time: " + time.strftime("%Y-%m-%d %H:%M:%S") + "\n")
                     f.write("Date of Records: " + current_date.strftime("%Y-%m-%d") + "\n")
                     f.write("=========================\n\n")
@@ -141,7 +147,7 @@ class DataExporter:
             self._logger.warning(f"Completed Event Record Export with {failed_exports} exports failed.")
 
         if old_mode:
-            self._communicator.change_mode(old_mode)
+            self._mode_manager.change_mode(old_mode)
             self._logger.info(f"Returned device mode to {old_mode} after export.")
 
         return True if all_successful else False
@@ -171,22 +177,18 @@ class DataExporter:
             True if all exports completed successfully, False if any failed.
         """
 
-        if not self._communicator.is_connected:
-            self._logger.error("Not connected to device. Cannot export detection records.")
-            return False
-
         if not dates:
             self._logger.warning("No dates provided for export. No detection records will be exported.")
             return False
 
         old_mode = None
-        mode = self._communicator.get_mode()
+        mode = self._mode_manager.get_current_mode()
         if mode != 'Standby':
             old_mode = mode
-            self._communicator.change_mode('Standby')
+            self._mode_manager.change_mode('Standby')
             self._logger.info(f"Changed device mode to Standby for export. Will return to {old_mode} mode after export is complete.")
 
-        upload_history = self._communicator.get_upload_history()
+        upload_history: UploadHistory = self._upload_history_checker.get_upload_history()
         total_number_of_records = upload_history["total_records"]
 
         self._logger.info("Initializing export of detection records from {} date(s).".format(len(dates)))
@@ -196,7 +198,7 @@ class DataExporter:
 
         self._logger.debug("Setting detection record format for export.")
 
-        default_format = self.DEFAULT_DETECTION_RECORD_FORMAT[self._communicator.device_type]
+        default_format = self.DEFAULT_DETECTION_RECORD_FORMAT[self._system_status.device_type]
         if not self._format_manager.set_detection_record_format(default_format):
             self._logger.error("Failed to set detection record format. Cannot continue.")
             return False
@@ -314,7 +316,7 @@ class DataExporter:
         num_failed_exports = 0
         self._logger.info("Exporting detection records to files.")
         for date_num, current_date in enumerate(all_dates):
-            output_filepath = f"{output_dir}/{self._communicator.serial_number}_detection_records_{current_date.strftime('%Y_%m_%d')}.txt"
+            output_filepath = f"{output_dir}/{self._system_status.serial_number}_detection_records_{current_date.strftime('%Y_%m_%d')}.txt"
             counter = f"({date_num + 1}/{num_dates})"
             spacing = " " * (max_counter_width - len(counter))
 
@@ -330,8 +332,8 @@ class DataExporter:
             try:
                 with open(output_filepath, 'w') as f:
                     f.write("Oregon RFID Detection Records\n")
-                    f.write(f"Device Serial Number: {self._communicator.serial_number}\n")
-                    f.write(f"Device Type: {self._communicator.device_type}\n")
+                    f.write(f"Device Serial Number: {self._system_status.serial_number}\n")
+                    f.write(f"Device Type: {self._system_status.device_type}\n")
                     f.write("Export Date/Time: " + time.strftime("%Y-%m-%d %H:%M:%S") + "\n")
                     f.write("Date of Record: " + current_date.strftime("%Y-%m-%d") + "\n")
                     f.write("Number of Records: " + count_str.strip() + "\n")
@@ -358,7 +360,7 @@ class DataExporter:
             self._logger.warning(f"{num_failed_exports} detection record exports failed. Please check the logs for details.")
 
         if old_mode:
-            self._communicator.change_mode(old_mode)
+            self._mode_manager.change_mode(old_mode)
             self._logger.info(f"Returned device mode to {old_mode} after export.")
 
         return all_successful

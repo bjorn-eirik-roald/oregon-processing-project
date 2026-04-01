@@ -5,7 +5,6 @@ Oregon RFID Communicator
 
 from contextlib import ExitStack
 
-from datetime import datetime
 from pathlib import Path
 
 from oregon_processing.util.connector import ConnectionResult, Connector
@@ -17,9 +16,9 @@ from oregon_processing.util.format_manager import FormatManager
 from oregon_processing.util.data_exporter import DataExporter
 from oregon_processing.util.device_health_checker import DeviceHealthChecker, DeviceHealthReport
 from oregon_processing.util.logging_manager import get_logger
-from src.oregon_processing.util.exceptions import ConnectionFailedError, UnexpectedResponseError, UnexpectedResponseError
-from src.oregon_processing.util.system_status import SystemStatusChecker, SystemStatus
-from src.oregon_processing.util.upload_history import UploadHistory
+from oregon_processing.util.exceptions import ConnectionFailedError, UnexpectedResponseError, UnexpectedResponseError
+from oregon_processing.util.system_status import SystemStatusChecker, SystemStatus
+from oregon_processing.util.upload_history import UploadHistoryChecker, UploadHistory
 
 
 
@@ -39,6 +38,7 @@ class Communicator:
         self._format_manager: FormatManager = None
         self._data_exporter: DataExporter = None
         self._health_manager: DeviceHealthChecker = None
+        self._upload_history_checker: UploadHistoryChecker = None
 
         self._last_upload_date = None
         self._reader_name = None
@@ -58,19 +58,20 @@ class Communicator:
             connection_result: ConnectionResult = connector.connect()
 
             if connection_result and connection_result.success:
-                self._connection = connection_result.connection
+                self._connection:  = connection_result.connection
 
                 # Command manager needed already in post-connect handshake
-                self._command_manager = CommandManager(self)
+                self._command_manager = CommandManager(self._connection)
 
                 self._post_connect_handshake()
 
-                self._mode_manager = self._exit_stack.enter_context(DeviceModeManager(self, self._command_manager))
-                self._format_manager = self._exit_stack.enter_context(FormatManager(self, self._command_manager))
-                self._data_exporter = DataExporter(self, self._format_manager, self._command_manager)
-                self._clock_manager = ClockManager(self, self._command_manager)
-                self._health_checker = DeviceHealthChecker(self)
                 self._system_status_checker = SystemStatusChecker(self._command_manager)
+                self._mode_manager = self._exit_stack.enter_context(DeviceModeManager(self._command_manager, self._system_status_checker))
+                self._format_manager = self._exit_stack.enter_context(FormatManager(self._command_manager, self._mode_manager))
+                self._upload_history_checker = UploadHistoryChecker(self._command_manager, self._mode_manager)
+                self._data_exporter = DataExporter(self._format_manager, self._command_manager, self._upload_history_checker, self._mode_manager, self._system_status_checker)
+                self._clock_manager = ClockManager(self._command_manager)
+                self._health_checker = DeviceHealthChecker(self._system_status_checker, self._command_manager)
 
             else:
                 error_message = f"Failed to connect to Oregon device."
@@ -94,78 +95,9 @@ class Communicator:
         return False
 
     @property
-    def reader_name(self):
-        """Get the reader name if known."""
-        if not self._reader_name:
-            self._update_reader_name()
-
-        return self._reader_name
-
-    @property
-    def serial_number(self):
-        """Get the serial number if known."""
-        if not self._serial_number:
-            self._update_serial_number()
-
-        return self._serial_number
-
-    @property
-    def device_type(self):
-        """Get the device type from system status."""
-        if not self._device_type:
-            self._update_device_type()
-
-        return self._device_type
-
-    @property
     def is_connected(self):
         """Check if there is an active connection."""
         return self._connection is not None
-
-    @property
-    def prompt_signature(self):
-        if not self._command_manager:
-            error_message = "Command manager not initialized; cannot retrieve prompt signature."
-            self._logger.error(error_message)
-            raise RuntimeError(error_message)
-
-        return self._command_manager.prompt_signature
-
-    def get_mode(self):
-        """Get the current operating mode from the system status."""
-        if not self._mode_manager:
-            error_message = "Mode manager not initialized. Cannot retrieve current mode."
-            self._logger.error(error_message)
-            raise RuntimeError(error_message)
-
-        self._mode =  self._mode_manager.get_current_mode()
-        return self._mode
-
-    def change_mode(self, mode_name: str) -> bool:
-        """
-        Change the device operating mode.
-
-        Delegates to DeviceModeManager.
-
-        Parameters
-        ----------
-        mode_name : str
-            Target mode: "Standby", "Run", or "Sleep"
-
-        Returns
-        -------
-        bool
-            True if mode change successful, False otherwise.
-        """
-
-
-        if not self._mode_manager:
-            error_message = "Mode manager not initialized. Cannot change mode."
-            self._logger.error(error_message)
-            raise RuntimeError(error_message)
-
-        success: bool = self._mode_manager.change_mode(mode_name)
-        return success
 
     def check_device_health(self):
         """
@@ -327,10 +259,12 @@ class Communicator:
 
         self._logger.debug("Starting post-connection handshake.")
 
-        self._update_reader_name()
-        self._update_device_type()
+        system_status: SystemStatus = self.get_system_status()
+        reader_name = system_status.reader_name
+        serial_number = system_status.serial_number
+        device_type = system_status.device_type
 
-        self._logger.info(f"Connected to device '{self.reader_name}' of type '{self.device_type}' with serial number '{self.serial_number}'.")
+        self._logger.info(f"Connected to device '{reader_name}' of type '{device_type}' with serial number '{serial_number}'.")
 
     def _update_reader_name(self) -> str:
         """

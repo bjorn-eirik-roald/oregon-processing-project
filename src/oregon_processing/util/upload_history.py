@@ -1,11 +1,11 @@
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 
 from oregon_processing.util.command_manager import CommandManager
 from oregon_processing.util.exceptions import UnexpectedResponseError
 from oregon_processing.util.logging_manager import get_logger
-from src.oregon_processing.util.device_mode_manager import DeviceModeManager
+from oregon_processing.util.device_mode_manager import DeviceModeManager
 
 
 @dataclass
@@ -21,16 +21,13 @@ class UploadRecord:
 class UploadHistory:
     """Manages upload history for processed data."""
 
-    reader_name: str
-    site: str
-    upload_count: int
-    uploads: list[UploadRecord]
-    new_records: int
-    total_records: int
-    raw_output: str
-
-
-
+    reader_name: str = ""
+    site: str = ""
+    upload_count: int = 0
+    uploads: list[UploadRecord] = field(default_factory=list)
+    new_records: int = 0
+    total_records: int = 0
+    raw_output: str = ""
 
 class UploadHistoryChecker:
 

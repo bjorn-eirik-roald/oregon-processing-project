@@ -11,7 +11,6 @@ from src.oregon_processing.util.exceptions import CommandTransmissionError, Unex
 
 if TYPE_CHECKING:
     from oregon_processing.util.command_manager import CommandManager
-    from oregon_processing.util.communicator import Communicator
 
 class ClockManager:
     """Manages device clock synchronization and datetime operations."""
@@ -23,20 +22,18 @@ class ClockManager:
         'E': "Ellapsed time since power-up"
     }
 
-    def __init__(self, communicator: "Communicator", command_manager: "CommandManager"):
+    def __init__(self, command_manager: CommandManager):
         """
         Initialize ClockManager.
 
         Parameters
         ----------
-        communicator : Communicator
-            Communicator instance for device communication.
         command_manager : CommandManager
             CommandManager instance for sending commands to device.
         """
-        self._communicator = communicator
-        self._command_manager = command_manager
         self._logger = get_logger(__name__)
+
+        self._command_manager = command_manager
 
     def get_device_datetime(self) -> dict:
         """

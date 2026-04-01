@@ -4,6 +4,8 @@ Format Manager for Oregon RFID device record format operations
 """
 
 from oregon_processing.util.logging_manager import get_logger
+from src.oregon_processing.util.command_manager import CommandManager
+from src.oregon_processing.util.device_mode_manager import DeviceModeManager
 from src.oregon_processing.util.exceptions import UnexpectedResponseError
 
 
@@ -43,26 +45,27 @@ class FormatManager:
         'SPC': 'Output one space character',
         }
 
-    def __init__(self, communicator, command_manager):
+    def __init__(self, command_manager: CommandManager, mode_manager: DeviceModeManager):
         """
         Initialize FormatManager.
 
         Parameters
         ----------
-        communicator : Communicator
-            Communicator instance for device communication.
         command_manager : CommandManager
             CommandManager instance for sending commands to device.
+        mode_manager : DeviceModeManager
+            DeviceModeManager instance for managing device modes.
         """
-        self._communicator = communicator
-        self._command_manager = command_manager
-        self._detection_record_format = None
-        self._startup_format = None
         self._logger = get_logger(__name__)
 
+        self._command_manager = command_manager
+        self._mode_manager = mode_manager
+
+        self._detection_record_format = None
+        self._startup_format = None
+
         # Store startup format when initialized
-        if self._communicator.is_connected:
-            self._startup_format = self._fetch_detection_record_format()
+        self._startup_format = self._fetch_detection_record_format()
 
     def __enter__(self):
         """Enter context manager."""
@@ -106,11 +109,6 @@ class FormatManager:
             True if format was set successfully, False otherwise.
         """
 
-
-        if not self._communicator.is_connected:
-            self._logger.error("Not connected to device. Cannot set detection record format.")
-            return False
-
         try:
             fm_command = f"FM {format_string}"
             self._command_manager.send_command(fm_command)
@@ -142,22 +140,16 @@ class FormatManager:
             }
         """
 
-
-        if not self._communicator.is_connected:
-            error_message = f"Not connected to device. Cannot fetch detection record format."
-            self._logger.error(error_message)
-            raise ConnectionError(error_message)
-
         old_mode = None
-        mode = self._communicator.get_mode()
+        mode = self._mode_manager.get_current_mode()
         if mode.lower() != 'standby':
             old_mode = mode
-            self._communicator.change_mode('Standby')
+            self._mode_manager.change_mode('Standby')
 
         response_lines = self._command_manager.send_command("FM")
 
         if old_mode:
-            self._communicator.change_mode(old_mode)
+            self._mode_manager.change_mode(old_mode)
 
         if len(response_lines) != 1:
             error_message = f"Unexpected number of lines in FM response: {len(response_lines)}. Response: {response_lines}"
@@ -195,10 +187,6 @@ class FormatManager:
         bool
             True if format was restored or no change was needed, False if restoration failed.
         """
-
-
-        if not self._communicator.is_connected:
-            return False
 
         if self._startup_format is None:
             # No startup format stored, nothing to restore

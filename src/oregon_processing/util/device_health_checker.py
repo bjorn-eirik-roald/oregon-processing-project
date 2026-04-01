@@ -12,9 +12,9 @@ from oregon_processing.util.logging_manager import get_logger
 
 from typing import TYPE_CHECKING
 
-from src.oregon_processing.util.system_status import FirmwareVersion, SystemStatus
+from src.oregon_processing.util.command_manager import CommandManager
+from src.oregon_processing.util.system_status import FirmwareVersion, SystemStatus, SystemStatusChecker
 if TYPE_CHECKING:
-    from oregon_processing.util.communicator import Communicator
 
 
 @dataclass
@@ -32,17 +32,21 @@ class DeviceHealthChecker:
     CRITICAL_VOLTAGE_THRESHOLD = 12.5
     OLD_VERSION_THRESHOLD = 2.74
 
-    def __init__(self, communicator: "Communicator"):
+    def __init__(self, system_status_checker: SystemStatusChecker, command_manager: CommandManager):
         """
         Initialize DeviceHealthChecker.
 
         Parameters
         ----------
-        communicator : Communicator
-            Communicator instance for device communication.
+        system_status_checker : SystemStatusChecker
+            SystemStatusChecker instance for checking system status.
+        command_manager : CommandManager
+            CommandManager instance for managing device commands.
         """
-        self._communicator = communicator
         self._logger = get_logger(__name__)
+
+        self._system_status_checker = system_status_checker
+        self._command_manager = command_manager
 
     def check_device_health(self) -> DeviceHealthReport:
         """
@@ -60,8 +64,8 @@ class DeviceHealthChecker:
         critical_warnings = []
         non_critical_warnings = []
 
-        system_status: SystemStatus = self._communicator.get_system_status()
-        prompt_signature = self._communicator.prompt_signature
+        system_status: SystemStatus = self._system_status_checker.get_system_status()
+        prompt_signature = self._command_manager.prompt_signature
 
         # Check time synchronization status based on prompt signature (3rd character should be 'G' for GNSS sync)
         if prompt_signature[2] != 'G':

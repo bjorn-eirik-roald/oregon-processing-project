@@ -7,9 +7,8 @@ Device Mode Manager for Oregon RFID
 from typing import TYPE_CHECKING
 
 from oregon_processing.util.logging_manager import get_logger
-from src.oregon_processing.util.system_status import SystemStatus
+from src.oregon_processing.util.system_status import SystemStatus, SystemStatusChecker
 if TYPE_CHECKING:
-    from oregon_processing.util.communicator import Communicator
     from oregon_processing.util.command_manager import CommandManager
 
 
@@ -21,21 +20,22 @@ class DeviceModeManager:
         'run': {'display': 'Run', 'command': 'ON'},
         'sleep': {'display': 'Sleep', 'command': 'OF'}
     }
-    def __init__(self, communicator: "Communicator", command_manager: "CommandManager"):
+    def __init__(self, command_manager: CommandManager, status_checker: SystemStatusChecker):
         """
-        Initialize DeviceModeManager with communicator and command manager.
+        Initialize DeviceModeManager with command manager and status checker.
 
         Parameters
         ----------
-        communicator : Communicator
-            Connected Communicator instance to use for device operations.
         command_manager : CommandManager
             Command manager instance for sending commands to device.
+        status_checker : SystemStatusChecker
+            Status checker instance for retrieving system status.
         """
-        self._communicator = communicator
-        self._command_manager = command_manager
-        self._startup_mode = None
         self._logger = get_logger(__name__)
+
+        self._command_manager = command_manager
+        self._status_checker = status_checker
+        self._startup_mode = None
 
     def __enter__(self):
         """Enter context manager."""
@@ -88,11 +88,6 @@ class DeviceModeManager:
 
         command = self.MODES[mode_name]['command']
 
-        if not self._communicator._connection:
-            error_message = "Not connected to device. Cannot change mode."
-            self._logger.error(error_message)
-            raise ConnectionError(error_message)
-
         current_mode = self.get_current_mode()
         if current_mode != mode_name:
             self._logger.debug(f"Changing device mode from '{current_mode}' to '{mode_name}' (sending {command} command).")
@@ -112,8 +107,6 @@ class DeviceModeManager:
 
     def _return_to_startup_mode(self) -> None:
         """Return the Oregon RFID device to its start-up mode."""
-        if not self._communicator._connection:
-            return
 
         if not self._startup_mode:
             self._logger.warning("Startup mode not set. Cannot return to startup mode.")
@@ -136,7 +129,7 @@ class DeviceModeManager:
         str
             Current mode: "Standby", "Run", or "Sleep"
         """
-        status: SystemStatus = self._communicator.get_system_status()
+        status: SystemStatus = self._status_checker.get_system_status()
         return status.mode
 
 

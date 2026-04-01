@@ -8,11 +8,11 @@ class ConnectionResult:
     """Class to encapsulate the result of a connection attempt."""
 
     def __init__(self, success, connection=None, port=None, baudrate=None, error_message=None):
-        self.success = success
-        self.connection = connection
-        self.port = port
-        self.baudrate = baudrate
-        self.error_message = error_message
+        self.success: bool = success
+        self.connection: serial.Serial = connection
+        self.port: str = port
+        self.baudrate: int = baudrate
+        self.error_message: str = error_message
 
 class Connector:
     """Class to handle connection establishment with Oregon RFID devices."""
@@ -241,7 +241,7 @@ class Connector:
 
                 ser = None
                 try:
-                    ser = serial.Serial(port, baudrate=baud, timeout=0.2, write_timeout=0.2)
+                    ser: serial.Serial = serial.Serial(port, baudrate=baud, timeout=0.2, write_timeout=0.2)
                     ser.reset_input_buffer()
                     ser.reset_output_buffer()
 

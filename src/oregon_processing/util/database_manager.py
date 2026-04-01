@@ -6,6 +6,8 @@ from oregon_processing.util.util_functions import extract_filename_date
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
+from src.oregon_processing.util.system_status import SystemStatus
+
 
 
 
@@ -14,7 +16,7 @@ class DatabaseManager:
 
     DEFAULT_FIRST_DATE = date(2018, 1, 1)
 
-    def __init__(self, config: OregonConfig, communicator: "Communicator"):
+    def __init__(self, config: OregonConfig, system_status: SystemStatus):
         """
         Initialize DatabaseManager.
 
@@ -25,9 +27,10 @@ class DatabaseManager:
         communicator : Communicator
             Communicator instance for device information
         """
-        self._config = config
         self._logger = get_logger(__name__)
-        self._communicator = communicator
+
+        self._config = config
+        self._system_status = system_status
 
         # Root directories
         self._data_dir = None
@@ -109,8 +112,8 @@ class DatabaseManager:
 
         self._logger.debug("Preparing output directories.")
 
-        # Get serial number from communicator
-        serial_number = self._communicator.serial_number
+        # Get serial number from system status
+        serial_number = self._system_status.serial_number
 
         self._root_output_dir = self._config.root_output_dir
         self._root_log_dir = self._config.root_log_dir
