@@ -1,6 +1,6 @@
 from oregon_processing.util.export_protocol import ExportProtocol
 from oregon_processing.util.logging_manager import LoggingManager, get_logger
-from oregon_processing.util.exceptions import ConfigNotFoundError, InvalidConfigError, ConnectionFailedError, UnexpectedResponseError, CommandTransmissionError, UserAbortError
+from oregon_processing.util.exceptions import ConfigNotFoundError, InvalidConfigError, ConnectionFailedError, UnexpectedResponseError, CommandTransmissionError, UserAbortError, DeviceHealthError
 
 __all__ = [
     'ExportProtocol',
@@ -11,5 +11,6 @@ __all__ = [
     'ConnectionFailedError',
     'UnexpectedResponseError',
     'CommandTransmissionError',
-    'UserAbortError'
+    'UserAbortError',
+    'DeviceHealthError'
 ]

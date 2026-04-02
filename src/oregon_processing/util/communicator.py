@@ -10,7 +10,7 @@ from serial import Serial
 
 from oregon_processing.util.connector import ConnectionResult, Connector
 from oregon_processing.util.command_manager import CommandManager
-from oregon_processing.util.clock_manager import ClockManager
+from oregon_processing.util.clock_manager import ClockCheckResult, ClockManager
 from oregon_processing.util.device_mode_manager import DeviceModeManager
 from oregon_processing.util.interactive_terminal import InteractiveTerminal
 from oregon_processing.util.format_manager import FormatManager
@@ -20,7 +20,7 @@ from oregon_processing.util.logging_manager import get_logger
 from oregon_processing.util.system_status import SystemStatusChecker, SystemStatus
 from oregon_processing.util.upload_history import UploadHistoryChecker, UploadHistory
 
-from oregon_processing.util.exceptions import ConnectionFailedError, UnexpectedResponseError, UnexpectedResponseError
+from oregon_processing.util.exceptions import CommandTransmissionError, ConnectionFailedError, UnexpectedResponseError, UnexpectedResponseError, UserAbortError
 
 
 class Communicator:
@@ -79,7 +79,8 @@ class Communicator:
                 self._logger.error(error_message)
                 raise ConnectionFailedError(error_message)
 
-        except ConnectionFailedError as e:
+        # catch exceptions where logging is already made and reraise after closing exit stack
+        except (ConnectionFailedError, UnexpectedResponseError, CommandTransmissionError, UserAbortError) as e:
             self._exit_stack.close()
             raise
         except Exception as e:
@@ -195,16 +196,15 @@ class Communicator:
 
         Returns
         -------
-        dict
-            Report with keys: synced, device_datetime, elapsed_time, system_datetime,
-            difference_seconds, was_updated, update_command_sent, update_response, error
+
         """
         if not self._connection:
             error_message = f"Not connected to device. Cannot check or control device datetime."
             self._logger.error(error_message)
             raise ConnectionError(error_message)
 
-        return self._clock_manager.control_device_datetime(tolerance_seconds, attempt_sync)
+        clock_check_result: ClockCheckResult = self._clock_manager.check_device_datetime(tolerance_seconds, attempt_sync)
+        return clock_check_result
 
     def export_event_records(self, dates: list, output_dir: Path = Path("")) -> bool:
         """

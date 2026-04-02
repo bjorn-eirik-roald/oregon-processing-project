@@ -6,8 +6,9 @@ from oregon_processing.util.communicator import Communicator
 from oregon_processing.util.oregon_config import OregonConfig
 from oregon_processing.util.database_manager import DatabaseManager
 from oregon_processing.util.logging_manager import LoggingManager, get_logger
+from src.oregon_processing.util.clock_manager import ClockCheckResult
 from src.oregon_processing.util.device_health_checker import DeviceHealthReport
-from src.oregon_processing.util.exceptions import ConfigNotFoundError, ConnectionFailedError, UnexpectedResponseError
+from src.oregon_processing.util.exceptions import CommandTransmissionError, ConfigNotFoundError, ConnectionFailedError, DeviceHealthError, InvalidConfigError, UnexpectedResponseError, UserAbortError
 from src.oregon_processing.util.system_status import SystemStatus
 
 class ExportProtocol:
@@ -51,20 +52,14 @@ class ExportProtocol:
             report_file_dir = self._database_manager.log_dir
             report_file = report_file_dir / f"export_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
             self._logging_manager.transfer_log_file(report_file)
-        except ConnectionFailedError as e:
-            self._exit_stack.close()
-            raise
-        except ConfigNotFoundError as e:
-            self._exit_stack.close()
-            raise
-        except UnexpectedResponseError as e:
+        except (ConfigNotFoundError, InvalidConfigError, ConnectionFailedError, UnexpectedResponseError, CommandTransmissionError, UserAbortError) as e:
             self._exit_stack.close()
             raise
         except Exception as e:
             if self._logger:
-                self._logger.exception("Failed to initialize export protocol:\n\n %s", e)
+                self._logger.exception("Failed to initialize export protocol:\n\n {}".format(e))
             else:
-                print(f"Failed to initialize export protocol: {e}")
+                print(f"Failed to initialize export protocol:\n\n {e}")
 
             self._exit_stack.close()
             raise
@@ -80,25 +75,25 @@ class ExportProtocol:
 
         self._logger.info("Oregon RFID Export Protocol Initiated")
 
-        if self._config is None:
-            self._logger.error("Configuration manager not initialized. Aborting.")
-            return
-
         if not self._communicator.is_connected:
             self._logger.error("Oregon RFID device is not connected. Aborting.")
             return
 
+        # Execute device health check on device
         health_report: DeviceHealthReport = self._communicator.check_device_health()
         if len(health_report.critical_warnings) > 0:
-            message = "Device health check failed. Please address the following critical issues before proceeding: \n  -" + "\n  -".join(health_report.critical_warnings)
-            self._logger.error(message)
-            return
+            error_message = "Device health check failed. Please address the following critical issues before proceeding: \n  -" + "\n  -".join(health_report.critical_warnings)
+            self._logger.error(error_message)
+            raise DeviceHealthError(error_message)
 
-        result = self._communicator.control_device_datetime(tolerance_seconds=10)
-        if not result['synced']:
-            self._logger.error("Device clock is not in sync. Please address the issues before proceeding.")
-            return
+        # Execute device clock sync check on device
+        clock_check_result: ClockCheckResult = self._communicator.control_device_datetime(tolerance_seconds=10)
+        if not clock_check_result.synced:
+            error_message = "Device clock is not in sync and could not be automatically updated. Please address the issue before proceeding."
+            self._logger.error(error_message)
+            raise DeviceHealthError(error_message)
 
+        # get dates where exports are needed based on what is already in the database
         missing_export_dates = self._database_manager.get_export_dates()
 
 

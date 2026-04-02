@@ -22,3 +22,7 @@ class UserAbortError(Exception):
     """Raised when the user aborts an operation."""
     pass
 
+class DeviceHealthError(Exception):
+    """Error for when device health check fails or device clock is not in sync."""
+
+
