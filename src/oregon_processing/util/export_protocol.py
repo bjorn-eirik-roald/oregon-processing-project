@@ -1,10 +1,9 @@
-import logging
 from contextlib import ExitStack
 from datetime import datetime
 
 from oregon_processing.util.communicator import Communicator
 from oregon_processing.util.oregon_config import OregonConfig
-from oregon_processing.util.database_manager import DatabaseManager
+from oregon_processing.util.database_manager import DatabaseManager, ExportDates
 from oregon_processing.util.logging_manager import LoggingManager, get_logger
 from src.oregon_processing.util.clock_manager import ClockCheckResult
 from src.oregon_processing.util.device_health_checker import DeviceHealthReport
@@ -94,18 +93,18 @@ class ExportProtocol:
             raise DeviceHealthError(error_message)
 
         # get dates where exports are needed based on what is already in the database
-        missing_export_dates = self._database_manager.get_export_dates()
+        export_dates: ExportDates = self._database_manager.get_export_dates()
 
 
         if self.EXPORT_EVENT_RECORD_FLAG:
             self._communicator.export_event_records(
-                dates=missing_export_dates['system_logs'],
+                dates=export_dates.event_record_dates,
                 output_dir=self._database_manager.event_records_dir
             )
         else:
             self._logger.info("Skipping event record export as currently configured.")
 
         self._communicator.export_detection_records(
-            dates=missing_export_dates['records'],
+            dates=export_dates.detection_record_dates,
             output_dir=self._database_manager.records_dir
         )

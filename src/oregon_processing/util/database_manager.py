@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+
 from oregon_processing.util.logging_manager import get_logger
 from oregon_processing.util.oregon_config import OregonConfig
 from oregon_processing.util.communicator import Communicator
@@ -8,8 +10,10 @@ from pathlib import Path
 
 from src.oregon_processing.util.system_status import SystemStatus
 
-
-
+@dataclass
+class ExportDates:
+    detection_record_dates: list
+    event_record_dates: list
 
 class DatabaseManager:
     """Manages database directories and date range tracking for exports."""
@@ -156,8 +160,8 @@ class DatabaseManager:
 
         Returns
         -------
-        dict
-            Dictionary with 'records' and 'system_logs' keys containing lists of missing dates
+        ExportDates
+            Object containing lists of missing/incomplete dates for detection records and event records
         """
 
         if self._detection_records_dir is None or self._event_records_dir is None:
@@ -166,17 +170,17 @@ class DatabaseManager:
             raise RuntimeError(error_message)
 
         self._logger.debug("Scanning for existing detection record files...")
-        record_files = list(self._detection_records_dir.glob("*.txt"))
-        self._logger.debug(f"Found {len(record_files)} detection record file(s) from current RFID reader.")
+        detection_record_files = list(self._detection_records_dir.glob("*.txt"))
+        self._logger.debug(f"Found {len(detection_record_files)} detection record file(s) from current RFID reader.")
 
         self._logger.debug("Scanning for existing event record files...")
-        event_files = list(self._event_records_dir.glob("*.txt"))
-        self._logger.debug(f"Found {len(event_files)} event record file(s) from current RFID reader.")
+        event_record_files = list(self._event_records_dir.glob("*.txt"))
+        self._logger.debug(f"Found {len(event_record_files)} event record file(s) from current RFID reader.")
 
         self._logger.debug("Extracting dates from filenames...")
 
-        record_file_dates = set(d for d in [extract_filename_date(f.name, logger=self._logger) for f in record_files] if d is not None)
-        event_file_dates = set(d for d in [extract_filename_date(f.name, logger=self._logger) for f in event_files] if d is not None)
+        detection_record_dates = set(d for d in [extract_filename_date(f.name, logger=self._logger) for f in detection_record_files] if d is not None)
+        event_record_dates = set(d for d in [extract_filename_date(f.name, logger=self._logger) for f in event_record_files] if d is not None)
 
         # Generate expected date range from DEFAULT_FIRST_DATE to today
         today = date.today()
@@ -187,31 +191,35 @@ class DatabaseManager:
             current_date += timedelta(days=1)
 
         # Find missing dates for each file type
-        missing_record_dates = sorted([d for d in expected_dates if d not in record_file_dates])
-        missing_event_dates = sorted([d for d in expected_dates if d not in event_file_dates])
+        missing_detection_file_dates = sorted([d for d in expected_dates if d not in detection_record_dates])
+        missing_event_file_dates = sorted([d for d in expected_dates if d not in event_record_dates])
 
         # Get last available dates
-        last_record_date = max(record_file_dates) if record_file_dates else None
-        last_event_date = max(event_file_dates) if event_file_dates else None
+        last_detection_file_date = max(detection_record_dates) if detection_record_dates else None
+        last_event_file_date = max(event_record_dates) if event_record_dates else None
 
         # Add last available dates to missing list to account for potential incomplete exports
-        if last_record_date and last_record_date not in missing_record_dates:
-            missing_record_dates = sorted(missing_record_dates + [last_record_date])
-        if last_event_date and last_event_date not in missing_event_dates:
-            missing_event_dates = sorted(missing_event_dates + [last_event_date])
+        if last_detection_file_date and last_detection_file_date not in missing_detection_file_dates:
+            missing_detection_file_dates = sorted(missing_detection_file_dates + [last_detection_file_date])
+        if last_event_file_date and last_event_file_date not in missing_event_file_dates:
+            missing_event_file_dates = sorted(missing_event_file_dates + [last_event_file_date])
 
-        self._logger.debug(f"Detection records: {len(missing_record_dates)} missing/incomplete date(s) out of {len(expected_dates)}")
-        if missing_record_dates:
-            self._logger.debug(f"Missing detection dates: {self._format_date_intervals(missing_record_dates)}")
+        # logging summary of missing dates
+        self._logger.debug(f"Detection records: {len(missing_detection_file_dates)} missing/incomplete date(s) out of {len(expected_dates)}")
+        if missing_detection_file_dates:
+            self._logger.debug(f"Missing detection dates: {self._format_date_intervals(missing_detection_file_dates)}")
 
-        self._logger.debug(f"Event records: {len(missing_event_dates)} missing/incomplete date(s) out of {len(expected_dates)}")
-        if missing_event_dates:
-            self._logger.debug(f"Missing event dates: {self._format_date_intervals(missing_event_dates)}")
+        # logging summary of missing dates
+        self._logger.debug(f"Event records: {len(missing_event_file_dates)} missing/incomplete date(s) out of {len(expected_dates)}")
+        if missing_event_file_dates:
+            self._logger.debug(f"Missing event dates: {self._format_date_intervals(missing_event_file_dates)}")
 
-        return {
-            'records': missing_record_dates,
-            'system_logs': missing_event_dates
-        }
+        export_dates: ExportDates = ExportDates(
+            detection_record_dates=missing_detection_file_dates,
+            event_record_dates=missing_event_file_dates
+        )
+
+        return export_dates
 
     @classmethod
     def prepare_crash_log_file(cls, config) -> Path:
