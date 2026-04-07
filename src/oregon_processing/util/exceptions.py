@@ -28,4 +28,7 @@ class DeviceHealthError(Exception):
 class ClockSyncError(Exception):
     """Raised when device clock is not synchronized within acceptable tolerance."""
 
+class ModeChangeError(Exception):
+    """Raised when a device mode change fails."""
+
 

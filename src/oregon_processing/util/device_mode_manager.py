@@ -7,6 +7,7 @@ Device Mode Manager for Oregon RFID
 from __future__ import annotations
 from typing import TYPE_CHECKING
 
+from oregon_processing.util.exceptions import ModeChangeError
 from oregon_processing.util.logging_manager import get_logger
 
 if TYPE_CHECKING:
@@ -97,8 +98,9 @@ class DeviceModeManager:
             if self.get_current_mode() == mode_name:
                 self._logger.debug(f"Device mode changed from '{current_mode}' to '{mode_name}'.")
             else:
-                self._logger.error(f"Device mode change failed! Device is still in '{self.get_current_mode()}' mode.")
-                return False
+                error_message = f"Device mode change failed! Expected mode: '{mode_name}', Actual mode: '{self.get_current_mode()}'"
+                self._logger.error(error_message)
+                raise ModeChangeError(error_message)
 
         return True
 
