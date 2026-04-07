@@ -14,3 +14,6 @@ def open_terminal():
                 communicator.start_interactive_terminal()
             else:
                 logger.info("Connection not established. Aborting terminal session.")
+
+if __name__ == "__main__":
+    open_terminal()

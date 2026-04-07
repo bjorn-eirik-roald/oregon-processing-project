@@ -9,7 +9,7 @@ import time
 from serial import Serial
 
 from oregon_processing.util.logging_manager import get_logger
-from src.oregon_processing.util.command_manager import CommandManager
+from oregon_processing.util.command_manager import CommandManager
 
 
 

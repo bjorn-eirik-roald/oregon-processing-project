@@ -4,9 +4,9 @@ Format Manager for Oregon RFID device record format operations
 """
 
 from oregon_processing.util.logging_manager import get_logger
-from src.oregon_processing.util.command_manager import CommandManager
-from src.oregon_processing.util.device_mode_manager import DeviceModeManager
-from src.oregon_processing.util.exceptions import UnexpectedResponseError
+from oregon_processing.util.command_manager import CommandManager
+from oregon_processing.util.device_mode_manager import DeviceModeManager
+from oregon_processing.util.exceptions import UnexpectedResponseError
 
 
 class FormatManager:

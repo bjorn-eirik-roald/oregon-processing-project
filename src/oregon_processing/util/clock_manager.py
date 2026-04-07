@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 from datetime import datetime, timedelta, timezone
 
 from oregon_processing.util.logging_manager import get_logger
-from src.oregon_processing.util.exceptions import CommandTransmissionError, UnexpectedResponseError
+from oregon_processing.util.exceptions import CommandTransmissionError, UnexpectedResponseError
 
 if TYPE_CHECKING:
     from oregon_processing.util.command_manager import CommandManager

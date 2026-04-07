@@ -12,8 +12,8 @@ from oregon_processing.util.logging_manager import get_logger
 
 from typing import TYPE_CHECKING
 
-from src.oregon_processing.util.command_manager import CommandManager
-from src.oregon_processing.util.system_status import FirmwareVersion, SystemStatus, SystemStatusChecker
+from oregon_processing.util.command_manager import CommandManager
+from oregon_processing.util.system_status import FirmwareVersion, SystemStatus, SystemStatusChecker
 if TYPE_CHECKING:
 
 

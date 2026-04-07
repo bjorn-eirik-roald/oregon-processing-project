@@ -7,7 +7,7 @@ Device Mode Manager for Oregon RFID
 from typing import TYPE_CHECKING
 
 from oregon_processing.util.logging_manager import get_logger
-from src.oregon_processing.util.system_status import SystemStatus, SystemStatusChecker
+from oregon_processing.util.system_status import SystemStatus, SystemStatusChecker
 if TYPE_CHECKING:
     from oregon_processing.util.command_manager import CommandManager
 

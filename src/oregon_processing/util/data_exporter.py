@@ -9,9 +9,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from oregon_processing.util.logging_manager import get_logger
-from src.oregon_processing.util.device_mode_manager import DeviceModeManager
-from src.oregon_processing.util.system_status import SystemStatus
-from src.oregon_processing.util.upload_history import UploadHistory, UploadHistoryChecker
+from oregon_processing.util.device_mode_manager import DeviceModeManager
+from oregon_processing.util.system_status import SystemStatus
+from oregon_processing.util.upload_history import UploadHistory, UploadHistoryChecker
 
 if TYPE_CHECKING:
     from oregon_processing.util.format_manager import FormatManager

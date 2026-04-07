@@ -10,7 +10,7 @@ from oregon_processing.util.logging_manager import get_logger
 import time
 from serial import Serial
 
-from src.oregon_processing.util.exceptions import UnexpectedResponseError
+from oregon_processing.util.exceptions import UnexpectedResponseError
 
 
 class CommandManager:

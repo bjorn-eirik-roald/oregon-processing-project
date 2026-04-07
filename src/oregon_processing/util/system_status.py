@@ -2,7 +2,7 @@ from oregon_processing.util.command_manager import CommandManager
 from oregon_processing.util.logging_manager import get_logger
 
 from oregon_processing.util.exceptions import UnexpectedResponseError
-from src.oregon_processing.util.device_mode_manager import DeviceModeManager
+from oregon_processing.util.device_mode_manager import DeviceModeManager
 
 from dataclasses import dataclass, field
 from typing import Optional, List, ClassVar
