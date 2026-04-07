@@ -159,13 +159,13 @@ class SystemStatusChecker:
 
             # Use specific parsing for the first 3 lines, then auto-parse the rest
             if line_num == 0:
-                self._parse_line_1(line, status)
+                self._parse_line_1(line=line, status=status)
             elif line_num == 1:
-                self._parse_line_2(line, status)
+                self._parse_line_2(line=line, status=status)
             elif line_num == 2:
-                self._parse_line_3(line, status)
+                self._parse_line_3(line=line, status=status)
             else:
-                self._auto_parse_line(line, status)
+                self._auto_parse_line(line=line, line_num=line_num, status=status)
 
         try:
             status.check_prerequisites()  # validate prerequisites
@@ -229,36 +229,36 @@ class SystemStatusChecker:
     def _auto_parse_line(self, line: str, line_num: int, status: SystemStatus):
 
         if 'mode' in line:
-            self._parse_mode_line(line, line_num, status)
+            self._parse_mode_line(line=line, line_num=line_num, status=status)
         elif 'supply voltage' in line:
-            self._parse_supply_voltage_line(line, line_num, status)
+            self._parse_supply_voltage_line(line=line, line_num=line_num, status=status)
         elif ('standby amps' in line or 'sleep amps' in line) and 'amps' in line:
-            self._parse_standby_amps_line(line, line_num, status)
+            self._parse_standby_amps_line(line=line, line_num=line_num, status=status)
         elif line.startswith('noise'):
-            self._parse_noise_line(line, line_num, status)
+            self._parse_noise_line(line=line, line_num=line_num, status=status)
         elif 'antenna' in line and '#' in line:
-            self._parse_antenna_line(line, line_num, status)
+            self._parse_antenna_line(line=line, line_num=line_num, status=status)
         elif 'shutdown' in line and ('supercap' in line or 'supply' in line):
-            self._parse_shutdown_line(line, line_num, status)
+            self._parse_shutdown_line(line=line, line_num=line_num, status=status)
         elif 'sleep battery' in line or (line.startswith('battery') and 'sleep' not in line):
-            self._parse_sleep_battery_line(line, line_num, status)
+            self._parse_sleep_battery_line(line=line, line_num=line_num, status=status)
         elif 'tags in archive' in line:
-            self._parse_tags_in_archive_line(line, line_num, status)
+            self._parse_tags_in_archive_line(line=line, line_num=line_num, status=status)
         elif 'bluetooth' in line:
-            self._parse_bluetooth_line(line, line_num, status)
+            self._parse_bluetooth_line(line=line, line_num=line_num, status=status)
         elif "gnss logged every " in line or 'gnss log is off' in line:
-            self._parse_gnss_log_line(line, line_num, status)
+            self._parse_gnss_log_line(line=line, line_num=line_num, status=status)
         else:
             error_message = f"Unrecognized line format in system status at row {line_num + 1} of SY response: '{line}'"
             self._logger.error(error_message)
             raise UnexpectedResponseError(error_message)
 
-    def _parse_mode_line(self, line: str, status: SystemStatus):
+    def _parse_mode_line(self, line: str, line_num: int, status: SystemStatus):
         mode = line.split(' mode')[0].strip() or None
 
         # valdate mode is one of expected values
         if not DeviceModeManager.is_valid_mode(mode):
-            error_message = f"Unexpected mode value parsed from SY response: '{mode}' in line: '{line}'"
+            error_message = f"Unexpected mode value parsed from SY response: '{mode}' in line {line_num + 1}: '{line}'"
             self._logger.error(error_message)
             raise UnexpectedResponseError(error_message)
         status.mode = mode
