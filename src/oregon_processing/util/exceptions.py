@@ -25,4 +25,7 @@ class UserAbortError(Exception):
 class DeviceHealthError(Exception):
     """Error for when device health check fails or device clock is not in sync."""
 
+class ClockSyncError(Exception):
+    """Raised when device clock is not synchronized within acceptable tolerance."""
+
 

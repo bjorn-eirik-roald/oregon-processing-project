@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 from oregon_processing.util.logging_manager import get_logger
-from oregon_processing.util.exceptions import CommandTransmissionError, UnexpectedResponseError
+from oregon_processing.util.exceptions import ClockSyncError, CommandTransmissionError, UnexpectedResponseError
 
 if TYPE_CHECKING:
     from oregon_processing.util.command_manager import CommandManager
@@ -98,27 +98,25 @@ class ClockManager:
             if confirm in ['n', 'no']:
                 self._logger.debug("User selected not to sync device time.")
 
-                return clock_check_result
-
             elif confirm in ['y', 'yes']:
                 self._logger.debug("User selected to synch computer/device times.")
 
-            try:
-                self._sync_device_time()
-                is_synchronized, time_diff, device_clock_status, computer_datetime = self._check_if_synched(tolerance_seconds=tolerance_seconds)
-                self._print_clock_status(is_synchronized, device_clock_status, computer_datetime, time_diff)
-                clock_check_result.synchronized = is_synchronized
-                clock_check_result.device_datetime = device_clock_status.datetime
-                clock_check_result.device_elapsed_time = device_clock_status.elapsed_time
-                clock_check_result.computer_datetime = computer_datetime
+                try:
+                    self._sync_device_time()
+                    is_synchronized, time_diff, device_clock_status, computer_datetime = self._check_if_synched(tolerance_seconds=tolerance_seconds)
+                    self._print_clock_status(is_synchronized, device_clock_status, computer_datetime, time_diff)
+                    clock_check_result.synchronized = is_synchronized
+                    clock_check_result.device_datetime = device_clock_status.datetime
+                    clock_check_result.device_elapsed_time = device_clock_status.elapsed_time
+                    clock_check_result.computer_datetime = computer_datetime
 
 
-            except Exception as e:
-                error_message = f"Failed to synchronize device time: {e}"
-                self._logger.error(error_message)
-                clock_check_result.error = error_message
+                except Exception as e:
+                    error_message = f"Failed to synchronize device time: {e}"
+                    self._logger.error(error_message)
+                    raise ClockSyncError(error_message)
 
-            return clock_check_result
+        return clock_check_result
 
     def _get_device_datetime(self) -> ClockStatus:
         """
