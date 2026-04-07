@@ -141,7 +141,7 @@ class SystemStatusChecker:
 
         status = SystemStatus()  # create empty SystemStatus
 
-        # Validate we have at least 3 lines to parse the row 1-3, which are always in teh same rows.
+        # Validate we have at least 3 lines to parse the row 1-3, which are always in the same rows.
         if len(status_lines) < 3:
             error_message = f"Expected at least 3 lines in SY response, got {len(status_lines)}"
             self._logger.error(error_message)
@@ -154,8 +154,6 @@ class SystemStatusChecker:
                 error_message = f"Empty line encountered in SY response at row {line_num + 1} of SY response."
                 self._logger.error(error_message)
                 raise UnexpectedResponseError(error_message)
-
-            line = line.lower()  # normalize to lowercase for easier parsing, but keep original line in case needed for error messages or raw output
 
             # Use specific parsing for the first 3 lines, then auto-parse the rest
             if line_num == 0:
@@ -177,14 +175,16 @@ class SystemStatusChecker:
         return status
 
     def _parse_line_1(self, line: str, status: SystemStatus):
+
+        line_lower = line.lower()
         # Line 0: device type
-        if not "oregon rfid" in line:
+        if not "oregon rfid" in line_lower:
             error_message = f"Unexpected device type line format at row 1 of SY response: '{line}'"
             self._logger.error(error_message)
             raise UnexpectedResponseError(error_message)
-        if 'single antenna' in line:
+        if 'single antenna' in line_lower:
             status.device_type = 'ORSR'
-        elif 'multiple antenna' in line:
+        elif 'multiple antenna' in line_lower:
             status.device_type = 'ORMR'
         else:
             error_message = f"Could not determine device type from line 1 of SY response: '{line}'"
@@ -193,6 +193,7 @@ class SystemStatusChecker:
 
     def _parse_line_2(self, line: str, status: SystemStatus):
 
+        #Line 1: version and serial number
         line_splits = line.split()
         if len(line_splits) != 2:
             error_message = f"Unexpected version/serial line format at row 2 of SY response: '{line}'"
@@ -228,25 +229,27 @@ class SystemStatusChecker:
 
     def _auto_parse_line(self, line: str, line_num: int, status: SystemStatus):
 
-        if 'mode' in line:
+        line_lower = line.lower()
+
+        if 'mode' in line_lower:
             self._parse_mode_line(line=line, line_num=line_num, status=status)
-        elif 'supply voltage' in line:
+        elif 'supply voltage' in line_lower:
             self._parse_supply_voltage_line(line=line, line_num=line_num, status=status)
-        elif ('standby amps' in line or 'sleep amps' in line) and 'amps' in line:
+        elif ('standby amps' in line_lower or 'sleep amps' in line_lower) and 'amps' in line_lower:
             self._parse_standby_amps_line(line=line, line_num=line_num, status=status)
-        elif line.startswith('noise'):
+        elif line_lower.startswith('noise'):
             self._parse_noise_line(line=line, line_num=line_num, status=status)
-        elif 'antenna' in line and '#' in line:
+        elif 'antenna' in line_lower and '#' in line_lower:
             self._parse_antenna_line(line=line, line_num=line_num, status=status)
-        elif 'shutdown' in line and ('supercap' in line or 'supply' in line):
+        elif 'shutdown' in line_lower and ('supercap' in line_lower or 'supply' in line_lower):
             self._parse_shutdown_line(line=line, line_num=line_num, status=status)
-        elif 'sleep battery' in line or (line.startswith('battery') and 'sleep' not in line):
+        elif 'sleep battery' in line_lower or (line_lower.startswith('battery') and 'sleep' not in line_lower):
             self._parse_sleep_battery_line(line=line, line_num=line_num, status=status)
-        elif 'tags in archive' in line:
+        elif 'tags in archive' in line_lower:
             self._parse_tags_in_archive_line(line=line, line_num=line_num, status=status)
-        elif 'bluetooth' in line:
+        elif 'bluetooth' in line_lower:
             self._parse_bluetooth_line(line=line, line_num=line_num, status=status)
-        elif "gnss logged every " in line or 'gnss log is off' in line:
+        elif "gnss logged every " in line_lower or 'gnss log is off' in line_lower:
             self._parse_gnss_log_line(line=line, line_num=line_num, status=status)
         else:
             error_message = f"Unrecognized line format in system status at row {line_num + 1} of SY response: '{line}'"
@@ -254,6 +257,7 @@ class SystemStatusChecker:
             raise UnexpectedResponseError(error_message)
 
     def _parse_mode_line(self, line: str, line_num: int, status: SystemStatus):
+
         mode = line.split(' mode')[0].strip() or None
 
         # valdate mode is one of expected values
@@ -320,9 +324,11 @@ class SystemStatusChecker:
         status.bluetooth_status = line
 
     def _parse_gnss_log_line(self, line: str, line_num: int, status: SystemStatus):
-        if "gnss logged every " in line:
+
+        line_lower = line.lower()
+        if "gnss logged every " in line_lower:
             status.gnss_log_interval_minutes = True
-        elif 'gnss log is off' in line:
+        elif 'gnss log is off' in line_lower:
             status.gnss_log_interval_minutes = False
         else:
             error_message = f"Unrecognized GNSS log line format in SY response at row {line_num + 1}: '{line}'"
