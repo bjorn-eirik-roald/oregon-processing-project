@@ -82,7 +82,7 @@ class SystemStatus:
 
     # --- Class constants (NOT dataclass fields) ---
     MUST_HAVE_FIELDS: ClassVar[list[str]] = ['device_type', 'version', 'serial_number', 'reader_name', 'mode']
-    ACCEPTED_DEVICE_TYPES: ClassVar[list[str]] = ['ORSR', 'ORMR']
+    ACCEPTED_DEVICE_TYPES: ClassVar[list[str]] = ['orsr', 'ormr']
     ACCEPTED_MODES: ClassVar[list[str]] = list(DeviceModeManager.MODES.keys())
 
     # --- Data fields ---
@@ -108,13 +108,13 @@ class SystemStatus:
 
     # --- Logic ---
     def check_prerequisites(self):
-        if self.device_type not in self.ACCEPTED_DEVICE_TYPES:
+        if self.device_type.lower() not in self.ACCEPTED_DEVICE_TYPES:
             raise UnexpectedResponseError(
                 f"Unsupported device type '{self.device_type}'. "
                 f"Only {self.ACCEPTED_DEVICE_TYPES} are supported."
             )
 
-        if self.mode not in self.ACCEPTED_MODES:
+        if self.mode.lower() not in self.ACCEPTED_MODES:
             raise UnexpectedResponseError(
                 f"Unsupported device mode '{self.mode}'. "
                 f"Expected one of: {self.ACCEPTED_MODES}"

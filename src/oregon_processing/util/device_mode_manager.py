@@ -21,7 +21,10 @@ class DeviceModeManager:
     MODES = {
         'standby': {'display': 'Standby', 'command': 'ST'},
         'run': {'display': 'Run', 'command': 'ON'},
-        'sleep': {'display': 'Sleep', 'command': 'OF'}
+        'sleep': {'display': 'Sleep', 'command': 'OF'},
+        'Standby': {'display': 'Standby', 'command': 'ST'},
+        'Run': {'display': 'Run', 'command': 'ON'},
+        'Sleep': {'display': 'Sleep', 'command': 'OF'}
     }
     def __init__(self, command_manager: CommandManager, status_checker: SystemStatusChecker):
         """
@@ -82,7 +85,6 @@ class DeviceModeManager:
             True if mode change successful, False otherwise.
         """
 
-        mode_name = mode_name.lower()
 
         if mode_name not in self.MODES:
             error_message = f"Invalid mode: {mode_name}. Can only set modes to: Standby, Run, Sleep"
