@@ -199,8 +199,9 @@ class Communicator:
         clock_check_result : ClockCheckResult
             Result of clock check with fields:
             - synchronized (bool): Whether device time is synchronized within tolerance
-            - device_time (datetime): Current device time (or None if not available)
-            - system_time (datetime): Current system time
+            - device_datetime (datetime): Current device time (or None if not available)
+            - device_elapsed_time (timedelta): Elapsed time since device boot (or None if not available)
+            - computer_datetime (datetime): Current system time
             - time_difference (timedelta): Absolute difference between device and system time
         """
         if not self._connection:

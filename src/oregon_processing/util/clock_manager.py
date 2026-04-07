@@ -52,7 +52,7 @@ class ClockManager:
 
         self._command_manager = command_manager
 
-    def control_device_datetime(self, tolerance_seconds: int = 15, attempt_sync: bool = True) -> dict:
+    def control_device_datetime(self, tolerance_seconds: int = 15, attempt_sync: bool = True) -> ClockCheckResult:
         """
         Check if device datetime is synchronized with computer time and optionally update it.
 
@@ -69,8 +69,6 @@ class ClockManager:
         Returns
         -------
         ClockCheckResult
-            Data class instance with attributes: synchronized, device_datetime, elapsed_time, computer_datetime,
-            time_difference, was_updated, update_command_sent, update_response, error
         """
 
 
@@ -126,19 +124,12 @@ class ClockManager:
         """
         Retrieve the device's current date and time using the DT and TZ commands.
 
-        When sync_status is 'E' (elapsed time), returns elapsed_time instead of datetime.
-        When sync_status is 'G', 'N', or 'U', returns timezone-aware datetime object.
+        When sync_status is 'E' (elapsed time), uses elapsed_time instead of datetime.
+        When sync_status is 'G', 'N', or 'U', uses timezone-aware datetime object.
 
         Returns
         -------
         ClockStatus
-            Parsed device datetime with attributes:
-
-            - 'datetime': Timezone-aware datetime object (None if elapsed time)
-            - 'elapsed_time': timedelta object (None if absolute datetime)
-            - 'milliseconds': Milliseconds component (int, 0-999)
-            - 'timezone': Timezone object (None if elapsed time)
-            - 'sync_status': Single character sync status ('G', 'N', 'U', or 'E')
         """
 
 
@@ -175,8 +166,12 @@ class ClockManager:
 
         Returns
         -------
-        float
-            Difference in seconds between device and computer datetimes.
+        is_synchronized : bool
+            Whether device time is in sync with computer time.
+        time_diff : float or None
+            Time difference in seconds (None if elapsed time only).
+        device_clock_status : ClockStatus
+        computer_datetime : datetime
         """
 
         device_clock_status: ClockStatus = self._get_device_datetime()
