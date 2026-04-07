@@ -23,7 +23,7 @@ class ClockStatus:
 
 @dataclass
 class ClockCheckResult:
-    synced: bool
+    synchronized: bool
     device_datetime: datetime | None
     device_elapsed_time: timedelta | None
     computer_datetime: datetime
@@ -69,28 +69,28 @@ class ClockManager:
         Returns
         -------
         ClockCheckResult
-            Data class instance with attributes: synced, device_datetime, elapsed_time, computer_datetime,
+            Data class instance with attributes: synchronized, device_datetime, elapsed_time, computer_datetime,
             difference_seconds, was_updated, update_command_sent, update_response, error
         """
 
 
 
 
-        is_synced, time_diff, device_clock_status, computer_datetime = self._check_if_synched(tolerance_seconds=tolerance_seconds)
+        is_synchronized, time_diff, device_clock_status, computer_datetime = self._check_if_synched(tolerance_seconds=tolerance_seconds)
 
         clock_check_result = ClockCheckResult(
-            synced=is_synced,
+            synchronized=is_synchronized,
             device_datetime=device_clock_status.datetime,
             device_elapsed_time=device_clock_status.elapsed_time,
             computer_datetime=computer_datetime,
             difference_seconds=time_diff,
             )
 
-        self._print_clock_status(is_synced, device_clock_status, computer_datetime, time_diff)
+        self._print_clock_status(is_synchronized, device_clock_status, computer_datetime, time_diff)
 
 
         # Attempt sync if out of sync and requested
-        if not is_synced and attempt_sync:
+        if not is_synchronized and attempt_sync:
 
             confirm = None
             while confirm not in ['y', 'yes', 'n', 'no']:
@@ -107,9 +107,9 @@ class ClockManager:
 
             try:
                 self._sync_device_time()
-                is_synced, time_diff, device_clock_status, computer_datetime = self._check_if_synched(tolerance_seconds=tolerance_seconds)
-                self._print_clock_status(is_synced, device_clock_status, computer_datetime, time_diff)
-                clock_check_result.synced = is_synced
+                is_synchronized, time_diff, device_clock_status, computer_datetime = self._check_if_synched(tolerance_seconds=tolerance_seconds)
+                self._print_clock_status(is_synchronized, device_clock_status, computer_datetime, time_diff)
+                clock_check_result.synchronized = is_synchronized
                 clock_check_result.device_datetime = device_clock_status.datetime
                 clock_check_result.device_elapsed_time = device_clock_status.elapsed_time
                 clock_check_result.computer_datetime = computer_datetime
@@ -190,22 +190,22 @@ class ClockManager:
         if sync_status == 'E':
             # No absolute datetime available
             time_diff = None
-            is_synced = False
+            is_synchronized = False
         else:
             device_datetime_utc = device_datetime.astimezone(timezone.utc)
             computer_datetime_utc = computer_datetime.astimezone(timezone.utc)
             time_diff = abs(device_datetime_utc - computer_datetime_utc).total_seconds()
-            is_synced = time_diff <= tolerance_seconds
+            is_synchronized = time_diff <= tolerance_seconds
 
-        return is_synced, time_diff, device_clock_status, computer_datetime
+        return is_synchronized, time_diff, device_clock_status, computer_datetime
 
-    def _print_clock_status(self, is_synced: bool, device_clock_status: ClockStatus, computer_dt, time_diff) -> None:
+    def _print_clock_status(self, is_synchronized: bool, device_clock_status: ClockStatus, computer_dt, time_diff) -> None:
         """
         Print clock status information.
 
         Parameters
         ----------
-        is_synced : bool
+        is_synchronized : bool
             Whether device time is in sync with computer time.
         device_dt : datetime or None
             Device datetime (None if elapsed time only).
@@ -230,7 +230,7 @@ class ClockManager:
         computer_offset_hours = computer_dt.astimezone().utcoffset().total_seconds() / 3600
         computer_tz_str = f"(UT{computer_offset_hours:+.1f})"
 
-        status_message = f"Device Clock Status:\n    {'✓ IN SYNC' if is_synced else '⚠ OUT OF SYNC'}\n    Device Clock Source: {sync_status_name}\n"
+        status_message = f"Device Clock Status:\n    {'✓ IN SYNC' if is_synchronized else '⚠ OUT OF SYNC'}\n    Device Clock Source: {sync_status_name}\n"
 
 
         if device_dt:
@@ -245,7 +245,7 @@ class ClockManager:
 
         status_message += f"    Computer Time: {computer_dt.strftime('%Y-%m-%d %H:%M:%S')} {computer_tz_str}"
 
-        if time_diff is not None and not is_synced:
+        if time_diff is not None and not is_synchronized:
             status_message += f"\n    Computer/Device Time Difference: {time_diff:+.1f}s ({abs(time_diff):.1f}s {'ahead' if time_diff > 0 else 'behind'})"
 
         self._logger.info(status_message)

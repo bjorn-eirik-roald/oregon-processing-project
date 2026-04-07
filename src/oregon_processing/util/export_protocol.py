@@ -87,7 +87,7 @@ class ExportProtocol:
 
         # Execute device clock sync check on device
         clock_check_result: ClockCheckResult = self._communicator.control_device_datetime(tolerance_seconds=10)
-        if not clock_check_result.synced:
+        if not clock_check_result.synchronized:
             error_message = "Device clock is not in sync and could not be automatically updated. Please address the issue before proceeding."
             self._logger.error(error_message)
             raise DeviceHealthError(error_message)

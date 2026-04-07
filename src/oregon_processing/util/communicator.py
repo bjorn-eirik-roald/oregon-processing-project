@@ -196,14 +196,19 @@ class Communicator:
 
         Returns
         -------
-
+        clock_check_result : ClockCheckResult
+            Result of clock check with fields:
+            - synchronized (bool): Whether device time is synchronized within tolerance
+            - device_time (datetime): Current device time (or None if not available)
+            - system_time (datetime): Current system time
+            - time_difference (timedelta): Absolute difference between device and system time
         """
         if not self._connection:
             error_message = f"Not connected to device. Cannot check or control device datetime."
             self._logger.error(error_message)
             raise ConnectionError(error_message)
 
-        clock_check_result: ClockCheckResult = self._clock_manager.check_device_datetime(tolerance_seconds, attempt_sync)
+        clock_check_result: ClockCheckResult = self._clock_manager.control_device_datetime(tolerance_seconds, attempt_sync)
         return clock_check_result
 
     def export_event_records(self, dates: list, output_dir: Path = Path("")) -> bool:
