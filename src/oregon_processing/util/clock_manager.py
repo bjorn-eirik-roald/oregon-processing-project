@@ -2,8 +2,10 @@
 """
 Oregon RFID Clock Manager - Handles device date/time operations
 """
+
 from __future__ import annotations
 from typing import TYPE_CHECKING
+
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
@@ -36,7 +38,7 @@ class ClockManager:
         'G': "GNSS Time",
         'N': "Network time using CAT5 cable",
         'U': "Uncalibrated (entered with DT command)",
-        'E': "Ellapsed time since power-up"
+        'E': "Elapsed time since power-up"
     }
 
     def __init__(self, command_manager: CommandManager):

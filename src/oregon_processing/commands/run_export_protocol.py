@@ -1,4 +1,6 @@
-
+"""
+Execute the export protocol to retrieve data from a Oregon RFID and store in database define by config
+"""
 
 from oregon_processing.util import ExportProtocol
 from oregon_processing.util import (ConfigNotFoundError, InvalidConfigError, ConnectionFailedError, UnexpectedResponseError,

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Oregon RFID Terminal
+Open Terminal connection to Oregon RFID Device
 """
 
 from oregon_processing.util.logging_manager import LoggingManager, get_logger
