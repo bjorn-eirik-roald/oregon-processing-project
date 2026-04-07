@@ -65,6 +65,8 @@ class FirmwareVersion:
             Version string in format like 'V2.74N' or 'V2.74' or 'V1.998'.
         """
         # Starts with 'V' followed by unknown number of digits for major, then a dot, then unknown number of digits for minor, then optional single letter suffix
+
+        version_str = version_str.strip().upper()  # normalize to uppercase and strip whitespace
         match = re.match(r"V([0-9]+)\.([0-9]+)([A-Z]*)", version_str)
         if match:
             self._major = int(match.group(1))
