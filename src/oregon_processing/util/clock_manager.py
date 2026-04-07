@@ -27,7 +27,7 @@ class ClockCheckResult:
     device_datetime: datetime | None
     device_elapsed_time: timedelta | None
     computer_datetime: datetime
-    difference_seconds: float | None
+    time_difference: float | None
 
 class ClockManager:
     """Manages device clock synchronization and datetime operations."""
@@ -70,7 +70,7 @@ class ClockManager:
         -------
         ClockCheckResult
             Data class instance with attributes: synchronized, device_datetime, elapsed_time, computer_datetime,
-            difference_seconds, was_updated, update_command_sent, update_response, error
+            time_difference, was_updated, update_command_sent, update_response, error
         """
 
 
@@ -83,7 +83,7 @@ class ClockManager:
             device_datetime=device_clock_status.datetime,
             device_elapsed_time=device_clock_status.elapsed_time,
             computer_datetime=computer_datetime,
-            difference_seconds=time_diff,
+            time_difference=time_diff,
             )
 
         self._print_clock_status(is_synchronized, device_clock_status, computer_datetime, time_diff)
