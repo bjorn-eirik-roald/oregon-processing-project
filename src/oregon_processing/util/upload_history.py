@@ -37,23 +37,21 @@ class UploadHistoryChecker:
         self._command_manager = command_manager
         self._mode_manager = mode_manager
 
-    def get_upload_history(self, tag_id: str) -> UploadHistory:
-        """Retrieves upload history for a given tag ID."""
+    def get_upload_history(self) -> UploadHistory:
 
         """
         Parse upload history output from UH command.
 
         Returns
         -------
-        dict
-            Parsed upload history with upload records and metadata.
+        UploadHistory
         """
 
 
-        self._mode_manager.get_current_mode() # update mode property
+        mode = self._mode_manager.get_current_mode() # update mode property
         old_mode = None
-        if self._mode.lower() != 'standby':
-            old_mode = self._mode
+        if mode.lower() != 'standby':
+            old_mode = mode
             self.change_mode('Standby')
 
         upload_history_lines = self._command_manager.send_command("UH")
@@ -82,7 +80,9 @@ class UploadHistoryChecker:
                     try:
                         upload_history.upload_count = int(parts[1].strip())
                     except ValueError:
-                        pass
+                        error_message = f"Unrecognized line format in upload history at row {i + 1}: '{line}'"
+                        self._logger.error(error_message)
+                        raise UnexpectedResponseError(error_message)
 
             # Skip header row (Num   UP Date    Time    Records)
             elif line_stripped.startswith('Num'):

@@ -191,7 +191,7 @@ class DataExporter:
             self._logger.info(f"Changed device mode to Standby for export. Will return to {old_mode} mode after export is complete.")
 
         upload_history: UploadHistory = self._upload_history_checker.get_upload_history()
-        total_number_of_records = upload_history["total_records"]
+        total_number_of_records = upload_history.total_records
 
         self._logger.info("Initializing export of detection records from {} date(s).".format(len(dates)))
         self._logger.debug(f"Total records on device: {total_number_of_records}")
