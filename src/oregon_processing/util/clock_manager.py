@@ -321,9 +321,9 @@ class ClockManager:
             raise UnexpectedResponseError(error_message)
 
         dt_line_format = None
-        if parts[-1] == 'E':
+        if parts[-1] == 'E': # Elapsed time --> last part is 'E' and time is in HH:MM:SS.milliseconds format without date
             dt_line_format = "elapsed"
-        elif parts[-1] in 'GNU':
+        elif parts[-2] in 'GNU': # Absolute datetime --> last part is timezone but part before last is sync status (G, N, or U) and date is in YYYY-MM-DD format
             dt_line_format = "absolute"
         else:
             error_message = f"Unrecognized DT response format: {dt_line}"
