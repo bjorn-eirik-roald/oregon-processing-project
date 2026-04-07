@@ -3,8 +3,8 @@
 Oregon RFID Clock Manager - Handles device date/time operations
 """
 from __future__ import annotations
-from dataclasses import dataclass
 from typing import TYPE_CHECKING
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 from oregon_processing.util.logging_manager import get_logger

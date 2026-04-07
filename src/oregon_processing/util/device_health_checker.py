@@ -6,15 +6,18 @@ Provides methods for checking device health status, including supply voltage
 and other system parameters.
 """
 
+from __future__ import annotations
+from typing import TYPE_CHECKING
+
+
 from dataclasses import dataclass
 import re
 from oregon_processing.util.logging_manager import get_logger
 
-from typing import TYPE_CHECKING
 
-from oregon_processing.util.command_manager import CommandManager
-from oregon_processing.util.system_status import FirmwareVersion, SystemStatus, SystemStatusChecker
 if TYPE_CHECKING:
+    from oregon_processing.util.command_manager import CommandManager
+    from oregon_processing.util.system_status import FirmwareVersion, SystemStatus, SystemStatusChecker
 
 
 @dataclass

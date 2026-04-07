@@ -3,10 +3,12 @@
 Data Exporter for Oregon RFID device data
 """
 
+from __future__ import annotations
+from typing import TYPE_CHECKING
+
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from oregon_processing.util.logging_manager import get_logger
 from oregon_processing.util.device_mode_manager import DeviceModeManager
