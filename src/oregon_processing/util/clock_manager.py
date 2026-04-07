@@ -143,12 +143,6 @@ class ClockManager:
         tz_line: str = self._send_tz_command()
         self._parse_tz_response(tz_line, clock_status)
 
-        device_datetime = clock_status.datetime
-        device_tz = clock_status.timezone
-
-        device_datetime_tz_aware = device_datetime.replace(tzinfo=device_tz) if device_datetime and device_tz else None
-        clock_status.datetime = device_datetime_tz_aware
-
         return clock_status
 
     def _check_if_synched(self, tolerance_seconds: int) -> bool:
@@ -291,7 +285,7 @@ class ClockManager:
 
         return dt_line
 
-    def _parse_dt_response(self, dt_line: str, clock_status: ClockStatus = None) -> ClockStatus:
+    def _parse_dt_response(self, dt_line: str, clock_status: ClockStatus) -> None:
         """
         Parse the DT command response line into its components.
 
@@ -305,13 +299,9 @@ class ClockManager:
 
         Returns
         -------
-        ClockStatus
-            Parsed DT response encapsulated in a ClockStatus object.
-
+        None
         """
 
-        if not clock_status:
-            clock_status = ClockStatus()
 
         parts = dt_line.split()
 
@@ -331,13 +321,12 @@ class ClockManager:
             raise UnexpectedResponseError(error_message)
 
         if dt_line_format == "elapsed":
-            clock_status: ClockStatus = self._parse_elapsed_time_dt_response(dt_line, clock_status)
+            self._parse_elapsed_time_dt_response(dt_line, clock_status)
         elif dt_line_format == "absolute":
-            clock_status: ClockStatus = self._parse_absolute_dt_response(dt_line, clock_status)
+            self._parse_absolute_dt_response(dt_line, clock_status)
 
-        return clock_status
 
-    def _parse_elapsed_time_dt_response(self, dt_line: str, clock_status: ClockStatus = None) -> ClockStatus:
+    def _parse_elapsed_time_dt_response(self, dt_line: str, clock_status: ClockStatus) -> None:
         """
         Parse a DT response line that contains elapsed time since power-up.
 
@@ -350,12 +339,9 @@ class ClockManager:
 
         Returns
         -------
-        ClockStatus
-            Parsed DT response encapsulated in a ClockStatus object with elapsed_time and sync_status.
+        None
         """
 
-        if not clock_status:
-            clock_status = ClockStatus()
 
         parts = dt_line.split()
 
@@ -390,9 +376,8 @@ class ClockManager:
 
         clock_status.elapsed_time = elapsed_time
         clock_status.sync_status = sync_status
-        return clock_status
 
-    def _parse_absolute_dt_response(self, dt_line: str, clock_status: ClockStatus = None) -> ClockStatus:
+    def _parse_absolute_dt_response(self, dt_line: str, clock_status: ClockStatus) -> ClockStatus:
         """
         Parse a DT response line that contains absolute datetime.
 
@@ -409,11 +394,8 @@ class ClockManager:
             Parsed DT response encapsulated in a ClockStatus object with datetime, sync_status, and timezone.
         """
 
-        if not clock_status:
-            clock_status = ClockStatus()
-
         parts = dt_line.split()
-        if len(parts) < 3:
+        if len(parts) < 4: # Expect at least date, time, sync status, and timezone
             error_message = f"Unrecognized DT response format: {dt_line}"
             self._logger.error(error_message)
             raise UnexpectedResponseError(error_message)
@@ -446,8 +428,6 @@ class ClockManager:
         clock_status.datetime = dt
         clock_status.sync_status = sync_status
 
-        return clock_status
-
     def _send_tz_command(self) -> str:
         try:
             lines = self._command_manager.send_command("TZ")
@@ -465,7 +445,7 @@ class ClockManager:
 
         return tz_line
 
-    def _parse_tz_response(self, tz_line: str, clock_status: ClockStatus = None) -> timezone:
+    def _parse_tz_response(self, tz_line: str, clock_status: ClockStatus) -> None:
         """
         Parse timezone response from TZ command.
 
@@ -476,12 +456,8 @@ class ClockManager:
 
         Returns
         -------
-        timezone
-            Timezone object representing the device's timezone offset.
+        None
         """
-
-        if not clock_status:
-            clock_status = ClockStatus()
 
         hours = 0
         minutes = 0
@@ -548,4 +524,6 @@ class ClockManager:
         # Calculate total offset and return timezone object
         total_seconds = sign * (hours * 3600 + minutes * 60)
 
-        return timezone(timedelta(seconds=total_seconds))
+        tz = timezone(timedelta(seconds=total_seconds))
+        clock_status.timezone = tz
+        clock_status.datetime = clock_status.datetime.replace(tzinfo=tz) if clock_status.datetime else None
