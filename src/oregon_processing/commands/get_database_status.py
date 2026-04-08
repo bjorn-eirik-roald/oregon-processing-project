@@ -6,7 +6,7 @@ from oregon_processing.util import DatabaseManager
 from oregon_processing.util import OregonConfig
 from oregon_processing.util import ConfigNotFoundError, InvalidConfigError
 
-def get_latest_record_dates():
+def get_database_status():
 
     try:
         config = OregonConfig()
@@ -28,4 +28,4 @@ def get_latest_record_dates():
             print(f"Serial Number: {serial} - No detection record files found.")
 
 if __name__ == "__main__":
-    get_latest_record_dates()
+    get_database_status()

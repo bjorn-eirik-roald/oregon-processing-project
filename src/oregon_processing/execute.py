@@ -1,4 +1,4 @@
-from oregon_processing.commands import setup_config, open_terminal, run_export_protocol, get_latest_record_dates
+from oregon_processing.commands import setup_config, open_terminal, run_export_protocol, get_database_status
 import argparse
 import sys
 
@@ -7,7 +7,7 @@ def main():
         "setup_config": setup_config,
         "open_terminal": open_terminal,
         "run_export_protocol": run_export_protocol,
-        "get_latest_record_dates": get_latest_record_dates
+        "get_database_status": get_database_status
     }
     parser = argparse.ArgumentParser(description="Execute a Oregon-Processing command.")
     parser.add_argument(
