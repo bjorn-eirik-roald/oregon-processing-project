@@ -108,14 +108,14 @@ class DeviceHealthChecker:
             warning_message = f"Device health check detected {total_issues} issue(s)."
 
             if critical_warnings:
-                warning_message += "\n  Critical:"
+                warning_message += "\n    Critical:"
                 for warning in critical_warnings:
-                    warning_message += f"\n    - {warning}"
+                    warning_message += f"\n      - {warning}"
 
             if non_critical_warnings:
-                warning_message += "\n  Non-critical:"
+                warning_message += "\n    Non-critical:"
                 for warning in non_critical_warnings:
-                    warning_message += f"\n    - {warning}"
+                    warning_message += f"\n      - {warning}"
 
             self._logger.warning(warning_message)
 
