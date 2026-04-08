@@ -305,7 +305,6 @@ class DataExporter:
             f"    Number of unique tags detected:        {str(len(unique_tags)).rjust(max_summary_width)}"
         )
 
-        self._logger.info(summary_message)
 
         # Calculate max width for counter alignment
         max_counter_width = len(f"({num_dates}/{num_dates})")
@@ -364,6 +363,8 @@ class DataExporter:
             self._logger.info("All detection record exports completed successfully.")
         else:
             self._logger.warning(f"{num_failed_exports} detection record exports failed. Please check the logs for details.")
+
+        self._logger.info(summary_message)
 
         if old_mode:
             self._mode_manager.change_mode(old_mode)
