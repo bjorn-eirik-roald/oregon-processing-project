@@ -4,8 +4,8 @@ Configuration Setup Script
 Standalone script to create or update the communicator configuration file.
 """
 
-from oregon_processing.util.oregon_config import OregonConfig
-from oregon_processing.util.exceptions import ConfigNotFoundError, InvalidConfigError
+from oregon_processing.util import OregonConfig
+from oregon_processing.util import ConfigNotFoundError, InvalidConfigError
 
 def setup_config():
     try:
