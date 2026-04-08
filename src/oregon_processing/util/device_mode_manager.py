@@ -97,7 +97,7 @@ class DeviceModeManager:
         if current_mode != mode_name:
             self._logger.debug(f"Changing device mode from '{current_mode}' to '{mode_name}' (sending {command} command).")
             self._command_manager.send_command(command)
-            if self.get_current_mode() == mode_name:
+            if self.get_current_mode().lower() == mode_name.lower():
                 self._logger.debug(f"Device mode changed from '{current_mode}' to '{mode_name}'.")
             else:
                 error_message = f"Device mode change failed! Expected mode: '{mode_name}', Actual mode: '{self.get_current_mode()}'"
