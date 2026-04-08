@@ -115,15 +115,9 @@ class DatabaseManager:
 
         self._logger.debug("Preparing output directories.")
 
-        self._root_output_dir = self._config.root_output_dir
-        self._root_log_dir = self._config.root_log_dir
-        self._root_export_data_dir = self._config.root_export_data_dir
-        self._crash_log_dir = self._config.crash_logs_dir
-
-        # Add serial number subdirectory to export logs, detection records, and event records
-        self._log_dir = self._config.root_log_dir / serial_number
-        self._detection_records_dir = self._config.root_detection_records_dir / serial_number
-        self._event_records_dir = self._config.root_event_records_dir / serial_number
+        # Define directories based on config and device serial number
+        self._define_root_directories()
+        self._define_serial_number_directories(serial_number)
 
         self._logger.info(f"Root output directory: {self._root_output_dir}", extra={"_skip_path_alias_filter": True})
         self._logger.debug(f"Root Export data directory: {self._root_export_data_dir}")
@@ -175,8 +169,8 @@ class DatabaseManager:
 
         self._logger.debug("Extracting dates from filenames...")
 
-        detection_record_dates = set(d for d in [extract_filename_date(f.name, logger=self._logger) for f in detection_record_files] if d is not None)
-        event_record_dates = set(d for d in [extract_filename_date(f.name, logger=self._logger) for f in event_record_files] if d is not None)
+        detection_record_dates = set(extract_filename_date(f.name, logger=self._logger) for f in detection_record_files)
+        event_record_dates = set(extract_filename_date(f.name, logger=self._logger) for f in event_record_files)
 
         # Generate expected date range from DEFAULT_FIRST_DATE to today
         today = date.today()
@@ -217,6 +211,41 @@ class DatabaseManager:
 
         return export_dates
 
+    def get_last_exported_detection_record_dates(self) -> dict[str, date]:
+        """
+        Get the date of last exported detection record of all serial numbers in database.
+
+        Returns
+        -------
+        dict[str, date]
+            Dictionary mapping serial numbers to their last exported detection record date.
+        """
+
+        self._define_root_directories()
+
+        root_detection_records_dir = self._config.root_detection_records_dir
+        detection_record_dirs = list(root_detection_records_dir.glob("*")) # Get all subdirectories (serial numbers) in detection records directory
+
+        last_exported_dates: dict[str, date] = {}
+        for detection_record_dir in detection_record_dirs:
+            serial = detection_record_dir.name
+            self._logger.debug(f"Checking detection record files for serial number: {serial}")
+
+
+            detection_record_files = list(detection_record_dir.glob("*.txt"))
+            if not detection_record_files:
+                self._logger.debug("No existing detection record files found.")
+                last_exported_dates[serial] = None
+                continue
+
+            detection_record_dates = set(extract_filename_date(f.name, logger=self._logger) for f in detection_record_files)
+
+            last_exported_date = max(detection_record_dates)
+            self._logger.debug(f"Last exported date based on existing detection record files: {last_exported_date}")
+            last_exported_dates[serial] = last_exported_date
+
+        return last_exported_dates
+
     @classmethod
     def prepare_crash_log_file(cls, config) -> Path:
         """Prepare and return the crash logs directory path."""
@@ -225,6 +254,20 @@ class DatabaseManager:
 
         crash_log_file = crash_logs_dir / f"crash_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
         return crash_log_file
+
+    def _define_root_directories(self) -> None:
+        """Define directory paths based on root directories and serial number."""
+        self._root_output_dir = self._config.root_output_dir
+        self._root_log_dir = self._config.root_log_dir
+        self._root_export_data_dir = self._config.root_export_data_dir
+        self._crash_log_dir = self._config.crash_logs_dir
+
+    def _define_serial_number_directories(self, serial_number: str) -> None:
+        # Add serial number subdirectory to export logs, detection records, and event records
+        self._log_dir = self._config.root_log_dir / serial_number
+        self._detection_records_dir = self._config.root_detection_records_dir / serial_number
+        self._event_records_dir = self._config.root_event_records_dir / serial_number
+
 
     def _format_date_intervals(self, dates: list) -> str:
         """

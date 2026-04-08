@@ -12,8 +12,8 @@ def extract_filename_date(filename: str, logger=None) -> date:
 
     Returns
     -------
-    date or None
-        The extracted date object, or None if no valid date found
+    date
+        The extracted date object
     """
     # Pattern to match _YYYY_MM_DD before file extension
     pattern = r'_(\d{4})_(\d{2})_(\d{2})\.\w+$'
