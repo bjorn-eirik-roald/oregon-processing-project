@@ -18,6 +18,13 @@ if TYPE_CHECKING:
 
 @dataclass
 class ClockStatus:
+    """"
+    Represents the clock status of the device, including datetime, elapsed time, synchronization status, and timezone.
+     - datetime: The current date and time on the device (if available).
+    - elapsed_time: The elapsed time since power-up (if absolute datetime is not available).
+    - sync_status: The synchronization status of the device clock (e.g., 'G', 'N', 'U', 'E').
+    - timezone: The timezone of the device clock (if available).
+    """
     datetime: datetime | None = None
     elapsed_time: timedelta | None = None
     sync_status: str | None = None
@@ -25,6 +32,15 @@ class ClockStatus:
 
 @dataclass
 class ClockCheckResult:
+    """
+    Represents the result of checking the device clock synchronization status, including whether it is synchronized
+    with the computer time, the device datetime or elapsed time, the computer datetime, and the time difference if applicable.
+        - synchronized: Whether the device clock is synchronized with the computer time.
+        - device_datetime: The current date and time on the device (if available).
+        - device_elapsed_time: The elapsed time since power-up (if absolute datetime is not available).
+        - computer_datetime: The current date and time on the computer.
+        - time_difference: The difference in seconds between the device and computer time (if absolute datetime is available).
+    """
     synchronized: bool
     device_datetime: datetime | None
     device_elapsed_time: timedelta | None
@@ -38,7 +54,11 @@ class ClockManager:
         'G': "GNSS Time",
         'N': "Network time using CAT5 cable",
         'U': "Uncalibrated (entered with DT command)",
-        'E': "Elapsed time since power-up"
+        'E': "Elapsed time since power-up",
+        'g': "GNSS Time",
+        'n': "Network time using CAT5 cable",
+        'u': "Uncalibrated (entered with DT command)",
+        'e': "Elapsed time since power-up"
     }
 
     def __init__(self, command_manager: CommandManager):
@@ -54,29 +74,25 @@ class ClockManager:
 
         self._command_manager = command_manager
 
-    def control_device_datetime(self, tolerance_seconds: int = 15, attempt_sync: bool = True) -> ClockCheckResult:
+    def control_device_datetime(self, tolerance_time_diff: int = 15, attempt_sync: bool = True) -> ClockCheckResult:
         """
         Check if device datetime is synchronized with computer time and optionally update it.
 
-        When device has elapsed time only (not synchronized), displays uptime and returns with error.
-        When device has absolute datetime, compares with computer time and prompts for sync if needed.
-
+        If device time is out of sync or uses elapsed time, prompts user to update device time to match computer time.
+        If user agrees, updates device time and re-checks synchronization status.
         Parameters
         ----------
-        tolerance_seconds : int
+        tolerance_time_diff : int
             Acceptable difference in seconds before device is considered out of sync. Default: 15
         attempt_sync : bool
             If True and out of sync, prompt user to update device time. Default: True
 
         Returns
         -------
-        ClockCheckResult
+        ClockCheckResult: Object containing result from clock check
         """
 
-
-
-
-        is_synchronized, time_diff, device_clock_status, computer_datetime = self._check_if_synched(tolerance_seconds=tolerance_seconds)
+        is_synchronized, time_diff, device_clock_status, computer_datetime = self._check_if_synched(tolerance_time_diff=tolerance_time_diff)
 
         clock_check_result = ClockCheckResult(
             synchronized=is_synchronized,
@@ -92,20 +108,24 @@ class ClockManager:
         # Attempt sync if out of sync and requested
         if not is_synchronized and attempt_sync:
 
+            # prompt user to confirm if they want to update device time to match computer time
             confirm = None
             while confirm not in ['y', 'yes', 'n', 'no']:
                 confirm = input("\nUpdate device time to match computer time? (yes/no): ").strip().lower()
                 print() # Add spacing after input for cleaner output
 
+            # log if user selected not to sync
             if confirm in ['n', 'no']:
                 self._logger.debug("User selected not to sync device time.")
 
+            # log if user selected to sync and attempt synchronization
             elif confirm in ['y', 'yes']:
                 self._logger.debug("User selected to synch computer/device times.")
 
+                # attempt to synchronize device time and re-check synchronization status
                 try:
                     self._sync_device_time()
-                    is_synchronized, time_diff, device_clock_status, computer_datetime = self._check_if_synched(tolerance_seconds=tolerance_seconds)
+                    is_synchronized, time_diff, device_clock_status, computer_datetime = self._check_if_synched(tolerance_time_diff=tolerance_time_diff)
                     self._print_clock_status(is_synchronized, device_clock_status, computer_datetime, time_diff)
                     clock_check_result.synchronized = is_synchronized
                     clock_check_result.device_datetime = device_clock_status.datetime
@@ -118,46 +138,42 @@ class ClockManager:
                     self._logger.error(error_message)
                     raise ClockSyncError(error_message)
 
+        # return either the original clock check result (if no sync attempted) or the updated clock check result (if sync attempted)
         return clock_check_result
 
     def _get_device_datetime(self) -> ClockStatus:
         """
-        Retrieve the device's current date and time using the DT and TZ commands.
-
-        When sync_status is 'E' (elapsed time), uses elapsed_time instead of datetime.
-        When sync_status is 'G', 'N', or 'U', uses timezone-aware datetime object.
+        Retrieve the device's current date, time and timezone using the DT and TZ commands, as well as helper methods.
 
         Returns
         -------
-        ClockStatus
+        ClockStatus: Object containing device datetime, elapsed time, sync status, and timezone information.
         """
 
-
+        # Initialize ClockStatus object to store results. Uses default values of None
         clock_status: ClockStatus = ClockStatus()
 
         # Send DT command and get response
         dt_line: str = self._send_dt_command()
+        # Parse DT response to populate datetime, elapsed time, and sync status in ClockStatus object
         self._parse_dt_response(dt_line, clock_status)
 
-
+        # Send TZ command and get response
         tz_line: str = self._send_tz_command()
+        # Parse TZ response to populate timezone in ClockStatus object and update datetime with timezone if absolute datetime is available
         self._parse_tz_response(tz_line, clock_status)
 
+        # return populated ClockStatus object with device datetime, elapsed time, sync status, and timezone information
         return clock_status
 
-    def _check_if_synched(self, tolerance_seconds: int) -> bool:
+    def _check_if_synched(self, tolerance_time_diff: int) -> tuple[bool, float | None, ClockStatus, datetime]:
         """
-        Compare device and computer datetimes and return whether they are in sync.
+        # Get device datetime and timezone, then compare device and computer datetimes and return whether they are in sync.
 
         Parameters
         ----------
-        device_clock_status : ClockStatus
-            Device clock status object.
-        computer_datetime : datetime
-            Computer datetime (assumed to be timezone-aware).
-        tolerance_seconds : int
+        tolerance_time_diff : int
             Acceptable difference in seconds before device is considered out of sync.
-
         Returns
         -------
         is_synchronized : bool
@@ -165,26 +181,28 @@ class ClockManager:
         time_diff : float or None
             Time difference in seconds (None if elapsed time only).
         device_clock_status : ClockStatus
-        computer_datetime : datetime
+        computer_datetime : timezone-aware datetime of computer at time of check
         """
 
+        # get device datetime, elapsed time, sync status, and timezone information encapsulated in ClockStatus object
         device_clock_status: ClockStatus = self._get_device_datetime()
 
+        # get current computer datetime as timezone-aware datetime
         computer_datetime = datetime.now()
 
+        # Determine synchronization status
         sync_status = device_clock_status.sync_status
-
-        device_datetime = device_clock_status.datetime
 
         if sync_status == 'E':
             # No absolute datetime available
             time_diff = None
             is_synchronized = False
         else:
+            device_datetime = device_clock_status.datetime
             device_datetime_utc = device_datetime.astimezone(timezone.utc)
             computer_datetime_utc = computer_datetime.astimezone(timezone.utc)
             time_diff = abs(device_datetime_utc - computer_datetime_utc).total_seconds()
-            is_synchronized = time_diff <= tolerance_seconds
+            is_synchronized = time_diff <= tolerance_time_diff
 
         return is_synchronized, time_diff, device_clock_status, computer_datetime
 
@@ -196,32 +214,31 @@ class ClockManager:
         ----------
         is_synchronized : bool
             Whether device time is in sync with computer time.
-        device_dt : datetime or None
-            Device datetime (None if elapsed time only).
-        device_tz : timezone
-            Device timezone.
-        elapsed : timedelta or None
-            Elapsed time since power-up (None if absolute datetime).
+        device_clock_status : ClockStatus
+            Device clock status information.
         computer_dt : datetime
-            Computer datetime.
+            Current computer timezone-aware datetime.
         time_diff : float or None
-            Time difference in seconds (None if elapsed time).
-        sync_status_name : str
-            Human-readable sync status name.
+            Time difference in seconds between device and computer time (None if elapsed time only).
         """
 
+        # Get human-readable sync status name from code
         sync_status_name = self.TIME_STATUSES[device_clock_status.sync_status]
+
+        # Get device timezone, datetime, and elapsed time from ClockStatus object for printing
         device_tz = device_clock_status.timezone
         device_dt = device_clock_status.datetime
         device_elapsed_time = device_clock_status.elapsed_time
 
+        # Format timezone offsets for printing
         device_tz_str = f"(UT{device_tz.utcoffset(None).total_seconds() / 3600:+.1f})" if device_tz else "(unknown)"
         computer_offset_hours = computer_dt.astimezone().utcoffset().total_seconds() / 3600
         computer_tz_str = f"(UT{computer_offset_hours:+.1f})"
 
+        # Start building status message with synchronization status and device clock source
         status_message = f"Device Clock Status:\n    {'✓ IN SYNC' if is_synchronized else '⚠ OUT OF SYNC'}\n    Device Clock Source: {sync_status_name}\n"
 
-
+        # If device datetime is available, print it with timezone. Otherwise, print elapsed time since power-up if available, or indicate that no time information is available.
         if device_dt:
             status_message += f"    Device Time: {device_dt.strftime('%Y-%m-%d %H:%M:%S')} {device_tz_str}\n"
         else:
@@ -232,8 +249,11 @@ class ClockManager:
             milliseconds = device_elapsed_time.microseconds // 1000
             status_message += f"    Device Time: elapsed-only (no absolute time): {hours:02d}:{minutes:02d}:{seconds:02d}.{milliseconds:03d}\n"
 
+        # Print computer time with timezone information
         status_message += f"    Computer Time: {computer_dt.strftime('%Y-%m-%d %H:%M:%S')} {computer_tz_str}"
 
+        # If time difference is available (i.e., absolute datetime is available) and device is out of sync,
+        # print the time difference in seconds and whether the device is ahead or behind the computer time.
         if time_diff is not None and not is_synchronized:
             status_message += f"\n    Computer/Device Time Difference: {time_diff:+.1f}s ({abs(time_diff):.1f}s {'ahead' if time_diff > 0 else 'behind'})"
 
