@@ -45,7 +45,7 @@ class ExportProtocol:
 
             system_status: SystemStatus = self._communicator.get_system_status()
             self._database_manager = DatabaseManager(self._config, system_status)
-            self._database_manager.prepare_directories()
+            self._database_manager.prepare_directories(system_status.serial_number)
 
             # Update log file to final location
             report_file_dir = self._database_manager.log_dir
