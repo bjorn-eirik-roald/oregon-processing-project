@@ -54,7 +54,7 @@ class Connector:
                 if not selected_ports:
                     return ConnectionResult(success=False, error_message="User cancelled port selection.")
             else:
-                # First attampt: Try defauilt baud rate and look for Prolific ports
+                # First attempt: Try default baud rate and look for Prolific ports
                 self._logger.debug("First connection attempt: trying default baud rate and searching for Prolific ports.")
                 bauds = [self.BAUD_RATES[0]]  # Start with default baud rate
                 selected_ports = self._handle_prolific_port_search(self._get_all_ports())
@@ -63,7 +63,7 @@ class Connector:
 
             result = self._attempt_connection(selected_ports, bauds)
 
-            if result:
+            if result.success:
                 return result
 
             # Connection failed, ask if user wants to retry
@@ -267,7 +267,7 @@ class Connector:
                     error_message = f"Error when connecting to {port} at {baud} baud: {e}"
                     self._logger.error(error_message)
 
-        return ConnectionResult(success=False, error_message="Failed to connect on all attempted ports and baud rates.")
+        return ConnectionResult(success=False, error_message="Failed to connect on all attempted port/baud combinations.")
 
     def _get_all_ports(self):
         """
