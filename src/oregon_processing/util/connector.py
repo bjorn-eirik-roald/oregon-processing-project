@@ -236,6 +236,8 @@ class Connector:
         """Helper method to attempt connection on a list of ports with specified baud rates."""
 
 
+        if not ports or not bauds:
+            return ConnectionResult(success=False, error_message="No ports or baud rates provided for connection attempt.")
 
         for port in ports:
             for baud in bauds:
