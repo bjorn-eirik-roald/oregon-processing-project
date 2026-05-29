@@ -2,12 +2,11 @@ from contextlib import ExitStack
 from datetime import datetime
 
 from oregon_processing.util.communicator import Communicator
-from oregon_processing.util.oregon_config import OregonConfig
 from oregon_processing.util.database_manager import DatabaseManager, ExportDates
 from oregon_processing.util.logging_manager import LoggingManager, get_logger
 from oregon_processing.util.clock_manager import ClockCheckResult
 from oregon_processing.util.device_health_checker import DeviceHealthReport
-from oregon_processing.util.exceptions import CommandTransmissionError, ConfigNotFoundError, ConnectionFailedError, DeviceHealthError, InvalidConfigError, UnexpectedResponseError, UserAbortError
+from oregon_processing.util.exceptions import CommandTransmissionError, ConfigNotFoundError, ConnectionFailedError, DeviceHealthError, InvalidConfigError, UnexpectedResponseError, UserCancelledError
 from oregon_processing.util.system_status import SystemStatus
 
 class ExportProtocol:
@@ -51,7 +50,7 @@ class ExportProtocol:
             report_file_dir = self._database_manager.log_dir
             report_file = report_file_dir / f"export_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
             self._logging_manager.transfer_log_file(report_file)
-        except (ConfigNotFoundError, InvalidConfigError, ConnectionFailedError, UnexpectedResponseError, CommandTransmissionError, UserAbortError) as e:
+        except (ConfigNotFoundError, InvalidConfigError, ConnectionFailedError, UnexpectedResponseError, CommandTransmissionError, UserCancelledError) as e:
             self._exit_stack.close()
             raise
         except Exception as e:

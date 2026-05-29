@@ -18,7 +18,7 @@ class CommandTransmissionError(Exception):
     """Raised when a command fails to be transmitted to a PIT reader."""
     pass
 
-class UserAbortError(Exception):
+class UserCancelledError(Exception):
     """Raised when the user aborts an operation."""
     pass
 
@@ -31,4 +31,11 @@ class ClockSyncError(Exception):
 class ModeChangeError(Exception):
     """Raised when a device mode change fails."""
 
+class NoFileSelectedError(Exception):
+    """Raised when no file is selected."""
+    pass
+
+class InvalidProjectDirectoryError(Exception):
+    """Raised when the project directory is invalid."""
+    pass
 

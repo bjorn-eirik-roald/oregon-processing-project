@@ -20,7 +20,7 @@ from oregon_processing.util.logging_manager import get_logger
 from oregon_processing.util.system_status import SystemStatusChecker, SystemStatus
 from oregon_processing.util.upload_history import UploadHistoryChecker, UploadHistory
 
-from oregon_processing.util.exceptions import CommandTransmissionError, ConnectionFailedError, UnexpectedResponseError, UnexpectedResponseError, UserAbortError
+from oregon_processing.util.exceptions import CommandTransmissionError, ConnectionFailedError, UnexpectedResponseError, UnexpectedResponseError, UserCancelledError
 
 
 class Communicator:
@@ -80,7 +80,7 @@ class Communicator:
                 raise ConnectionFailedError(error_message)
 
         # catch exceptions where logging is already made and reraise after closing exit stack
-        except (ConnectionFailedError, UnexpectedResponseError, CommandTransmissionError, UserAbortError) as e:
+        except (ConnectionFailedError, UnexpectedResponseError, CommandTransmissionError, UserCancelledError) as e:
             self._exit_stack.close()
             raise
         except Exception as e:

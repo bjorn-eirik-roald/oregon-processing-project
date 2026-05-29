@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 
 from oregon_processing.util.logging_manager import get_logger
-from oregon_processing.util.oregon_config import OregonConfig
 from oregon_processing.util.communicator import Communicator
 from oregon_processing.util.util_functions import extract_filename_date
 
@@ -20,7 +19,7 @@ class DatabaseManager:
 
     DEFAULT_FIRST_DATE = date(2018, 1, 1)
 
-    def __init__(self, config: OregonConfig):
+    def __init__(self, config):
         """
         Initialize DatabaseManager.
 
