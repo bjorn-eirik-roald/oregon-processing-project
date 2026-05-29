@@ -1,10 +1,14 @@
-from oregon_processing.commands import setup_config, open_terminal, run_export_protocol, get_database_status
+from oregon_processing.commands import get_database_status
+from oregon_processing.commands.create_project import create_project
+from oregon_processing.commands.open_terminal import open_terminal
+from oregon_processing.commands.run_export_protocol import run_export_protocol
+from oregon_processing.commands.get_database_status import get_database_status
 import argparse
 import sys
 
 def main():
     commands = {
-        "setup_config": setup_config,
+        "create_project": create_project,
         "open_terminal": open_terminal,
         "run_export_protocol": run_export_protocol,
         "get_database_status": get_database_status

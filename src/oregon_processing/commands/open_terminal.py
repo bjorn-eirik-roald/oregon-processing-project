@@ -3,9 +3,9 @@
 Open Terminal connection to Oregon RFID Device
 """
 
-from oregon_processing.util import (ConfigNotFoundError, InvalidConfigError, ConnectionFailedError, UnexpectedResponseError,
+from oregon_processing.util.exceptions import (ConfigNotFoundError, InvalidConfigError, ConnectionFailedError, UnexpectedResponseError,
                                     CommandTransmissionError, UserCancelledError, DeviceHealthError, ClockSyncError, ModeChangeError)
-from oregon_processing.util import LoggingManager, get_logger
+from oregon_processing.util.logging_manager import LoggingManager, get_logger
 from oregon_processing.util.communicator import Communicator
 
 def open_terminal():

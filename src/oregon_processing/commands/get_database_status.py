@@ -2,19 +2,20 @@
 Display an overview of the most recent record dates for each serial number in the database, only detection records.
 """
 
-from oregon_processing.util import DatabaseManager
-from oregon_processing.util import OregonConfig
-from oregon_processing.util import ConfigNotFoundError, InvalidConfigError
+from oregon_processing.util.database_manager import DatabaseManager
+from oregon_processing.util.project import OregonProject
+from oregon_processing.util.exceptions import ConfigNotFoundError, InvalidConfigError
 
 def get_database_status():
 
     try:
-        config = OregonConfig()
+        project = OregonProject()
+
     except (ConfigNotFoundError, InvalidConfigError) as e:
         print(f"\n\n"+str(e) + "\n\nPlease ensure the configuration file is present and valid, then try again.")
         return
 
-    database_manager = DatabaseManager(config)
+    database_manager = DatabaseManager(project)
     latest_record_dates = database_manager.get_last_exported_detection_record_dates()
 
     #sort from least recent to most recent
