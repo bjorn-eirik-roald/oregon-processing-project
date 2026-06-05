@@ -11,7 +11,7 @@ from oregon_processing.util.popups.yes_no_popup import prompt_yes_no
 from oregon_processing.util.directory_names import directory_names
 from oregon_processing.util.file_names import file_names
 
-class OregonProject:
+class Project:
     def __init__(self, project_dir: Path = None):
         self._logger = get_logger(__name__)
 
@@ -33,6 +33,7 @@ class OregonProject:
         self._project_dir: Path = project_dir
         self._archive_dir: Path = project_dir / directory_names.archive_dir_name
         self._logs_dir: Path = project_dir / directory_names.logs_dir_name
+        self._crash_logs_dir: Path = self._logs_dir / directory_names.crash_log_dir_name
         self._export_dir: Path = project_dir / directory_names.export_dir_name
         self._detection_record_export_dir: Path = self._export_dir / directory_names.detection_record_export_dir_name
         self._event_record_export_dir: Path = self._export_dir / directory_names.event_record_export_dir_name
@@ -41,6 +42,9 @@ class OregonProject:
 
         self._validate_project_directory()
         self._load_project_parameters()
+
+        if self._software_version != oregon_processing.__version__:
+            self._logger.warning(f"Project was created with a different version of Oregon (project software version: {self._software_version}, current software version: {oregon_processing.__version__}).")
 
     @property
     def project_dir(self) -> Path:
@@ -61,6 +65,10 @@ class OregonProject:
     @property
     def logs_dir(self) -> Path:
         return self._logs_dir
+
+    @property
+    def crash_logs_dir(self) -> Path:
+        return self._crash_logs_dir
 
     @property
     def export_dir(self) -> Path:
@@ -239,12 +247,12 @@ class OregonProject:
 if __name__ == "__main__":
 
     try:
-        OregonProject.create_new_project()
+        Project.create_new_project()
     except UserCancelledError:
         print("Project creation cancelled by user.")
 
     try:
-        project = OregonProject()
+        project = Project()
         print(f"Project '{project._project_name}' loaded successfully with parameters:")
         print(f"\t- Software version: {project._software_version}")
 
@@ -252,7 +260,7 @@ if __name__ == "__main__":
         print("Project loading cancelled by user.")
 
     try:
-        OregonProject.update_project_parameters()
+        Project.update_project_parameters()
         print("Project parameters updated successfully.")
     except UserCancelledError:
         print("Project update cancelled by user.")
