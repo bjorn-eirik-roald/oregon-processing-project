@@ -1,5 +1,5 @@
 """
-Execute the export protocol to retrieve data from a Oregon RFID and store in database define by config
+Execute the export protocol to retrieve data from a Oregon RFID and store in database define by project
 """
 
 from oregon_processing.util.export_protocol import ExportProtocol

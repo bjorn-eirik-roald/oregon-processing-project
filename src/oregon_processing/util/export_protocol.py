@@ -2,11 +2,14 @@ from contextlib import ExitStack
 from datetime import datetime
 
 from oregon_processing.util.communicator import Communicator
+from oregon_processing.util.config import OregonConfig
 from oregon_processing.util.database_manager import DatabaseManager, ExportDates
 from oregon_processing.util.logging_manager import LoggingManager, get_logger
 from oregon_processing.util.clock_manager import ClockCheckResult
 from oregon_processing.util.device_health_checker import DeviceHealthReport
-from oregon_processing.util.exceptions import CommandTransmissionError, ConfigNotFoundError, ConnectionFailedError, DeviceHealthError, InvalidConfigError, UnexpectedResponseError, UserCancelledError
+from oregon_processing.util.exceptions import CommandTransmissionError, ConfigNotFoundError, ConnectionFailedError, DeviceHealthError, InvalidConfigError, NoFileSelectedError, UnexpectedResponseError, UserCancelledError
+from oregon_processing.util.popups.yes_no_popup import prompt_yes_no
+from oregon_processing.util.project import Project
 from oregon_processing.util.system_status import SystemStatus
 
 class ExportProtocol:
@@ -15,26 +18,51 @@ class ExportProtocol:
 
     def __init__(self):
         self._exit_stack = None
-        self._config = None
-        self._communicator = None
-        self._database_manager = None
-        self._logging_manager = None
+        self._project: Project = None
+        self._communicator: Communicator = None
+        self._database_manager: DatabaseManager = None
+        self._logging_manager: LoggingManager = None
         self._logger = None
 
     def __enter__(self):
         self._exit_stack = ExitStack()
 
         try:
-            self._config = OregonConfig()
+            try:
+                config = OregonConfig()
+            except ConfigNotFoundError:
+                OregonConfig.create_default_config()
+                config = OregonConfig()
+
+            last_project_dir = config.last_project_dir
+
+            if last_project_dir:
+                # prompt user if they want to reuse the last project directory or select a new one
+
+                try:
+                    answer = prompt_yes_no(f"Last project directory found: {last_project_dir}\nDo you want to reuse this directory for the export?",
+                                       window_height=200, window_width=600)
+                except (UserCancelledError, NoFileSelectedError):
+                    print("\n\nProject directory selection cancelled by user. Aborting export protocol.\n\n")
+                    raise UserCancelledError
+
+                if not answer:
+                    last_project_dir = None
+
+            self._project = Project(project_dir=last_project_dir)
+
+            # update config with last used project directory
+            config.last_project_dir = self._project.project_dir
+
 
             # Set up logging with crash logs directory
-            crash_log_file = DatabaseManager.prepare_crash_log_file(self._config)
+            crash_log_file = DatabaseManager.prepare_crash_log_file(self._project)
             self._logging_manager = self._exit_stack.enter_context(
                 LoggingManager(
                     write_to_console = True,
                     write_to_report_file = True,
                     report_file = crash_log_file,
-                    relative_base_paths = {"output_dir": self._config.root_output_dir}
+                    relative_base_paths = {"output_dir": self._project.project_dir}
                     )
             )
 
@@ -43,11 +71,11 @@ class ExportProtocol:
             self._communicator = self._exit_stack.enter_context(Communicator())
 
             system_status: SystemStatus = self._communicator.get_system_status()
-            self._database_manager = DatabaseManager(self._config)
+            self._database_manager = DatabaseManager(self._project)
             self._database_manager.prepare_directories(system_status.serial_number)
 
             # Update log file to final location
-            report_file_dir = self._database_manager.log_dir
+            report_file_dir = self._database_manager.logs_dir
             report_file = report_file_dir / f"export_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
             self._logging_manager.transfer_log_file(report_file)
         except (ConfigNotFoundError, InvalidConfigError, ConnectionFailedError, UnexpectedResponseError, CommandTransmissionError, UserCancelledError) as e:
@@ -105,5 +133,5 @@ class ExportProtocol:
 
         self._communicator.export_detection_records(
             dates=export_dates.detection_record_dates,
-            output_dir=self._database_manager.records_dir
+            output_dir=self._database_manager.detection_records_dir
         )

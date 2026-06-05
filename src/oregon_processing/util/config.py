@@ -8,7 +8,7 @@ from oregon_processing.util.exceptions import ConfigNotFoundError, InvalidConfig
 
 class OregonConfig:
     """
-    Realized config for Oregon processing, with specific attributes and validation.
+    Basic config for storing last used project directory and other potential settings in the future.
     """
     CONFIG_FILE_NAME = "oregon_config.json"
     APP_DIR_PARTS = ("oregon_processing",)

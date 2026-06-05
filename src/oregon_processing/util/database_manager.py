@@ -2,6 +2,7 @@ from dataclasses import dataclass
 
 from oregon_processing.util.logging_manager import get_logger
 from oregon_processing.util.communicator import Communicator
+from oregon_processing.util.project import Project
 from oregon_processing.util.util_functions import extract_filename_date
 
 from datetime import date, datetime, timedelta
@@ -19,125 +20,70 @@ class DatabaseManager:
 
     DEFAULT_FIRST_DATE = date(2018, 1, 1)
 
-    def __init__(self, config):
+    def __init__(self, project: Project):
         """
         Initialize DatabaseManager.
 
         Parameters
         ----------
-        config : OregonConfig
-            Configuration manager instance for data directory
-        communicator : Communicator
-            Communicator instance for device information
+        project : Project
+            Project instance for data directory
         """
         self._logger = get_logger(__name__)
 
-        self._config = config
+        self._project = project
 
         # Root directories
-        self._data_dir = None
-        self._export_logs_base_dir = None
-        self._log_dir = None
-        self._crash_log_dir = None
-        self._export_data_dir = None
+        self._project_dir = project.project_dir
+        self._log_dir = project.logs_dir
+        self._crash_log_dir = project.crash_logs_dir
+        self._export_dir = project.export_dir
 
         # Export data subdirectories
         self._detection_records_dir = None
         self._event_records_dir = None
 
     @property
-    def data_dir(self) -> Path:
-        """Get the root data directory path."""
-        if self._data_dir is None:
-            error_message = f"Data directory not prepared yet. Call prepare_directories() first."
-            self._logger.error(error_message)
-            raise RuntimeError(error_message)
-        return self._data_dir
-
-    @property
-    def log_dir(self) -> Path:
-        """Get the export logs directory path (for specific serial number)."""
-        if self._log_dir is None:
-            error_message = "Directories not prepared yet."
-            self._logger.error(error_message)
-            raise RuntimeError(error_message)
+    def logs_dir(self):
         return self._log_dir
 
     @property
-    def crash_logs_dir(self) -> Path:
-        """Get the crash logs directory path (for undefined/pre-connection crashes)."""
-        if self._crash_log_dir is None:
-            error_message = "Directories not prepared yet."
-            self._logger.error(error_message)
-            raise RuntimeError(error_message)
-        return self._crash_log_dir
-
-    @property
-    def export_data_dir(self) -> Path:
-        """Get the export data directory path."""
-        if self._export_data_dir is None:
-            error_message = "Directories not prepared yet."
-            self._logger.error(error_message)
-            raise RuntimeError(error_message)
-        return self._export_data_dir
-
-    @property
-    def detection_records_dir(self) -> Path:
-        """Get the detection records directory path."""
-        if self._detection_records_dir is None:
-            error_message = "Directories not prepared yet."
-            self._logger.error(error_message)
-            raise RuntimeError(error_message)
+    def detection_records_dir(self):
         return self._detection_records_dir
 
     @property
-    def event_records_dir(self) -> Path:
-        """Get the event records directory path."""
-        if self._event_records_dir is None:
-            error_message = "Directories not prepared yet."
-            self._logger.error(error_message)
-            raise RuntimeError(error_message)
+    def event_records_dir(self):
         return self._event_records_dir
-
-    @property
-    def records_dir(self) -> Path:
-        """Get the records directory path (alias for detection_records_dir for backward compatibility)."""
-        return self.detection_records_dir
-
-    @property
-    def system_logs_dir(self) -> Path:
-        """Get the system logs directory path (alias for event_records_dir for backward compatibility)."""
-        return self.event_records_dir
 
     def prepare_directories(self, serial_number: str) -> None:
         """Prepare and create necessary directories for export."""
 
         self._logger.debug("Preparing output directories.")
 
-        # Define directories based on config and device serial number
-        self._define_root_directories()
+        # Define directories based on project directories and device serial number
         self._define_serial_number_directories(serial_number)
 
-        self._logger.info(f"Root output directory: {self._root_output_dir}", extra={"_skip_path_alias_filter": True})
-        self._logger.debug(f"Root Export data directory: {self._root_export_data_dir}")
-        self._logger.debug(f"Detection records directory: {self._detection_records_dir}")
-        self._logger.debug(f"Event records directory: {self._event_records_dir}")
-        self._logger.debug(f"Export logs directory: {self._log_dir}")
-        self._logger.debug(f"Crash logs directory: {self._crash_log_dir}")
+        self._logger.info(f"Project directory: {self._project.project_dir}", extra={"_skip_path_alias_filter": True})
+        self._logger.debug(f"Root Export data directory: {self._project.export_dir}")
+        self._logger.debug(f"Detection records directory: {self._project.detection_record_export_dir}")
+        self._logger.debug(f"Event records directory: {self._project.event_record_export_dir}")
+        self._logger.debug(f"Export logs directory: {self._project.logs_dir}")
+        self._logger.debug(f"Crash logs directory: {self._project.crash_logs_dir}")
 
 
         # Create all directories
         directories = [
             (self._log_dir, "Export logs directory"),
             (self._crash_log_dir, "Crash logs directory"),
-            (self._root_export_data_dir, "Root export data directory"),
+            (self._export_dir, "Root export data directory"),
             (self._detection_records_dir, "Detection records directory"),
             (self._event_records_dir, "Event records directory"),
         ]
 
         for dir_path, dir_name in directories:
             if not dir_path.exists():
-                self._logger.info(f"Creating {dir_name}: {dir_path}")
+                warning_message = f"{dir_name} directory was missing from: {dir_path}\nCreating directory..."
+                self._logger.warning(warning_message)
                 dir_path.mkdir(parents=True, exist_ok=True)
 
     def get_export_dates(self) -> dict:
@@ -222,7 +168,7 @@ class DatabaseManager:
 
         self._define_root_directories()
 
-        root_detection_records_dir = self._config.root_detection_records_dir
+        root_detection_records_dir = self._project.detection_record_export_dir
         detection_record_dirs = list(root_detection_records_dir.glob("*")) # Get all subdirectories (serial numbers) in detection records directory
 
         last_exported_dates: dict[str, date] = {}
@@ -246,27 +192,19 @@ class DatabaseManager:
         return last_exported_dates
 
     @classmethod
-    def prepare_crash_log_file(cls, config) -> Path:
+    def prepare_crash_log_file(cls, project: Project) -> Path:
         """Prepare and return the crash logs directory path."""
-        crash_logs_dir = config.crash_logs_dir
+        crash_logs_dir = project.crash_logs_dir
         crash_logs_dir.mkdir(parents=True, exist_ok=True)
 
         crash_log_file = crash_logs_dir / f"crash_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
         return crash_log_file
 
-    def _define_root_directories(self) -> None:
-        """Define directory paths based on root directories and serial number."""
-        self._root_output_dir = self._config.root_output_dir
-        self._root_log_dir = self._config.root_log_dir
-        self._root_export_data_dir = self._config.root_export_data_dir
-        self._crash_log_dir = self._config.crash_logs_dir
-
     def _define_serial_number_directories(self, serial_number: str) -> None:
         # Add serial number subdirectory to export logs, detection records, and event records
-        self._log_dir = self._config.root_log_dir / serial_number
-        self._detection_records_dir = self._config.root_detection_records_dir / serial_number
-        self._event_records_dir = self._config.root_event_records_dir / serial_number
-
+        self._log_dir = self._project.logs_dir / serial_number
+        self._detection_records_dir = self._project.detection_record_export_dir / serial_number
+        self._event_records_dir = self._project.event_record_export_dir / serial_number
 
     def _format_date_intervals(self, dates: list) -> str:
         """
