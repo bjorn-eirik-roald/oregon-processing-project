@@ -1,7 +1,7 @@
 from oregon_processing.util.command_manager import CommandManager
 from oregon_processing.util.logging_manager import get_logger
 
-from oregon_processing.util.exceptions import UnexpectedResponseError
+from oregon_processing.util.exceptions import NoFileSelectedError, UnexpectedResponseError, UserCancelledError
 from oregon_processing.util.device_mode_manager import DeviceModeManager
 
 from dataclasses import dataclass, field
@@ -252,40 +252,13 @@ class SystemStatusChecker:
         if not match: match = self._attempt_parse_gnss_log_line(line=line, line_num=line_num, status=status)
 
         if not match:
-            error_message = f"Unrecognized line format in system status at row {line_num + 1} of SY response: '{line}'"
-            self._logger.error(error_message)
-            raise UnexpectedResponseError(error_message)
+            approved = self._handle_unrecognized_line(line=line, line_num=line_num)
 
-        if 'mode' in line_lower:
-            self._parse_mode_line(line=line, line_num=line_num, status=status)
-        elif 'supply voltage' in line_lower:
-            self._parse_supply_voltage_line(line=line, line_num=line_num, status=status)
-        elif 'charge pulse amps' in line_lower:
-            self._parse_charge_pulse_amps_line(line=line, line_num=line_num, status=status)
-        elif ('standby amps' in line_lower or 'sleep amps' in line_lower) and 'amps' in line_lower:
-            self._parse_standby_amps_line(line=line, line_num=line_num, status=status)
-        elif 'listen amps' in line_lower:
-            self._parse_listen_amps_line(line=line, line_num=line_num, status=status)
-        elif 'effective amps' in line_lower:
-            self._parse_effective_amps_line(line=line, line_num=line_num, status=status)
-        elif line_lower.startswith('noise'):
-            self._parse_noise_line(line=line, line_num=line_num, status=status)
-        elif 'antenna' in line_lower and '#' in line_lower:
-            self._parse_antenna_line(line=line, line_num=line_num, status=status)
-        elif 'shutdown' in line_lower and ('supercap' in line_lower or 'supply' in line_lower):
-            self._parse_shutdown_line(line=line, line_num=line_num, status=status)
-        elif 'sleep battery' in line_lower or (line_lower.startswith('battery') and 'sleep' not in line_lower):
-            self._parse_sleep_battery_line(line=line, line_num=line_num, status=status)
-        elif 'tags in archive' in line_lower:
-            self._parse_tags_in_archive_line(line=line, line_num=line_num, status=status)
-        elif 'bluetooth' in line_lower:
-            self._parse_bluetooth_line(line=line, line_num=line_num, status=status)
-        elif "gnss logged every " in line_lower or 'gnss log is off' in line_lower:
-            self._parse_gnss_log_line(line=line, line_num=line_num, status=status)
-        else:
-            error_message = f"Unrecognized line format in system status at row {line_num + 1} of SY response: '{line}'"
-            self._logger.error(error_message)
-            raise UnexpectedResponseError(error_message)
+            if not approved:
+                error_message = f"Unrecognized line format in system status at row {line_num + 1} of SY response: '{line}'"
+                self._logger.error(error_message)
+                raise UnexpectedResponseError(error_message)
+
 
     def _attempt_parse_mode_line(self, line: str, line_num: int, status: SystemStatus):
 
@@ -517,9 +490,25 @@ class SystemStatusChecker:
             self._logger.error(error_message)
             raise UnexpectedResponseError(error_message)
 
+    def _handle_unrecognized_line(self, line: str, line_num: int):
+        """
+
+        Handle an unrecognized line in the system status response.
 
 
+        Will prompt the user with a popup to confirm that the unrecognized line is not a problem for processing. This allows us to continue with processing
+        even if there are some unexpected lines in the SY response, which may occur with different firmware versions or device models.
 
+        Returns True if the user approves the unrecognized line, False if the user does not approve and wants to treat it as an error.
+        """
 
+        from oregon_processing.util.popups.yes_no_popup import prompt_yes_no
 
+        try:
+            answer = prompt_yes_no(f"Unrecognized line in system status response: '{line}'\n\nDo you want to ignore this line and continue with processing?",
+                                   window_height=200, window_width=800)
+        except (UserCancelledError, NoFileSelectedError):
+            print("\n\nUnrecognized line approval cancelled by user. Aborting export protocol.\n\n")
+            raise UserCancelledError
 
+        return answer == "Yes"
