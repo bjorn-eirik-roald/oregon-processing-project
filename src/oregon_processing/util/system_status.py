@@ -92,7 +92,11 @@ class SystemStatus:
     reader_name: Optional[str] = None
     mode: Optional[str] = None
     supply_voltage: Optional[float] = None
+    charge_pulse_amps: Optional[float] = None
+    listen_amps: Optional[float] = None
+    effective_amps: Optional[float] = None
     standby_amps: Optional[float] = None
+    sleep_amps: Optional[float] = None
     noise: Optional[float] = None
     antenna_1: Optional[str] = None
     antenna_2: Optional[str] = None
@@ -231,12 +235,39 @@ class SystemStatusChecker:
 
         line_lower = line.lower()
 
+        match = False
+        if not match: match = self._attempt_parse_mode_line(line=line, line_num=line_num, status=status)
+        if not match: match = self._attempt_parse_supply_voltage_line(line=line, line_num=line_num, status=status)
+        if not match: match = self._attempt_parse_charge_pulse_amps_line(line=line, line_num=line_num, status=status)
+        if not match: match = self._attempt_parse_standby_amps_line(line=line, line_num=line_num, status=status)
+        if not match: match = self._attempt_parse_sleep_amps_line(line=line, line_num=line_num, status=status)
+        if not match: match = self._attempt_parse_listen_amps_line(line=line, line_num=line_num, status=status)
+        if not match: match = self._attempt_parse_effective_amps_line(line=line, line_num=line_num, status=status)
+        if not match: match = self._attempt_parse_noise_line(line=line, line_num=line_num, status=status)
+        if not match: match = self._attempt_parse_antenna_line(line=line, line_num=line_num, status=status)
+        if not match: match = self._attempt_parse_shutdown_line(line=line, line_num=line_num, status=status)
+        if not match: match = self._attempt_parse_sleep_battery_line(line=line, line_num=line_num, status=status)
+        if not match: match = self._attempt_parse_tags_in_archive_line(line=line, line_num=line_num, status=status)
+        if not match: match = self._attempt_parse_bluetooth_line(line=line, line_num=line_num, status=status)
+        if not match: match = self._attempt_parse_gnss_log_line(line=line, line_num=line_num, status=status)
+
+        if not match:
+            error_message = f"Unrecognized line format in system status at row {line_num + 1} of SY response: '{line}'"
+            self._logger.error(error_message)
+            raise UnexpectedResponseError(error_message)
+
         if 'mode' in line_lower:
             self._parse_mode_line(line=line, line_num=line_num, status=status)
         elif 'supply voltage' in line_lower:
             self._parse_supply_voltage_line(line=line, line_num=line_num, status=status)
+        elif 'charge pulse amps' in line_lower:
+            self._parse_charge_pulse_amps_line(line=line, line_num=line_num, status=status)
         elif ('standby amps' in line_lower or 'sleep amps' in line_lower) and 'amps' in line_lower:
             self._parse_standby_amps_line(line=line, line_num=line_num, status=status)
+        elif 'listen amps' in line_lower:
+            self._parse_listen_amps_line(line=line, line_num=line_num, status=status)
+        elif 'effective amps' in line_lower:
+            self._parse_effective_amps_line(line=line, line_num=line_num, status=status)
         elif line_lower.startswith('noise'):
             self._parse_noise_line(line=line, line_num=line_num, status=status)
         elif 'antenna' in line_lower and '#' in line_lower:
@@ -256,84 +287,236 @@ class SystemStatusChecker:
             self._logger.error(error_message)
             raise UnexpectedResponseError(error_message)
 
-    def _parse_mode_line(self, line: str, line_num: int, status: SystemStatus):
+    def _attempt_parse_mode_line(self, line: str, line_num: int, status: SystemStatus):
 
-        mode = line.split(' mode')[0].strip() or None
+        match = re.search(r"^(.*?)\s+mode\s*:", line, re.IGNORECASE)
+        if not match:
+            return False
+        else:
+            mode = match.group(1).strip()
 
-        # valdate mode is one of expected values
+        # validate mode is one of expected values
         if not DeviceModeManager.is_valid_mode(mode):
             error_message = f"Unexpected mode value parsed from SY response: '{mode}' in line {line_num + 1}: '{line}'"
             self._logger.error(error_message)
             raise UnexpectedResponseError(error_message)
-        status.mode = mode
 
-    def _parse_supply_voltage_line(self, line: str, line_num: int, status: SystemStatus):
-        parts = line.split()
-        supply_voltage = parts[-1]
+        status.mode = mode
+        return True
+
+    def _attempt_parse_supply_voltage_line(self, line: str, line_num: int, status: SystemStatus):
+        match = re.search(r"^supply voltage\s+([0-9]+(?:\.[0-9]+)?)$", line, re.IGNORECASE)
+        if not match:
+            return False
+        else:
+            voltage = match.group(1).strip()
+
         try:
-            status.supply_voltage = float(supply_voltage)
+            status.supply_voltage = float(voltage)
+            return True
         except ValueError:
             error_message = f"Could not parse supply voltage as float in SY response at row {line_num + 1}: '{line}'"
             self._logger.error(error_message)
             raise UnexpectedResponseError(error_message)
 
-    def _parse_standby_amps_line(self, line: str, line_num: int, status: SystemStatus):
-        parts = line.split()
-        status.standby_amps = parts[-1] if parts else None
+    def _attempt_parse_charge_pulse_amps_line(self, line: str, line_num: int, status: SystemStatus):
+        match = re.search(r"^charge pulse amps\s+([0-9]+(?:\.[0-9]+)?)$", line, re.IGNORECASE)
+        if not match:
+            status.charge_pulse_amps = None
+            return False
+        else:
+            charge_pulse_amps = match.group(1).strip()
 
-    def _parse_noise_line(self, line: str, line_num: int, status: SystemStatus):
-        parts = line.split()
-        status.noise = parts[-1] if parts else None
-
-    def _parse_antenna_line(self, line: str, line_num: int, status: SystemStatus):
-        parts = line.split()
         try:
-            antenna_num = line.split('#')[1].strip().split()[0]
-            antenna_value = parts[-1]
+            status.charge_pulse_amps = float(charge_pulse_amps)
+            return True
+        except ValueError:
+            error_message = f"Could not parse charge pulse amps as float in SY response at row {line_num + 1}: '{line}'"
+            self._logger.error(error_message)
+            raise UnexpectedResponseError(error_message)
 
-            if antenna_num == '1':
+    def _attempt_parse_listen_amps_line(self, line: str, line_num: int, status: SystemStatus):
+        match = re.search(r"^listen amps\s+([0-9]+(?:\.[0-9]+)?)$", line, re.IGNORECASE)
+        if not match:
+            return False
+        else:
+            listen_amps = match.group(1).strip()
+
+        try:
+            status.listen_amps = float(listen_amps)
+            return True
+        except ValueError:
+            error_message = f"Could not parse listen amps as float in SY response at row {line_num + 1}: '{line}'"
+            self._logger.error(error_message)
+            raise UnexpectedResponseError(error_message)
+
+    def _attempt_parse_effective_amps_line(self, line: str, line_num: int, status: SystemStatus):
+        match = re.search(r"^effective amps\s+([0-9]+(?:\.[0-9]+)?)$", line, re.IGNORECASE)
+        if not match:
+            return False
+        else:
+            effective_amps = match.group(1).strip()
+
+        try:
+            status.effective_amps = float(effective_amps)
+            return True
+        except ValueError:
+            error_message = f"Could not parse effective amps as float in SY response at row {line_num + 1}: '{line}'"
+            self._logger.error(error_message)
+            raise UnexpectedResponseError(error_message)
+
+    def _attempt_parse_standby_amps_line(self, line: str, line_num: int, status: SystemStatus):
+        match = re.search(r"^standby amps\s+([0-9]+(?:\.[0-9]+)?)$", line, re.IGNORECASE)
+        if not match:
+            return False
+        else:
+            standby_amps = match.group(1).strip()
+
+        try:
+            status.standby_amps = float(standby_amps)
+            return True
+        except ValueError:
+            error_message = f"Could not parse standby amps as float in SY response at row {line_num + 1}: '{line}'"
+            self._logger.error(error_message)
+            raise UnexpectedResponseError(error_message)
+
+    def _attempt_parse_sleep_amps_line(self, line: str, line_num: int, status: SystemStatus):
+        match = re.search(r"^sleep amps\s+([0-9]+(?:\.[0-9]+)?)$", line, re.IGNORECASE)
+        if not match:
+            return False
+        else:
+            sleep_amps = match.group(1).strip()
+
+        try:
+            status.sleep_amps = float(sleep_amps)
+            return True
+        except ValueError:
+            error_message = f"Could not parse sleep amps as float in SY response at row {line_num + 1}: '{line}'"
+            self._logger.error(error_message)
+            raise UnexpectedResponseError(error_message)
+
+    def _attempt_parse_noise_line(self, line: str, line_num: int, status: SystemStatus):
+        match = re.search(r"^noise\s+([0-9]+(?:\.[0-9]+)?)$", line, re.IGNORECASE)
+        if not match:
+            return False
+        else:
+            noise = match.group(1).strip()
+
+        try:
+            status.noise = float(noise)
+            return True
+        except ValueError:
+            error_message = f"Could not parse noise as float in SY response at row {line_num + 1}: '{line}'"
+            self._logger.error(error_message)
+            raise UnexpectedResponseError(error_message)
+
+    def _attempt_parse_antenna_line(self, line: str, line_num: int, status: SystemStatus):
+        match = re.search(r"^antenna\s+#([0-9]+)\s+([0-9]+(?:\.[0-9]+)?)$", line, re.IGNORECASE)
+
+        if not match:
+            return False
+        else:
+            antenna_num = match.group(1).strip()
+            antenna_value = match.group(2).strip()
+
+
+        try:
+            antenna_num = int(antenna_num)
+            antenna_value = float(antenna_value)
+            if antenna_num == 1:
                 status.antenna_1 = antenna_value
-            elif antenna_num == '2':
+            elif antenna_num == 2:
                 status.antenna_2 = antenna_value
-            elif antenna_num == '3':
+            elif antenna_num == 3:
                 status.antenna_3 = antenna_value
-            elif antenna_num == '4':
+            elif antenna_num == 4:
                 status.antenna_4 = antenna_value
             else:
-                error_message = f"Unexpected antenna number parsed from SY response: '{antenna_num}' in line: '{line}'"
-                self._logger.error(error_message)
-                raise UnexpectedResponseError(error_message)
-        except (IndexError):
+                raise ValueError(f"Unexpected antenna number: {antenna_num}")
+
+            return True
+        except ValueError as e:
             error_message = f"Unexpected antenna line format in SY response at row {line_num + 1}: '{line}'"
             self._logger.error(error_message)
             raise UnexpectedResponseError(error_message)
 
-    def _parse_shutdown_line(self, line: str, line_num: int, status: SystemStatus):
-        parts = line.split()
-        status.shutdown_supercap = parts[-1] if parts else None
-
-    def _parse_sleep_battery_line(self, line: str, line_num: int, status: SystemStatus):
-        parts = line.split()
-        status.sleep_battery = parts[-1] if parts else None
-
-    def _parse_tags_in_archive_line(self, line: str, line_num: int, status: SystemStatus):
-        parts = line.split()
-        status.tags_in_archive = parts[-1] if parts else None
-
-    def _parse_bluetooth_line(self, line: str, line_num: int, status: SystemStatus):
-        status.bluetooth_status = line
-
-    def _parse_gnss_log_line(self, line: str, line_num: int, status: SystemStatus):
-
-        line_lower = line.lower()
-        if "gnss logged every " in line_lower:
-            status.gnss_log_interval_minutes = True
-        elif 'gnss log is off' in line_lower:
-            status.gnss_log_interval_minutes = False
+    def _attempt_parse_shutdown_line(self, line: str, line_num: int, status: SystemStatus):
+        match = re.search(r"^shutdown supercap\s+([0-9]+(?:\.[0-9]+)?)$", line, re.IGNORECASE)
+        if not match:
+            return False
         else:
-            error_message = f"Unrecognized GNSS log line format in SY response at row {line_num + 1}: '{line}'"
+            shutdown_supercap = match.group(1).strip()
+
+        try:
+            status.shutdown_supercap = float(shutdown_supercap)
+            return True
+        except ValueError:
+            error_message = f"Could not parse shutdown supercap as float in SY response at row {line_num + 1}: '{line}'"
             self._logger.error(error_message)
             raise UnexpectedResponseError(error_message)
+
+    def _attempt_parse_sleep_battery_line(self, line: str, line_num: int, status: SystemStatus):
+        match = re.search(r"^sleep battery\s+([0-9]+(?:\.[0-9]+)?)$", line, re.IGNORECASE)
+        if not match:
+            return False
+        else:
+            sleep_battery = match.group(1).strip()
+
+        try:
+            status.sleep_battery = float(sleep_battery)
+            return True
+        except ValueError:
+            error_message = f"Could not parse sleep battery as float in SY response at row {line_num + 1}: '{line}'"
+            self._logger.error(error_message)
+            raise UnexpectedResponseError(error_message)
+
+    def _attempt_parse_tags_in_archive_line(self, line: str, line_num: int, status: SystemStatus):
+        match = re.search(r"^tags in archive\s+([0-9]+)$", line, re.IGNORECASE)
+        if not match:
+            return False
+        else:
+            tags_in_archive = match.group(1).strip()
+
+        try:
+            status.tags_in_archive = int(tags_in_archive)
+            return True
+        except ValueError:
+            error_message = f"Could not parse tags in archive as int in SY response at row {line_num + 1}: '{line}'"
+            self._logger.error(error_message)
+            raise UnexpectedResponseError(error_message)
+
+    def _attempt_parse_bluetooth_line(self, line: str, line_num: int, status: SystemStatus):
+        match = re.search(r"^bluetooth\s+is\s+(on|off)$", line, re.IGNORECASE)
+        if not match:
+            return False
+        else:
+            bluetooth_status = match.group(1).strip()
+
+        status.bluetooth_status = bluetooth_status
+        return True
+
+    def _attempt_parse_gnss_log_line(self, line: str, line_num: int, status: SystemStatus):
+        match = re.search(r"^gnss logged every\s+([0-9]+)\s+minutes$|^gnss log is off$", line, re.IGNORECASE)
+
+        if not match:
+            return False
+        else:
+            gnss_log_match = match.group(1)
+
+        try:
+            # If we have a match for the interval, parse it as int. If not, it means the log is off, so we set it to False
+            if gnss_log_match:
+                _ = int(gnss_log_match.strip()) # we parse it just to validate it's an int
+                status.gnss_log_interval_minutes = True
+            else:
+                status.gnss_log_interval_minutes = False
+
+            return True
+        except ValueError:
+            error_message = f"Could not parse GNSS log interval as int in SY response at row {line_num + 1}: '{line}'"
+            self._logger.error(error_message)
+            raise UnexpectedResponseError(error_message)
+
 
 
 
