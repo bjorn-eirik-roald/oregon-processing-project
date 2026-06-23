@@ -40,8 +40,8 @@ class ExportProtocol:
                 # prompt user if they want to reuse the last project directory or select a new one
 
                 try:
-                    answer = prompt_yes_no(f"Last project directory found: {last_project_dir}\nDo you want to reuse this directory for the export?",
-                                       window_height=200, window_width=600)
+                    answer = prompt_yes_no(f"Last project directory found: {last_project_dir}\n\nDo you want to reuse this directory for the export?",
+                                       window_height=250, window_width=600)
                 except (UserCancelledError, NoFileSelectedError):
                     print("\n\nProject directory selection cancelled by user. Aborting export protocol.\n\n")
                     raise UserCancelledError

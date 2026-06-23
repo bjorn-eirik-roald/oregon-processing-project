@@ -5,7 +5,7 @@ from oregon_processing.util.exceptions import NoFileSelectedError, UnexpectedRes
 from oregon_processing.util.device_mode_manager import DeviceModeManager
 
 from dataclasses import dataclass, field
-from typing import Optional, List, ClassVar
+from typing import Optional, ClassVar
 
 import re
 
@@ -108,7 +108,7 @@ class SystemStatus:
     bluetooth_status: Optional[str] = None
     gnss_log_interval_minutes: Optional[int] = None
     raw_output: Optional[str] = None
-    warnings: List[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
 
     # --- Logic ---
     def check_prerequisites(self):
@@ -139,6 +139,8 @@ class SystemStatusChecker:
         self._logger = get_logger(__name__)
         self._command_manager: CommandManager = command_manager
 
+        self._ignored_lines: list[str] = []
+
     def get_system_status(self) -> SystemStatus:
 
         status_lines = self._command_manager.send_command("SY")
@@ -158,6 +160,10 @@ class SystemStatusChecker:
                 error_message = f"Empty line encountered in SY response at row {line_num + 1} of SY response."
                 self._logger.error(error_message)
                 raise UnexpectedResponseError(error_message)
+
+            if line in self._ignored_lines:
+                self._logger.debug(f"Ignoring previously approved unrecognized line in SY response at row {line_num + 1}: '{line}'")
+                continue
 
             # Use specific parsing for the first 3 lines, then auto-parse the rest
             if line_num == 0:
@@ -241,7 +247,10 @@ class SystemStatusChecker:
         if not match:
             approved = self._handle_unrecognized_line(line=line, line_num=line_num)
 
-            if not approved:
+            if approved:
+                self._logger.warning(f"Unrecognized line in system status at row {line_num + 1} of SY response: '{line}' - User approved to ignore.")
+                self._ignored_lines.append(line)
+            else:
                 error_message = f"Unrecognized line format in system status at row {line_num + 1} of SY response: '{line}'"
                 self._logger.error(error_message)
                 raise UnexpectedResponseError(error_message)
@@ -249,7 +258,7 @@ class SystemStatusChecker:
 
     def _attempt_parse_mode_line(self, line: str, line_num: int, status: SystemStatus):
 
-        match = re.search(r"^(.*?)\s+mode\s*:", line, re.IGNORECASE)
+        match = re.search(r"^(.*?)\s+mode\s*", line, re.IGNORECASE)
         if not match:
             return False
         else:
@@ -282,7 +291,6 @@ class SystemStatusChecker:
     def _attempt_parse_charge_pulse_amps_line(self, line: str, line_num: int, status: SystemStatus):
         match = re.search(r"^charge pulse amps\s+([0-9]+(?:\.[0-9]+)?)$", line, re.IGNORECASE)
         if not match:
-            status.charge_pulse_amps = None
             return False
         else:
             charge_pulse_amps = match.group(1).strip()
