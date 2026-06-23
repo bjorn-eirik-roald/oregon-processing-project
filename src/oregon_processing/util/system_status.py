@@ -238,7 +238,8 @@ class SystemStatusChecker:
         if not match: match = self._attempt_parse_effective_amps_line(line=line, line_num=line_num, status=status)
         if not match: match = self._attempt_parse_noise_line(line=line, line_num=line_num, status=status)
         if not match: match = self._attempt_parse_antenna_line(line=line, line_num=line_num, status=status)
-        if not match: match = self._attempt_parse_shutdown_line(line=line, line_num=line_num, status=status)
+        if not match: match = self._attempt_parse_shutdown_supercap_line(line=line, line_num=line_num, status=status)
+        if not match: match = self._attempt_parse_shutdown_supply_line(line=line, line_num=line_num, status=status)
         if not match: match = self._attempt_parse_sleep_battery_line(line=line, line_num=line_num, status=status)
         if not match: match = self._attempt_parse_tags_in_archive_line(line=line, line_num=line_num, status=status)
         if not match: match = self._attempt_parse_bluetooth_line(line=line, line_num=line_num, status=status)
@@ -408,7 +409,7 @@ class SystemStatusChecker:
             self._logger.error(error_message)
             raise UnexpectedResponseError(error_message)
 
-    def _attempt_parse_shutdown_line(self, line: str, line_num: int, status: SystemStatus):
+    def _attempt_parse_shutdown_supercap_line(self, line: str, line_num: int, status: SystemStatus):
         match = re.search(r"^shutdown supercap\s+([0-9]+(?:\.[0-9]+)?)$", line, re.IGNORECASE)
         if not match:
             return False
@@ -420,6 +421,21 @@ class SystemStatusChecker:
             return True
         except ValueError:
             error_message = f"Could not parse shutdown supercap as float in SY response at row {line_num + 1}: '{line}'"
+            self._logger.error(error_message)
+            raise UnexpectedResponseError(error_message)
+
+    def _attempt_parse_shutdown_supply_line(self, line: str, line_num: int, status: SystemStatus):
+        match = re.search(r"^shutdown supply\s+([0-9]+(?:\.[0-9]+)?)$", line, re.IGNORECASE)
+        if not match:
+            return False
+        else:
+            shutdown_supply = match.group(1).strip()
+
+        try:
+            status.shutdown_supply = float(shutdown_supply)
+            return True
+        except ValueError:
+            error_message = f"Could not parse shutdown supply as float in SY response at row {line_num + 1}: '{line}'"
             self._logger.error(error_message)
             raise UnexpectedResponseError(error_message)
 
