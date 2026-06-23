@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "oregon-processing"
-version = "2.0.1"
+version = "2.0.2"
 description = "A Python package for communicating with Oregon RFID devices via serial connection"
 readme = "README.md"
 requires-python = ">=3.8,<4.0"
