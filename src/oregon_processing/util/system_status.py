@@ -179,16 +179,17 @@ class SystemStatusChecker:
         return status
 
     def _parse_line_1(self, line: str, status: SystemStatus):
-
-        line_lower = line.lower()
-        # Line 0: device type
-        if not "oregon rfid" in line_lower:
+        match = re.search(r"^Oregon RFID\s+(.*)$", line, re.IGNORECASE)
+        if not match:
             error_message = f"Unexpected device type line format at row 1 of SY response: '{line}'"
             self._logger.error(error_message)
             raise UnexpectedResponseError(error_message)
-        if 'single antenna' in line_lower:
+
+        device_type_str = match.group(1).strip()
+
+        if 'single antenna' in device_type_str.lower():
             status.device_type = 'ORSR'
-        elif 'multiple antenna' in line_lower:
+        elif 'multiple antenna' in device_type_str.lower():
             status.device_type = 'ORMR'
         else:
             error_message = f"Could not determine device type from line 1 of SY response: '{line}'"
@@ -196,44 +197,30 @@ class SystemStatusChecker:
             raise UnexpectedResponseError(error_message)
 
     def _parse_line_2(self, line: str, status: SystemStatus):
-
-        #Line 1: version and serial number
-        line_splits = line.split()
-        if len(line_splits) != 2:
+        match = re.search(r"^(V[0-9]+\.[0-9]+[A-Z]*)\s+([0-9A-Fa-f\-]+)$", line)
+        if not match:
             error_message = f"Unexpected version/serial line format at row 2 of SY response: '{line}'"
             self._logger.error(error_message)
             raise UnexpectedResponseError(error_message)
 
-        version_str = line_splits[0]
+        firmware_version_str = match.group(1).strip()
+        serial_number_str = match.group(2).strip()
+
 
         try:
-            version = FirmwareVersion(version_str)
+            version = FirmwareVersion(firmware_version_str)
         except UnexpectedResponseError as e:
             error_message = f"Unexpected version format in row 2 of SY response: '{line}' - {str(e)}"
             self._logger.error(error_message)
             raise UnexpectedResponseError(error_message)
 
-
-        serial_number = line_splits[1].strip()
-        # Validate serial number format: hex digits separated by hyphens (e.g., 0011-000C-0C36-3039-3455-37)
-        if not all(c in '0123456789ABCDEFabcdef-' for c in serial_number):
-            error_message = f"Unexpected serial number in row 2 of SY response: '{line}'"
-            self._logger.error(error_message)
-            raise UnexpectedResponseError(error_message)
-        if not serial_number or serial_number.startswith('-') or serial_number.endswith('-'):
-            error_message = f"Unexpected serial number in row 2 of SY response: '{line}'"
-            self._logger.error(error_message)
-            raise UnexpectedResponseError(error_message)
-
         status.version = version
-        status.serial_number = serial_number
+        status.serial_number = serial_number_str
 
     def _parse_line_3(self, line: str, status: SystemStatus):
         status.reader_name = line
 
     def _auto_parse_line(self, line: str, line_num: int, status: SystemStatus):
-
-        line_lower = line.lower()
 
         match = False
         if not match: match = self._attempt_parse_mode_line(line=line, line_num=line_num, status=status)
