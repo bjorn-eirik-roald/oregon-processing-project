@@ -46,7 +46,7 @@ class ExportProtocol:
                     print("\n\nProject directory selection cancelled by user. Aborting export protocol.\n\n")
                     raise UserCancelledError
 
-                if not answer:
+                if answer != "Yes":
                     last_project_dir = None
 
             self._project = Project(project_dir=last_project_dir)
