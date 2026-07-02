@@ -20,7 +20,7 @@ Quick Setup (Recommended for End Users)
 
 ### 3) Run the Setup Script
 
-Navigate to the project folder using File Explorer and double-click on `setup.bat` to run it.
+Navigate to the project folder using File Explorer and double-click on `setup.cmd` to run it.
 
 The setup script will:
   1. Detect if Python 3.13 is installed via the Python launcher (`py.exe`). If not present, it will install Python 3.13 automatically.
@@ -49,7 +49,7 @@ Project Layout
 
 * `bin/` – user-facing shortcuts (double-click to run)
 
-* `.venv/` – virtual environment (created by `setup.bat`)
+* `.venv/` – virtual environment (created by `setup.cmd`)
 
 * `src/` – source-code
 
